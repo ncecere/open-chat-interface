@@ -5,6 +5,7 @@ import { db } from '../../db/index.js';
 import { notFound, validationFailed } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { getDefaultOrganizationId } from '../organization.js';
+import { requireProjectAccess } from '../project-sharing/access.js';
 import { getSetting } from '../settings.js';
 import { buildStorageKey, getStorageDriver } from '../storage/index.js';
 import { assertStorageAllowanceForUsage, getStorageLimits } from '../storage/quota.js';
@@ -40,9 +41,12 @@ async function releaseUpload(id: string, userId: string): Promise<void> {
  * Reserve in PostgreSQL first, do I/O outside transactions, then publish metadata.
  *
  * With `project`, the file is reserved as one of that project's files instead
- * of a staged message upload. The project row is locked (after the owner and
+ * of a staged message upload. The project row is locked (after the uploader and
  * before the storage counter, the order project deletion uses) so concurrent
  * uploads cannot exceed `maxFiles` and a deleted project cannot gain a file.
+ * The uploader must be the owner or an editor of the project (checked under the
+ * lock); the file, its bytes and its allowance are the uploader's, as for any
+ * file, so a shared project's storage is charged to whoever added each file.
  */
 export async function uploadAttachment(params: {
   userId: string;
@@ -79,11 +83,13 @@ export async function uploadAttachment(params: {
         const [project] = await tx
           .select({ id: schema.project.id })
           .from(schema.project)
-          .where(
-            and(eq(schema.project.id, params.project.id), eq(schema.project.userId, params.userId)),
-          )
+          .where(eq(schema.project.id, params.project.id))
           .for('update');
         if (!project) throw notFound('Project not found');
+        // Access is decided under the lock (v0.14): the owner or an editor may
+        // add a file, and the uploader is who is charged for it. A share removed
+        // a moment ago cannot be used, and 404 means "no access" as everywhere.
+        await requireProjectAccess(params.project.id, params.userId, 'editor', tx);
         // Reservations still uploading count, so parallel uploads cannot overshoot.
         const [files] = await tx
           .select({ value: count() })

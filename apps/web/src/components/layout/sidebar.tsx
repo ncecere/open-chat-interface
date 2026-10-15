@@ -11,6 +11,7 @@ import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
 import { useConfirmRemovedConversation } from '~/hooks/use-unused-conversation';
 import { focusComposerSoon } from '~/lib/focus-after-navigation';
+import { useT } from '~/lib/i18n';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { loopTab } from '~/lib/tab-loop';
 import { cn } from '~/lib/utils';
@@ -25,6 +26,7 @@ interface SidebarProps {
 export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
   // Read here rather than threaded through the shell: the header needs the
   // logo and short name too, and the status query is already cached.
+  const t = useT();
   const { data: status } = useAuthStatus();
   const branding = status?.branding;
   const [search, setSearch] = useState('');
@@ -56,15 +58,19 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
     <aside
       role={mobile ? 'dialog' : undefined}
       aria-modal={mobile ? true : undefined}
-      aria-label={mobile ? 'Conversation sidebar' : undefined}
+      aria-label={mobile ? t('shell.sidebar.drawerLabel') : undefined}
+      // What the shell looks the drawer up by: its name changes with the language.
+      data-sidebar-drawer={mobile ? '' : undefined}
       aria-hidden={!open ? true : undefined}
       inert={!open ? true : undefined}
       // As a modal, Tab and Shift+Tab stay in it (#191).
       onKeyDown={mobile && open ? loopTab : undefined}
       className={cn(
-        'fixed inset-y-0 left-0 z-50 flex h-dvh w-full shrink-0 flex-col bg-[var(--bg-app)] bg-[image:var(--sidebar-gradient)]',
+        'fixed inset-y-0 start-0 z-50 flex h-dvh w-full shrink-0 flex-col bg-[var(--bg-app)] bg-[image:var(--sidebar-gradient)]',
         'transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:transition-[margin]',
-        open ? 'translate-x-0 lg:ml-0' : '-translate-x-full lg:-ml-64 lg:translate-x-0',
+        open
+          ? 'translate-x-0 lg:ms-0'
+          : '-translate-x-full rtl:translate-x-full lg:-ms-64 lg:translate-x-0',
       )}
     >
       <div className="flex h-14 items-center px-3">
@@ -73,10 +79,10 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           variant="ghost"
           size="icon-sm"
           onClick={onToggle}
-          aria-label="Close sidebar"
+          aria-label={t('shell.sidebar.close')}
           aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
         >
-          <PanelLeft />
+          <PanelLeft className="rtl:-scale-x-100" />
         </Button>
         {/* Mark and name sit beside the toggle (v0.10): centring them needed a
             spacer that left too little room for the full default name. */}
@@ -98,12 +104,12 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           disabled={createThread.isPending}
           aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
         >
-          New Chat
+          {t('shell.sidebar.newChat')}
         </Button>
       </div>
 
-      <div className="relative px-3">
-        <Search className="pointer-events-none absolute left-6 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
+      <div className="relative px-3 py-1">
+        <Search className="pointer-events-none absolute start-6 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -113,16 +119,17 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
               setSearch('');
             }
           }}
-          placeholder="Search your conversations..."
-          aria-label="Search your conversations"
+          placeholder={t('shell.sidebar.searchPlaceholder')}
+          aria-label={t('shell.sidebar.searchLabel')}
           dir="auto"
           aria-describedby="thread-search-hint"
-          className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+          // A field with an edge, like the others (1.4.11): it was a bare row above a rule.
+          className="h-10 w-full rounded-lg border border-[var(--border-control)] bg-[var(--bg-control)] pe-3 ps-9 text-sm text-[var(--text-primary)] transition-colors placeholder:text-[var(--text-muted)] focus:border-[var(--text-muted)]"
         />
       </div>
 
       <p id="thread-search-hint" className="sr-only">
-        Searches titles and message text. Results appear below.
+        {t('shell.sidebar.searchHint')}
       </p>
 
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
@@ -151,7 +158,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           onClick={handleNewChat}
           aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
         >
-          New Chat
+          {t('shell.sidebar.newChat')}
         </Button>
         <UserMenu compact />
       </div>

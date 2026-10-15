@@ -12,7 +12,7 @@ import {
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { COMPACT_ACTION_LABEL } from '../../src/components/chat/compact-thread-dialog';
+import { compactActionLabel } from '../../src/components/chat/compact-thread-dialog';
 import { SidebarProjects } from '../../src/components/layout/sidebar-projects';
 import { ThreadList } from '../../src/components/layout/thread-list';
 import { TopBar } from '../../src/components/layout/top-bar';
@@ -140,7 +140,7 @@ const WRITE_CONTROLS = [
   'Rename conversation',
   'Share conversation',
   'Move to project',
-  COMPACT_ACTION_LABEL,
+  compactActionLabel(),
   'New project',
   // The sidebar's own, which were already off (#159): the others must match them.
   'Rename conversation: Trip plans',

@@ -21,8 +21,11 @@ import { TASK_LIST_COMPONENTS } from '~/components/chat/markdown-task-list';
 import {
   installStreamdownOverlayFocus,
   installStreamdownScrollRegions,
+  markStreamdownScrollRegions,
 } from '~/components/chat/streamdown-overlay-focus';
+import { streamdownTranslations } from '~/components/chat/streamdown-translations';
 import { readableCodePlugin } from '~/lib/code-contrast';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -126,38 +129,50 @@ function buildMarkdownRenderer([
   // A person's own message: text, not LaTeX, so every `$` is a dollar sign (#339).
   const pluginsWithoutMath = { code, mermaid };
 
-  return ({ children, className, math = true, skipHtml, urlTransform }: MarkdownProps) => (
-    <Streamdown
-      plugins={math ? plugins : pluginsWithoutMath}
-      className={cn(MARKDOWN_BASE, className)}
-      remarkPlugins={remarkPlugins}
-      translations={TRANSLATIONS}
-      // The reference interface shows plain code without a gutter.
-      lineNumbers={false}
-      // Links are real links that warn before leaving the instance (#174),
-      // not Streamdown's link-safety buttons; headings sit below the
-      // page's h1 (#212, #271); a task list's checkboxes are named (#240).
-      components={MESSAGE_COMPONENTS}
-      // Share pages pass their own URL policy and keep the visible marker.
-      rehypePlugins={
-        !skipHtml && !urlTransform && conversationPlugins ? conversationPlugins : defaultPlugins
-      }
-      {...(skipHtml ? { skipHtml } : {})}
-      {...(urlTransform
-        ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
-        : {})}
-    >
-      {math ? normalizeMathDelimiters(escapeCurrencyDollars(children)) : children}
-    </Streamdown>
-  );
+  return function MarkdownRenderer({
+    children,
+    className,
+    math = true,
+    skipHtml,
+    urlTransform,
+  }: MarkdownProps) {
+    const t = useT();
+    // Streamdown's own button titles follow the language; the names built from
+    // them (streamdown-control-names) are made again when it changes.
+    const translations = useMemo(() => streamdownTranslations(t), [t]);
+    useEffect(() => {
+      if (translations) markStreamdownScrollRegions();
+    }, [translations]);
+    return (
+      <Streamdown
+        plugins={math ? plugins : pluginsWithoutMath}
+        className={cn(MARKDOWN_BASE, className)}
+        remarkPlugins={remarkPlugins}
+        translations={translations}
+        // The reference interface shows plain code without a gutter.
+        lineNumbers={false}
+        // Links are real links that warn before leaving the instance (#174),
+        // not Streamdown's link-safety buttons; headings sit below the
+        // page's h1 (#212, #271); a task list's checkboxes are named (#240).
+        components={MESSAGE_COMPONENTS}
+        // Share pages pass their own URL policy and keep the visible marker.
+        rehypePlugins={
+          !skipHtml && !urlTransform && conversationPlugins ? conversationPlugins : defaultPlugins
+        }
+        {...(skipHtml ? { skipHtml } : {})}
+        {...(urlTransform
+          ? { urlTransform: urlTransform as ComponentProps<typeof Streamdown>['urlTransform'] }
+          : {})}
+      >
+        {math ? normalizeMathDelimiters(escapeCurrencyDollars(children)) : children}
+      </Streamdown>
+    );
+  };
 }
 
 const StreamdownMarkdown = lazy(() =>
   preloadMarkdownRenderer().then((loaded) => ({ default: loaded.markdown })),
 );
-
-/** "Copy Code" was the one title-cased tooltip among the reply's controls (#194). */
-const TRANSLATIONS = { copyCode: 'Copy code' };
 
 const MESSAGE_COMPONENTS = { a: MessageLink, ...DEMOTED_HEADINGS, ...TASK_LIST_COMPONENTS };
 
@@ -261,7 +276,10 @@ export const HighlightedCode = memo(function HighlightedCode({
   return (
     <Suspense
       fallback={
-        <pre className={cn('m-0 whitespace-pre-wrap break-words font-mono text-xs', className)}>
+        <pre
+          dir="ltr"
+          className={cn('m-0 whitespace-pre-wrap break-words font-mono text-xs', className)}
+        >
           <code>{source}</code>
         </pre>
       }
@@ -311,9 +329,11 @@ const MARKDOWN_BASE = cn(
   '[&_[data-streamdown=code-block]]:![content-visibility:visible]',
   // Paragraphs, lists and cells take their own direction (markdown-direction.ts,
   // #360); code does not follow them: a code block stays left to right, even
-  // in a right-to-left list item or quote, and inline code reads by its own text.
-  '[&_[data-streamdown=code-block]]:[direction:ltr] [&_pre]:text-left',
-  '[&_:not(pre)>code]:[unicode-bidi:plaintext]',
+  // in a right-to-left list item or quote, and inline code too: both are
+  // `dir="ltr"` (markdown-direction.ts) and isolated, so an Arabic sentence
+  // around them neither reorders them nor is reordered by them.
+  '[&_[data-streamdown=code-block]]:[direction:ltr] [&_[data-streamdown=code-block]]:[unicode-bidi:isolate] [&_pre]:text-start',
+  '[&_:not(pre)>code]:[direction:ltr] [&_:not(pre)>code]:[unicode-bidi:isolate]',
 );
 
 /**
@@ -351,11 +371,15 @@ export const MARKDOWN_PROSE = cn(
   // The indent is on the side the list starts, so a right-to-left list indents
   // from the right (#360); Streamdown's nested lists add a left one to undo.
   '[&_ul]:list-outside [&_ol]:list-outside [&_ul]:ps-6 [&_ol]:ps-6',
-  '[&_ul:dir(rtl)]:pl-0 [&_ol:dir(rtl)]:pl-0',
+  // `pl-0` stays physical: it undoes Streamdown's own physical `[li_&]:pl-6`.
+  // Attribute selectors, not `:dir()`: the CSS toolchain compiles `:dir()` to
+  // `:lang()`, which matches the language of the page, not the direction of the
+  // text (markdown-direction.ts writes `dir` on lists and quotes).
+  '[&_ul[dir=rtl]]:pl-0 [&_ol[dir=rtl]]:pl-0',
   // An item that reads the other way from its list (an Arabic item in an
   // English list) keeps its marker inside its own text: outside, the marker
   // would fall in the list's unpadded side.
-  '[&_:is(ul,ol):dir(ltr)>li:dir(rtl)]:list-inside [&_:is(ul,ol):dir(rtl)>li:dir(ltr)]:list-inside',
+  '[&_li[data-opposite-direction]]:list-inside',
   // A task's checkbox sits where the bullet would, so its text hangs too:
   // 16 px box, 4 px margin and the space after it fill the 24 px indent.
   '[&_.task-list-item_input]:-ms-6 [&_.task-list-item_input]:w-4',
@@ -364,8 +388,10 @@ export const MARKDOWN_PROSE = cn(
   // Streamdown's table header is left-aligned and its quote bar is on the
   // left: both follow the text's direction instead (#360).
   '[&_th]:text-start',
-  '[&_blockquote:dir(rtl)]:border-l-0 [&_blockquote:dir(rtl)]:border-r-4',
-  '[&_blockquote:dir(rtl)]:pl-0 [&_blockquote:dir(rtl)]:pr-4',
+  // `border-l-0` and `pl-0` stay physical: they undo Streamdown's own physical
+  // `border-l-4 pl-4`; the bar and the padding come back on the start side.
+  '[&_blockquote[dir=rtl]]:border-l-0 [&_blockquote[dir=rtl]]:border-s-4',
+  '[&_blockquote[dir=rtl]]:pl-0 [&_blockquote[dir=rtl]]:ps-4',
 );
 
 // Cache at the wrapper boundary, before normalization and the lazy renderer.

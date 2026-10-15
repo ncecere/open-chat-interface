@@ -12,6 +12,7 @@ import {
 import { db } from '../../db/index.js';
 import { encryptSecret } from '../../lib/crypto.js';
 import { AppError, conflict, notFound, validationFailed } from '../../lib/errors.js';
+import { connectorClassIds } from '../classification/store.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { forgetRoleTools } from '../tools/role-tools.js';
 import { withMcpClient } from './client.js';
@@ -53,6 +54,7 @@ function serializeConnector(
   row: ConnectorRow,
   tools: ConnectorToolRow[],
   accountCount: number,
+  dataClassIds: string[],
 ): AdminConnector {
   return {
     id: row.id,
@@ -68,6 +70,8 @@ function serializeConnector(
     oauthScopes: row.oauthScopes,
     enabled: row.enabled,
     allowPrivateNetwork: row.allowPrivateNetwork,
+    dataClassIds,
+    reviewed: row.dataClassesReviewedAt !== null,
     accountCount,
     lastContactAt: row.lastContactAt?.toISOString() ?? null,
     lastErrorAt: row.lastErrorAt?.toISOString() ?? null,
@@ -93,7 +97,7 @@ export async function listConnectors(ids?: string[]): Promise<AdminConnector[]> 
     .orderBy(asc(schema.connector.name));
   if (rows.length === 0) return [];
   const connectorIds = rows.map((row) => row.id);
-  const [tools, accounts] = await Promise.all([
+  const [tools, accounts, classIds] = await Promise.all([
     db
       .select()
       .from(schema.connectorTool)
@@ -109,12 +113,14 @@ export async function listConnectors(ids?: string[]): Promise<AdminConnector[]> 
         ),
       )
       .groupBy(schema.connectorAccount.connectorId),
+    connectorClassIds(connectorIds),
   ]);
   return rows.map((row) =>
     serializeConnector(
       row,
       tools.filter((tool) => tool.connectorId === row.id),
       accounts.find((entry) => entry.connectorId === row.id)?.value ?? 0,
+      classIds.get(row.id) ?? [],
     ),
   );
 }

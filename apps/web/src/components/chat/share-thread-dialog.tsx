@@ -17,6 +17,7 @@ import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { formatDate as formatDateTime, translate, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 
 interface OwnerShareLink {
@@ -28,6 +29,11 @@ interface OwnerShareLink {
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  /**
+   * Not readable while the conversation carries a data class (v0.14, #395);
+   * it works again once the label is gone.
+   */
+  paused?: boolean;
 }
 
 interface ThreadMessage {
@@ -42,15 +48,14 @@ function textPreview(message: ThreadMessage): string {
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return text.length > 70 ? `${text.slice(0, 70).trimEnd()}…` : text || '(no text)';
+  return text.length > 70
+    ? `${text.slice(0, 70).trimEnd()}…`
+    : text || translate('chat.share.noText');
 }
 
 function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Unknown';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    date,
-  );
+  if (Number.isNaN(new Date(value).getTime())) return translate('chat.share.unknownDate');
+  return formatDateTime(value, 'dateTime');
 }
 
 function shareUrl(slug: string): string | null {
@@ -64,6 +69,12 @@ function statusOf(link: OwnerShareLink): 'active' | 'expired' | 'revoked' {
   return 'active';
 }
 
+const STATUS_KEYS = {
+  active: 'chat.share.statusActive',
+  expired: 'chat.share.statusExpired',
+  revoked: 'chat.share.statusRevoked',
+} as const;
+
 function ShareLinkRow({
   link,
   copied,
@@ -75,7 +86,9 @@ function ShareLinkRow({
   onCopy: () => void;
   onRevoke: () => void;
 }) {
+  const t = useT();
   const status = statusOf(link);
+  const paused = Boolean(link.paused) && status === 'active';
   const url = shareUrl(link.slug);
   // Copying is reading; revoking is a change, off while read-only (#331).
   const lock = useReadOnlyLock();
@@ -85,25 +98,38 @@ function ShareLinkRow({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={status === 'active' ? 'success' : 'neutral'} className="capitalize">
-              {status}
+            <Badge
+              variant={paused ? 'warning' : status === 'active' ? 'success' : 'neutral'}
+              className="capitalize"
+            >
+              {paused ? t('chat.share.statusPaused') : t(STATUS_KEYS[status])}
             </Badge>
             <span className="text-xs text-[var(--text-muted)]">
-              {link.upToMessageId ? 'Snapshot' : 'Live'} · {link.viewCount}{' '}
-              {link.viewCount === 1 ? 'view' : 'views'}
+              {t(link.upToMessageId ? 'chat.share.metaSnapshot' : 'chat.share.metaLive', {
+                count: link.viewCount,
+              })}
             </span>
           </div>
           {/* The whole link on hover; the field is narrower than most links (#130). */}
           <p
             className="mt-2 truncate font-mono text-xs text-[var(--text-secondary)]"
-            title={url ?? 'Invalid share URL'}
+            title={url ?? t('chat.share.invalidUrl')}
           >
-            {url ?? 'Invalid share URL'}
+            {url ?? t('chat.share.invalidUrl')}
           </p>
           <p className="mt-1 text-[0.6875rem] text-[var(--text-muted)]">
-            Created {formatDate(link.createdAt)}
-            {link.expiresAt ? ` · Expires ${formatDate(link.expiresAt)}` : ' · No expiration'}
+            {link.expiresAt
+              ? t('chat.share.createdExpires', {
+                  created: formatDate(link.createdAt),
+                  expires: formatDate(link.expiresAt),
+                })
+              : t('chat.share.createdNoExpiry', { created: formatDate(link.createdAt) })}
           </p>
+          {paused && (
+            <p className="mt-1 text-xs text-[var(--text-secondary)]" data-share-paused>
+              {t('chat.share.pausedNote')}
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -111,8 +137,8 @@ function ShareLinkRow({
             type="button"
             size="icon-sm"
             variant="ghost"
-            aria-label="Copy share link"
-            disabled={!url || status !== 'active'}
+            aria-label={t('chat.share.copyLink')}
+            disabled={!url || status !== 'active' || paused}
             onClick={onCopy}
           >
             {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
@@ -121,7 +147,7 @@ function ShareLinkRow({
             type="button"
             size="icon-sm"
             variant="ghost"
-            aria-label="Revoke share link"
+            aria-label={t('chat.share.revokeLink')}
             aria-haspopup="dialog"
             locked={lock.title}
             disabled={status === 'revoked'}
@@ -146,12 +172,15 @@ export function ShareThreadDialog({
   threadId: string;
   trigger?: ReactNode;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [cutoffId, setCutoffId] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
+  // Said when the link was made in warn mode for a conversation that carries a class (v0.14, #395).
+  const [notice, setNotice] = useState<string | null>(null);
   // Revoking asks first, as Settings → Sharing does (#252): one click beside
   // Copy took down a link already sent out, and it cannot be turned back on.
   const [revoking, setRevoking] = useState<OwnerShareLink | null>(null);
@@ -177,11 +206,12 @@ export function ShareThreadDialog({
 
   const create = useMutation({
     mutationFn: (body: { upToMessageId: string | null; expiresAt: string | null }) =>
-      api.post<{ link: OwnerShareLink }>(
+      api.post<{ link: OwnerShareLink; notice?: string }>(
         `/share-links/threads/${encodeURIComponent(threadId)}`,
         body,
       ),
     onSuccess: async (response) => {
+      setNotice(response.notice ?? null);
       setCutoffId('');
       setExpiresAt('');
       setFormError(null);
@@ -193,7 +223,7 @@ export function ShareThreadDialog({
   async function copyLink(link: OwnerShareLink) {
     const url = shareUrl(link.slug);
     if (!url) {
-      setCopyError('The server returned an invalid share URL.');
+      setCopyError(t('chat.share.serverInvalidUrl'));
       return;
     }
 
@@ -206,19 +236,20 @@ export function ShareThreadDialog({
         1500,
       );
     } catch {
-      setCopyError('Clipboard access failed. Select the URL and copy it manually.');
+      setCopyError(t('chat.share.clipboardFailed'));
     }
   }
 
   function submit() {
     setFormError(null);
+    setNotice(null);
     create.reset();
 
     let expiration: string | null = null;
     if (expiresAt) {
       const parsed = new Date(expiresAt);
       if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
-        setFormError('Choose an expiration time in the future.');
+        setFormError(t('chat.share.expiryPast'));
         return;
       }
       expiration = parsed.toISOString();
@@ -241,7 +272,7 @@ export function ShareThreadDialog({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Share conversation"
+            aria-label={t('chat.share.open')}
             locked={lock.title}
           >
             <Share2 />
@@ -263,18 +294,15 @@ export function ShareThreadDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>Share conversation</DialogTitle>
-          <DialogDescription>
-            Anyone with an active link can read the shared messages. Attachments and private model
-            reasoning are never included.
-          </DialogDescription>
+          <DialogTitle>{t('chat.share.open')}</DialogTitle>
+          <DialogDescription>{t('chat.share.description')}</DialogDescription>
         </DialogHeader>
 
         <section className="grid gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/30 p-4 sm:grid-cols-2">
           <Field
-            label="Share through"
+            label={t('chat.share.throughLabel')}
             htmlFor="share-cutoff"
-            hint="Choose a message for a fixed snapshot, or keep the conversation live."
+            hint={t('chat.share.throughHint')}
           >
             <Select
               id="share-cutoff"
@@ -282,19 +310,25 @@ export function ShareThreadDialog({
               disabled={messages.isLoading || create.isPending}
               onChange={setCutoffId}
               options={[
-                { value: '', label: 'Latest messages (live)' },
+                { value: '', label: t('chat.share.optionLive') },
                 ...publicMessages.map((message, index) => ({
                   value: message.id,
-                  label: `${index + 1}. ${message.role === 'user' ? 'You' : 'Assistant'}: ${textPreview(message)}`,
+                  label: t(
+                    message.role === 'user' ? 'chat.share.optionYou' : 'chat.share.optionAssistant',
+                    {
+                      index: index + 1,
+                      preview: textPreview(message),
+                    },
+                  ),
                 })),
               ]}
             />
           </Field>
 
           <Field
-            label="Expires (optional)"
+            label={t('chat.share.expiresLabel')}
             htmlFor="share-expiration"
-            hint="Uses your local time. Leave blank for no expiration."
+            hint={t('chat.share.expiresHint')}
           >
             <Input
               id="share-expiration"
@@ -306,9 +340,7 @@ export function ShareThreadDialog({
           </Field>
 
           <div className="flex flex-col items-stretch gap-2 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-[var(--text-muted)]">
-              Existing links are independent; creating a new link does not revoke them.
-            </p>
+            <p className="text-xs text-[var(--text-muted)]">{t('chat.share.independent')}</p>
             <Button
               type="button"
               variant="primary"
@@ -317,7 +349,7 @@ export function ShareThreadDialog({
               onClick={submit}
             >
               {create.isPending ? <Spinner /> : <Link2 />}
-              Create and copy link
+              {t('chat.share.create')}
             </Button>
           </div>
         </section>
@@ -327,7 +359,16 @@ export function ShareThreadDialog({
             className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
             role="alert"
           >
-            {formError ?? apiErrorMessage(create.error, 'Failed to create share link.')}
+            {formError ?? apiErrorMessage(create.error, t('chat.share.createFailed'))}
+          </p>
+        )}
+        {notice && (
+          <p
+            className="mt-3 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-3 py-2 text-xs text-[var(--text-secondary)]"
+            role="status"
+            data-share-notice
+          >
+            {notice}
           </p>
         )}
         {copyError && (
@@ -338,12 +379,12 @@ export function ShareThreadDialog({
 
         <section className="mt-6" aria-labelledby="existing-share-links">
           <h3 id="existing-share-links" className="text-sm font-semibold">
-            Existing links
+            {t('chat.share.existing')}
           </h3>
 
           {(links.isLoading || messages.isLoading) && (
             <div className="flex items-center gap-2 py-6 text-sm text-[var(--text-muted)]">
-              <Spinner /> Loading share settings…
+              <Spinner /> {t('chat.share.loading')}
             </div>
           )}
           {loadError && (
@@ -351,12 +392,12 @@ export function ShareThreadDialog({
               className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
               role="alert"
             >
-              {apiErrorMessage(loadError, 'Failed to load share links.')}
+              {apiErrorMessage(loadError, t('chat.share.loadFailed'))}
             </p>
           )}
           {links.data?.links.length === 0 && (
             <p className="mt-3 rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-6 text-center text-sm text-[var(--text-muted)]">
-              No share links yet.
+              {t('chat.share.none')}
             </p>
           )}
           {links.data && links.data.links.length > 0 && (
@@ -379,16 +420,11 @@ export function ShareThreadDialog({
           onOpenChange={(next) => {
             if (!next) setRevoking(null);
           }}
-          title="Revoke this link?"
-          description={
-            <>
-              The link stops working at once. Anyone who opened it before keeps what they saved or
-              copied. A revoked link cannot be turned back on; you can make a new one here.
-            </>
-          }
-          confirmLabel="Revoke link"
-          pendingLabel="Revoking…"
-          errorMessage="The link could not be revoked."
+          title={t('chat.share.revokeTitle')}
+          description={t('chat.share.revokeDescription')}
+          confirmLabel={t('chat.share.revokeConfirm')}
+          pendingLabel={t('chat.share.revoking')}
+          errorMessage={t('chat.share.revokeFailed')}
           onConfirm={async () => {
             if (!revoking) return;
             await api.delete(`/share-links/links/${encodeURIComponent(revoking.id)}`);

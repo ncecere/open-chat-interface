@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type KeyboardEvent, useId, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { ApiError, api } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 
 /** Editing a Markdown document: saving makes a new version; nothing is overwritten. */
 export function DocumentEditor({
@@ -15,6 +16,7 @@ export function DocumentEditor({
   baseVersion: number;
   onDone: () => void;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(initial);
   const editorId = useId();
@@ -51,7 +53,7 @@ export function DocumentEditor({
       }}
     >
       <label htmlFor={editorId} className="text-sm font-medium text-[var(--text-primary)]">
-        Edit document
+        {t('artifacts.editor.label')}
       </label>
       <textarea
         id={editorId}
@@ -66,19 +68,19 @@ export function DocumentEditor({
       />
       {save.error && (
         <p role="alert" className="text-sm text-[var(--danger-on-tint)]">
-          {save.error instanceof ApiError ? save.error.message : 'The document could not be saved.'}
+          {save.error instanceof ApiError ? save.error.message : t('artifacts.editor.saveFailed')}
         </p>
       )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
-          Cancel
+          {t('artifacts.editor.cancel')}
         </Button>
         <Button
           type="submit"
           variant="primary"
           disabled={unchanged || !draft.trim() || save.isPending}
         >
-          {save.isPending ? 'Saving…' : 'Save as new version'}
+          {save.isPending ? t('artifacts.editor.saving') : t('artifacts.editor.save')}
         </Button>
       </div>
     </form>

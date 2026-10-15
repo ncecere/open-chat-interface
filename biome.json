@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/.turbo", "!**/drizzle", "!screen_shots"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.turbo",
+      "!**/drizzle",
+      "!screen_shots",
+      "!scripts/a11y-audit/fixtures/broken.html"
+    ]
   },
   "formatter": {
     "enabled": true,

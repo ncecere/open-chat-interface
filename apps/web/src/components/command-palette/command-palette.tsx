@@ -7,6 +7,7 @@ import {
 } from '~/components/ui/item-focus';
 import { Spinner } from '~/components/ui/spinner';
 import { useFocusReturn } from '~/hooks/use-focus-return';
+import { useT } from '~/lib/i18n';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import type { CommandPaletteProps } from './types';
@@ -19,6 +20,7 @@ keepHiddenContentInert();
 
 /** Global command and thread search, controlled by the app shell. */
 export function CommandPalette(props: CommandPaletteProps) {
+  const t = useT();
   const { open, onOpenChange } = props;
   const {
     inputRef,
@@ -43,8 +45,8 @@ export function CommandPalette(props: CommandPaletteProps) {
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px]" />
         <DialogPrimitive.Content
           className={cn(
-            'fixed left-1/2 top-[10vh] z-50 flex max-h-[min(32rem,calc(100dvh-2rem))] w-[calc(100vw-1.5rem)]',
-            'max-w-[32rem] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-[var(--border-strong)]',
+            'fixed start-1/2 top-[10vh] z-50 flex max-h-[min(32rem,calc(100dvh-2rem))] w-[calc(100vw-1.5rem)]',
+            'max-w-[32rem] -translate-x-1/2 flex-col rtl:translate-x-1/2 overflow-hidden rounded-xl border border-[var(--border-strong)]',
             'bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-[var(--shadow-popover)] outline-none',
             'sm:top-1/2 sm:-translate-y-1/2',
           )}
@@ -60,7 +62,7 @@ export function CommandPalette(props: CommandPaletteProps) {
             focusReturn.onCloseAutoFocus(event);
           }}
         >
-          <DialogPrimitive.Title className="sr-only">Search</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="sr-only">{t('palette.title')}</DialogPrimitive.Title>
           <p role="status" aria-live="polite" className="sr-only">
             {threadAnnouncement}
           </p>
@@ -71,7 +73,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               ref={inputRef}
               role="combobox"
               dir="auto"
-              aria-label="Type a command or search your conversations"
+              aria-label={t('palette.inputLabel')}
               aria-autocomplete="list"
               aria-expanded="true"
               aria-controls={LISTBOX_ID}
@@ -81,11 +83,14 @@ export function CommandPalette(props: CommandPaletteProps) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleInputKeyDown}
-              placeholder="Type a command or search your conversations..."
+              placeholder={t('palette.inputPlaceholder')}
               className="h-full min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
             />
             {showThreadProgress && <Spinner className="shrink-0" />}
-            <kbd className="hidden rounded border border-[var(--border-subtle)] bg-[var(--bg-control)] px-1.5 py-0.5 text-[0.625rem] text-[var(--text-muted)] sm:block">
+            <kbd
+              dir="ltr"
+              className="hidden rounded border border-[var(--border-subtle)] bg-[var(--bg-control)] px-1.5 py-0.5 text-[0.625rem] text-[var(--text-muted)] sm:block"
+            >
               ESC
             </kbd>
           </div>
@@ -93,7 +98,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           <div
             id={LISTBOX_ID}
             role="listbox"
-            aria-label="Suggestions"
+            aria-label={t('palette.suggestions')}
             className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 py-2"
           >
             {/* Options as a listbox has them (#176): focus stays in the search
@@ -127,7 +132,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                         if (event.key === 'Enter') void selectItem(item);
                       }}
                       className={cn(
-                        'flex min-h-9 w-full cursor-pointer gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm',
+                        'flex min-h-9 w-full cursor-pointer gap-2.5 rounded-md border px-2.5 py-2 text-start text-sm',
                         item.content ? 'items-start' : 'items-center',
                         'transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
                         // The active option gets the focus ring the model picker uses: the
@@ -152,10 +157,12 @@ export function CommandPalette(props: CommandPaletteProps) {
                       {item.content ? (
                         <span className="flex min-w-0 flex-1 flex-col">{item.content}</span>
                       ) : (
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        <span dir="auto" className="min-w-0 flex-1 truncate">
+                          {item.label}
+                        </span>
                       )}
                       {item.shortcut && (
-                        <span className="hidden shrink-0 gap-1 sm:flex" data-shortcut>
+                        <span dir="ltr" className="hidden shrink-0 gap-1 sm:flex" data-shortcut>
                           {item.shortcut.map((key) => (
                             <kbd
                               key={key}
@@ -174,7 +181,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 
             {items.length === 0 && !showThreadProgress && (
               <p className="px-3 py-10 text-center text-sm text-[var(--text-muted)]">
-                No commands or conversations found.
+                {t('palette.empty')}
               </p>
             )}
           </div>
@@ -182,11 +189,11 @@ export function CommandPalette(props: CommandPaletteProps) {
           <div className="flex min-h-10 shrink-0 items-center justify-end gap-3 border-t border-[var(--border-subtle)] px-3 text-[0.6875rem] text-[var(--text-muted)]">
             <span className="hidden items-center gap-1 sm:flex">
               <kbd className="rounded bg-[var(--bg-control)] px-1.5 py-0.5">↑↓</kbd>
-              Navigate
+              {t('palette.navigate')}
             </span>
             <span className="flex items-center gap-1">
               <kbd className="rounded bg-[var(--bg-control)] px-1.5 py-0.5">↵</kbd>
-              Open selected
+              {t('palette.openSelected')}
             </span>
           </div>
         </DialogPrimitive.Content>

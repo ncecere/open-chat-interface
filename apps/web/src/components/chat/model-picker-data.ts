@@ -1,6 +1,8 @@
 import { type CatalogModel, findModelLab, type ModelCapability } from '@oci/shared';
 import { Brain, Eye, FileText, Globe2, Image, SlidersHorizontal, Wrench, Zap } from 'lucide-react';
 
+import { type MessageKey, translate } from '~/lib/i18n';
+
 export const CAPABILITY_ICONS: Partial<Record<ModelCapability, typeof Eye>> = {
   vision: Eye,
   reasoning: Brain,
@@ -12,6 +14,10 @@ export const CAPABILITY_ICONS: Partial<Record<ModelCapability, typeof Eye>> = {
   web_search: Globe2,
 };
 
+/**
+ * The capabilities in English only: for the administration console, which is not
+ * translated. Everything else asks `capabilityLabel`.
+ */
 export const CAPABILITY_LABELS: Record<ModelCapability, string> = {
   vision: 'Vision',
   reasoning: 'Reasoning',
@@ -22,6 +28,40 @@ export const CAPABILITY_LABELS: Record<ModelCapability, string> = {
   image_generation: 'Image generation',
   web_search: 'Web search',
 };
+
+const CAPABILITY_KEYS = {
+  vision: 'chat.capability.vision',
+  reasoning: 'chat.capability.reasoning',
+  effort_control: 'chat.capability.effortControl',
+  tool_calling: 'chat.capability.toolCalling',
+  fast: 'chat.capability.fast',
+  pdf_comprehension: 'chat.capability.pdfComprehension',
+  image_generation: 'chat.capability.imageGeneration',
+  web_search: 'chat.capability.webSearch',
+} as const satisfies Record<ModelCapability, MessageKey>;
+
+/** The same, as an item in a sentence ("Supports reasoning, tool calling"). */
+const CAPABILITY_INLINE_KEYS = {
+  vision: 'chat.capabilityInline.vision',
+  reasoning: 'chat.capabilityInline.reasoning',
+  effort_control: 'chat.capabilityInline.effortControl',
+  tool_calling: 'chat.capabilityInline.toolCalling',
+  fast: 'chat.capabilityInline.fast',
+  pdf_comprehension: 'chat.capabilityInline.pdfComprehension',
+  image_generation: 'chat.capabilityInline.imageGeneration',
+  web_search: 'chat.capabilityInline.webSearch',
+} as const satisfies Record<ModelCapability, MessageKey>;
+
+/** A capability's name as a person reads it, in the language shown. */
+export const capabilityLabel = (capability: ModelCapability): string =>
+  translate(CAPABILITY_KEYS[capability]);
+
+/** Capabilities joined the way the language joins a short list. */
+export function capabilityList(capabilities: readonly ModelCapability[]): string {
+  return capabilities
+    .map((capability) => translate(CAPABILITY_INLINE_KEYS[capability]))
+    .join(translate('chat.capabilityInline.separator'));
+}
 
 export const FILTER_CAPABILITIES: ModelCapability[] = [
   'fast',
@@ -76,9 +116,9 @@ export function modelDescription(model: CatalogModel): string {
   const configured = model.description?.trim();
   if (configured) return configured;
 
-  const supported = model.capabilities
-    .map((capability) => CAPABILITY_LABELS[capability])
-    .filter(Boolean);
-  if (supported.length > 0) return `Supports ${supported.join(', ').toLowerCase()}`;
-  return `Available through ${model.providerLabel}`;
+  if (model.capabilities.length > 0)
+    return translate('chat.modelPicker.supports', {
+      capabilities: capabilityList(model.capabilities),
+    });
+  return translate('chat.modelPicker.availableThrough', { provider: model.providerLabel });
 }

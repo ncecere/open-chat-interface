@@ -1,4 +1,10 @@
-import type { PersonalDefaultProblem, ReasoningEffort, SignInMethods, UserRole } from '@oci/shared';
+import type {
+  MfaSummary,
+  PersonalDefaultProblem,
+  ReasoningEffort,
+  SignInMethods,
+  UserRole,
+} from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '~/lib/api-client';
 
@@ -24,6 +30,8 @@ export interface UserPreferences {
   defaultModelSlug: string | null;
   /** The person's own starting reasoning level (v0.10); null or absent for the instance default. */
   defaultEffort?: ReasoningEffort | null;
+  /** The person's saved language (v0.14); null follows the instance default; absent from an older API. */
+  locale?: string | null;
   /** The person's own memory switch; absent from an API before v0.9. */
   memoryEnabled?: boolean;
 }
@@ -74,6 +82,8 @@ export interface SettingsSummary {
   connectors: number;
   /** Share links not yet revoked (v0.10); absent from an older API. */
   shareLinks?: number;
+  /** Groups the person manages (v0.14); absent from an older API. Settings → Groups shows when above zero. */
+  managedGroups?: number;
 }
 
 interface MeResponse {
@@ -81,6 +91,8 @@ interface MeResponse {
   preferences: UserPreferences;
   /** How the person signs in (v0.9.1); absent from an older API. */
   signIn?: SignInMethods;
+  /** Two-step verification (v0.14); absent from an older API, which has none. */
+  mfa?: MfaSummary;
   /** Absent from an older API; every section then shows. */
   settingsSummary?: SettingsSummary;
   /** Instance switches narrowed by the person's role. */

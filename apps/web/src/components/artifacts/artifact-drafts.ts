@@ -8,6 +8,7 @@ import {
   toolIdOfPart,
 } from '@oci/shared';
 import type { UIMessage } from 'ai';
+import { translate } from '~/lib/i18n';
 
 /** One find-and-replace pair of an `update_artifact` call, as far as it has arrived. */
 interface ArtifactEdit {
@@ -106,8 +107,5 @@ export const writesSource = (draft: ArtifactDraft) => draft.mode === 'content';
 export function sizeLabel(content: string): string {
   // A final newline ends the last line rather than starting another.
   const lines = content ? content.replace(/\n$/, '').split('\n').length : 0;
-  const format = new Intl.NumberFormat();
-  return `${format.format(lines)} ${lines === 1 ? 'line' : 'lines'} · ${format.format(
-    content.length,
-  )} ${content.length === 1 ? 'character' : 'characters'}`;
+  return translate('artifacts.size', { lines, characters: content.length });
 }

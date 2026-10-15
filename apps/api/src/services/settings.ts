@@ -1,12 +1,20 @@
 import { and, eq, schema } from '@oci/db';
 import {
   type CapacityLimits,
+  type ClassificationMode,
+  type ClassificationService,
   COLOR_THEMES,
   type ColorTheme,
+  type LanguageSettings,
+  MFA_DEFAULT_GRACE_DAYS,
+  MFA_MAX_GRACE_DAYS,
+  type MfaRequirement,
+  normalizeLanguageSettings,
   type QueuePriority,
   type ReasoningEffort,
   type RoleFeatures,
   type SearchProviderKind,
+  USER_ROLES,
   type UserRole,
 } from '@oci/shared';
 import { db } from '../db/index.js';
@@ -15,6 +23,7 @@ import { getDefaultOrganizationId } from './organization.js';
 
 export type SettingKey =
   | 'branding'
+  | 'language'
   | 'auth'
   | 'features'
   | 'storage'
@@ -30,7 +39,8 @@ export type SettingKey =
   | 'backups'
   | 'compliance'
   | 'providerCapacity'
-  | 'maintenance';
+  | 'maintenance'
+  | 'classification';
 
 export interface BrandingSettings {
   appName: string;
@@ -75,6 +85,12 @@ export interface AuthSettings {
    */
   sessionLifetimeDays: number;
   sessionRefreshDays: number;
+  /**
+   * Two-step verification required per role (v0.14, #399). Absent from
+   * settings saved before v0.14, which read as nobody; a v0.13 replica saving
+   * the page keeps the key (`updateSetting` merges).
+   */
+  mfaRequirement?: MfaRequirement;
 }
 
 export interface FeatureSettings {
@@ -98,6 +114,33 @@ export function normalizeAuthSettings(value: AuthSettings): AuthSettings {
     ...value,
     sessionLifetimeDays: value.sessionLifetimeDays ?? 30,
     sessionRefreshDays: value.sessionRefreshDays ?? 1,
+    mfaRequirement: normalizeMfaRequirement(value.mfaRequirement),
+  };
+}
+
+/** Missing or malformed storage reads as no requirement, with the default grace. */
+export function normalizeMfaRequirement(
+  value: Partial<MfaRequirement> | undefined,
+): MfaRequirement {
+  const roles = Array.isArray(value?.roles)
+    ? USER_ROLES.filter((role) => value.roles?.includes(role))
+    : [];
+  const grace = value?.graceDays;
+  const since: MfaRequirement['since'] = {};
+  for (const role of roles) {
+    const stamped = value?.since?.[role];
+    if (typeof stamped === 'string' && !Number.isNaN(Date.parse(stamped))) since[role] = stamped;
+  }
+  return {
+    roles,
+    graceDays:
+      typeof grace === 'number' &&
+      Number.isInteger(grace) &&
+      grace >= 0 &&
+      grace <= MFA_MAX_GRACE_DAYS
+        ? grace
+        : MFA_DEFAULT_GRACE_DAYS,
+    since,
   };
 }
 
@@ -350,8 +393,21 @@ export interface StoredMaintenanceSettings {
   keepRunningJobs?: string[];
 }
 
+/**
+ * Data classification (v0.14, #395). Sparse: nothing saved means `off` with no
+ * approvals. A v0.13 replica ignores the key. Normalised by
+ * services/classification/config.ts.
+ */
+export interface StoredClassificationSettings {
+  mode?: ClassificationMode;
+  /** Class ids each outside service may receive; absent means none. */
+  services?: Partial<Record<ClassificationService, string[]>>;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
+  /** The instance's language and the languages people may choose (v0.14, #397). */
+  language: LanguageSettings;
   auth: AuthSettings;
   features: FeatureSettings;
   storage: StorageSettings;
@@ -368,6 +424,7 @@ interface SettingsMap {
   compliance: StoredComplianceSettings;
   providerCapacity: StoredProviderCapacitySettings;
   maintenance: StoredMaintenanceSettings;
+  classification: StoredClassificationSettings;
 }
 
 /**
@@ -415,7 +472,9 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<Settings
           ? normalizeFeatureSettings(stored as FeatureSettings)
           : key === 'auth'
             ? normalizeAuthSettings(stored as AuthSettings)
-            : stored
+            : key === 'language'
+              ? normalizeLanguageSettings(stored)
+              : stored
   ) as SettingsMap[K];
   if (readGeneration === generation)
     cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });

@@ -1,21 +1,8 @@
 import type { StorageUsage } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '~/lib/api-client';
+import { formatFileSize as formatBytes, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
-
-const MB = 1024 * 1024;
-const GB = 1024 * MB;
-
-function formatBytes(bytes: number): string {
-  if (bytes >= GB) return `${(bytes / GB).toFixed(2)} GB`;
-  if (bytes >= MB) return `${(bytes / MB).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
-}
-
-function plural(count: number, noun: string): string {
-  return `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`;
-}
 
 /**
  * Storage consumption against the role's allowance.
@@ -25,6 +12,7 @@ function plural(count: number, noun: string): string {
  * than at the end of the trash window.
  */
 export function StorageMeter() {
+  const t = useT();
   const { data } = useQuery({
     queryKey: ['attachments', 'usage'],
     queryFn: () => api.get<StorageUsage>('/attachments/usage'),
@@ -43,13 +31,22 @@ export function StorageMeter() {
   return (
     <div className="mt-5 rounded-xl border border-[var(--border-subtle)] p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-medium text-sm">Storage used</p>
+        <p className="font-medium text-sm">{t('settings.storage.used')}</p>
         <p className="text-[var(--text-muted)] text-xs">
-          {formatBytes(data.liveBytes)}
-          {hasByteLimit ? ` of ${formatBytes(data.maxTotalBytes as number)}` : ''} ·{' '}
-          {data.liveFileCount.toLocaleString()}
-          {data.maxFileCount ? ` of ${data.maxFileCount.toLocaleString()}` : ''} file
-          {data.liveFileCount === 1 ? '' : 's'}
+          {t('settings.storage.summary', {
+            bytes: hasByteLimit
+              ? t('settings.storage.bytesOf', {
+                  used: formatBytes(data.liveBytes),
+                  limit: formatBytes(data.maxTotalBytes as number),
+                })
+              : formatBytes(data.liveBytes),
+            files: data.maxFileCount
+              ? t('settings.storage.filesOf', {
+                  count: data.liveFileCount,
+                  max: data.maxFileCount,
+                })
+              : t('settings.storage.files', { count: data.liveFileCount }),
+          })}
         </p>
       </div>
 
@@ -67,20 +64,26 @@ export function StorageMeter() {
 
       {data.breakdown && (
         <dl
-          aria-label="Storage by kind"
+          aria-label={t('settings.storage.byKind')}
           className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-3"
         >
           {(
             [
-              ['Chat files', data.breakdown.chatFiles, 'file'],
-              ['Project files', data.breakdown.projectFiles, 'file'],
-              ['Artifacts', data.breakdown.artifacts, 'artifact'],
+              ['chat', t('settings.storage.chatFiles'), data.breakdown.chatFiles, false],
+              ['project', t('settings.storage.projectFiles'), data.breakdown.projectFiles, false],
+              ['artifacts', t('settings.storage.artifacts'), data.breakdown.artifacts, true],
             ] as const
-          ).map(([label, share, noun]) => (
-            <div key={label} className="flex items-baseline justify-between gap-2 sm:block">
+          ).map(([kind, label, share, artifacts]) => (
+            <div key={kind} className="flex items-baseline justify-between gap-2 sm:block">
               <dt className="text-[var(--text-secondary)]">{label}</dt>
               <dd className="text-[var(--text-muted)]">
-                {formatBytes(share.bytes)} · {plural(share.count, noun)}
+                {t('settings.storage.kindSummary', {
+                  bytes: formatBytes(share.bytes),
+                  items: t(
+                    artifacts ? 'settings.storage.artifactCount' : 'settings.storage.files',
+                    { count: share.count },
+                  ),
+                })}
               </dd>
             </div>
           ))}
@@ -90,19 +93,20 @@ export function StorageMeter() {
       <p className="mt-2 text-[var(--text-muted)] text-xs">
         {hasByteLimit
           ? nearlyFull
-            ? 'You are close to your storage limit. Delete files to make room.'
-            : `${formatBytes(Math.max(0, (data.maxTotalBytes as number) - data.liveBytes))} free.`
-          : 'No storage limit applies to your role.'}
+            ? t('settings.storage.nearlyFull')
+            : t('settings.storage.free', {
+                size: formatBytes(Math.max(0, (data.maxTotalBytes as number) - data.liveBytes)),
+              })
+          : t('settings.storage.noLimit')}
         {/* Files you deleted (gone for good, only waiting to be removed from
             storage) and those of conversations in the trash. There is no trash
             for files, so this does not say they are in one (#179). With no
             limit, it does not speak of one (#254). */}
         {data.pendingFileCount > 0 &&
-          ` ${formatBytes(data.pendingBytes)} of deleted files, and of conversations in the trash, ${
-            hasLimit
-              ? 'no longer counts against your limit.'
-              : 'is not counted in the storage used.'
-          }`}
+          ` ${t(
+            hasLimit ? 'settings.storage.pendingWithLimit' : 'settings.storage.pendingNoLimit',
+            { size: formatBytes(data.pendingBytes) },
+          )}`}
       </p>
     </div>
   );

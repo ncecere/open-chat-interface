@@ -107,7 +107,10 @@ function PgvectorNotice({
           Project search stays keyword-only until a database owner or superuser enables the
           extension once. Open Chat Interface never does this itself:
         </p>
-        <pre className="my-2 overflow-x-auto rounded-lg bg-[var(--bg-control)] px-3 py-2 font-mono text-xs text-[var(--text-primary)]">
+        <pre
+          dir="ltr"
+          className="my-2 overflow-x-auto rounded-lg bg-[var(--bg-control)] px-3 py-2 font-mono text-xs text-[var(--text-primary)]"
+        >
           <code>{PGVECTOR_ENABLE_COMMAND}</code>
         </pre>
         <p>See {docs} in the operations guide.</p>

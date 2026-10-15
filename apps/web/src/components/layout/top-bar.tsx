@@ -11,6 +11,7 @@ import { useCurrentUser } from '~/hooks/use-current-user';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
 import { useConversationUnavailable } from '~/lib/conversation-cache';
 import { focusComposerSoon } from '~/lib/focus-after-navigation';
+import { useT } from '~/lib/i18n';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
@@ -28,6 +29,7 @@ interface TopBarProps {
  * hang below it over the panel.
  */
 export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: TopBarProps) {
+  const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams({ strict: false }) as { threadId?: string };
@@ -61,22 +63,24 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
       {!sidebarOpen && (
         <div
           data-floating-controls
-          className="absolute left-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
+          className="absolute start-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
         >
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={onOpenSidebar}
-            aria-label="Open sidebar"
+            aria-label={t('shell.sidebar.open')}
+            // Found by the shell to give focus back when the drawer closes.
+            data-open-sidebar=""
             aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
           >
-            <PanelLeft />
+            <PanelLeft className="rtl:-scale-x-100" />
           </Button>
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={onOpenCommandPalette}
-            aria-label="Search commands and conversations"
+            aria-label={t('shell.topBar.commandSearch')}
             aria-keyshortcuts="Meta+K Control+K"
           >
             <Search />
@@ -85,7 +89,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
             variant="ghost"
             size="icon-sm"
             asChild
-            aria-label="New chat"
+            aria-label={t('shell.topBar.newChat')}
             aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
           >
             <Link
@@ -104,7 +108,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
 
       <div
         data-floating-controls
-        className="absolute right-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
+        className="absolute end-2 top-6 flex items-center gap-0.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-pill)] p-1 shadow-sm"
       >
         {threadId && <RenameConversationControl threadId={threadId} />}
         {threadId && (
@@ -112,8 +116,8 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
             variant="ghost"
             size="icon-sm"
             asChild
-            aria-label="Download this conversation"
-            title="Download as Markdown"
+            aria-label={t('shell.topBar.download')}
+            title={t('shell.topBar.downloadTitle')}
           >
             {/* A plain link so the browser handles the download; the response
                 carries its own filename. Dated in the person's own time zone,
@@ -140,9 +144,9 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
             size="icon-sm"
             // A toggle keeps its name and says whether it is on with
             // aria-pressed (#325): "Leave temporary chat, pressed" read as two states.
-            aria-label="Temporary chat"
+            aria-label={t('shell.topBar.temporaryChat')}
             aria-pressed={temporary}
-            title="Temporary chat"
+            title={t('shell.topBar.temporaryChat')}
             onClick={toggleTemporary}
             className={cn(
               temporary &&
@@ -160,6 +164,7 @@ export function TopBar({ sidebarOpen, onOpenSidebar, onOpenCommandPalette }: Top
 
 /** Renames the conversation on screen; offered once its current name is known. */
 function RenameConversationControl({ threadId }: { threadId: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const title = useOpenConversation(threadId)?.thread.title;
   // Off while read-only, as the sidebar's Rename is (#331).
@@ -170,8 +175,8 @@ function RenameConversationControl({ threadId }: { threadId: string }) {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Rename conversation"
-        title="Rename"
+        aria-label={t('shell.topBar.renameLabel')}
+        title={t('shell.topBar.renameTitle')}
         locked={lock.title}
         aria-haspopup="dialog"
         disabled={title === undefined}
@@ -188,6 +193,7 @@ function RenameConversationControl({ threadId }: { threadId: string }) {
 
 /** Opens the Move to project dialog for the conversation on screen. */
 function MoveToProjectControl({ threadId }: { threadId: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   // From the sidebar's cached lists, or the conversation's own history when
   // the sidebar does not list it (an older project conversation).
@@ -202,14 +208,14 @@ function MoveToProjectControl({ threadId }: { threadId: string }) {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Move to project"
+        aria-label={t('shell.topBar.moveToProject')}
         // Off while read-only, with the reason (#331).
-        title="Move to project"
+        title={t('shell.topBar.moveToProject')}
         locked={lock.title}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
-        <FolderInput />
+        <FolderInput className="rtl:-scale-x-100" />
       </Button>
       <MoveToProjectDialog
         threadId={threadId}

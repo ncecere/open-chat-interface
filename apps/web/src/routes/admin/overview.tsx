@@ -13,10 +13,10 @@ import { formatBytes } from '~/lib/utils';
 function Stat({ title, value, hint }: { title: string; value: string; hint?: string }) {
   return (
     <div className="min-w-0 p-4 sm:p-5">
-      <p className="truncate text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+      <p className="[overflow-wrap:anywhere] text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
         {title}
       </p>
-      <p className="mt-2 truncate text-xl font-semibold sm:text-2xl">{value}</p>
+      <p className="mt-2 [overflow-wrap:anywhere] text-xl font-semibold sm:text-2xl">{value}</p>
       {hint && <p className="mt-1 text-xs text-[var(--text-muted)]">{hint}</p>}
     </div>
   );
@@ -126,7 +126,7 @@ export function AdminOverviewPage() {
 
       {/* Borders are drawn per cell: dividers between siblings misplace the
           vertical rule when four figures wrap into two rows on a phone. */}
-      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t lg:[&>*:nth-child(n+2)]:border-l lg:[&>*:nth-child(n+3)]:border-t-0">
+      <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] lg:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-s [&>*:nth-child(n+3)]:border-t lg:[&>*:nth-child(n+2)]:border-s lg:[&>*:nth-child(n+3)]:border-t-0">
         <Stat
           title="Users"
           value={String(data.users.total)}
@@ -136,7 +136,9 @@ export function AdminOverviewPage() {
           <p className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
             Conversations
           </p>
-          <p className="mt-2 truncate font-semibold text-xl sm:text-2xl">{data.threads.total}</p>
+          <p className="mt-2 [overflow-wrap:anywhere] font-semibold text-xl sm:text-2xl">
+            {data.threads.total}
+          </p>
           <p className="mt-1 text-xs">
             <Trend current={data.threads.last24h} previous={data.threads.previous24h} />
           </p>
@@ -145,7 +147,9 @@ export function AdminOverviewPage() {
           <p className="font-medium text-[var(--text-muted)] text-xs uppercase tracking-wider">
             Messages
           </p>
-          <p className="mt-2 truncate font-semibold text-xl sm:text-2xl">{data.messages.total}</p>
+          <p className="mt-2 [overflow-wrap:anywhere] font-semibold text-xl sm:text-2xl">
+            {data.messages.total}
+          </p>
           <p className="mt-1 text-xs">
             <Trend current={data.messages.last24h} previous={data.messages.previous24h} />
           </p>

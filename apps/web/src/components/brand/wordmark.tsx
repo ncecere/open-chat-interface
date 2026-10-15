@@ -74,7 +74,14 @@ export function Wordmark({
       title={display === label ? undefined : label}
     >
       <TurnsMark className={compact ? 'size-6' : 'size-8'} />
-      <span className={compact ? 'min-w-0 truncate' : 'min-w-0 [overflow-wrap:anywhere]'}>
+      <span
+        className={
+          // The sidebar header may take two lines before it cuts (1.4.12), the full name on hover.
+          compact
+            ? 'min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]'
+            : 'min-w-0 [overflow-wrap:anywhere]'
+        }
+      >
         {display}
       </span>
     </span>

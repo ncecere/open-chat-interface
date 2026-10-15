@@ -2,6 +2,7 @@ import { count, desc, eq, isNull, schema } from '@oci/db';
 import { db } from '../../db/index.js';
 import { archiverMetricSamples, readArchiverState } from '../backups/database-state.js';
 import { backupSettings } from '../backups/settings.js';
+import { mfaImpact } from '../mfa/requirement.js';
 import { registerCollectedGauge } from './metrics.js';
 
 /** The WAL archiver read, only when the database is backed up outside OCI. */
@@ -74,5 +75,28 @@ export function registerCollectedGauges(): void {
       const samples = await archiverSamples();
       return samples ? [{ value: samples.failing }] : [];
     },
+  );
+  // Two-step verification (v0.14, #399): who has it, and who the requirement
+  // limits. Roles are the four fixed ones; never a person.
+  registerCollectedGauge(
+    'oci_mfa_people',
+    'Unbanned accounts by role and two-step verification state: enrolled (authenticator or passkey), not_enrolled, exempt (no password, so never required to).',
+    ['role', 'state'],
+    async () =>
+      (await mfaImpact()).roles.flatMap((row) => [
+        { labels: { role: row.role, state: 'enrolled' }, value: row.enrolled },
+        { labels: { role: row.role, state: 'not_enrolled' }, value: row.unenrolled },
+        { labels: { role: row.role, state: 'exempt' }, value: row.exempt },
+      ]),
+  );
+  registerCollectedGauge(
+    'oci_mfa_limited_people',
+    'People whose role requires two-step verification, who have not set it up and whose grace has passed: refused everywhere but setup until they do.',
+    ['role'],
+    async () =>
+      (await mfaImpact()).roles.map((row) => ({
+        labels: { role: row.role },
+        value: row.limitedNow,
+      })),
   );
 }

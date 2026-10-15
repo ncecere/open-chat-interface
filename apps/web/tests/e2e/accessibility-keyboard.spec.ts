@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { signIn, storeThemeForProject } from './accessibility.helpers';
+import { LABELLED, openLabelledConversation } from './classification.fixtures';
 
 storeThemeForProject();
 
@@ -93,5 +94,67 @@ test.describe('WCAG 2.2 AA: keyboard operation', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
+  });
+  test('a model the data classes forbid is reached, announced and not chosen by keyboard (v0.14)', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await openLabelledConversation(page);
+
+    // Open the picker from the keyboard, as a person using only one would.
+    const trigger = page.getByRole('combobox', { name: /Select model/ });
+    await expect(trigger).toHaveAccessibleName(`Select model. Current model: ${LABELLED.approved}`);
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    const search = page.getByRole('combobox', { name: 'Search models' });
+    await expect(search).toBeFocused();
+
+    // Arrowing onto the forbidden model makes it the active descendant, and its
+    // accessible name carries the reason, so a screen reader reads it out.
+    await page.keyboard.press('ArrowDown');
+    const plain = page.getByRole('option', { name: new RegExp(LABELLED.plain) });
+    await expect(search).toHaveAttribute(
+      'aria-activedescendant',
+      (await plain.getAttribute('id'))!,
+    );
+    await expect(plain).toHaveAttribute('aria-disabled', 'true');
+    await expect(plain).toHaveAccessibleName(
+      new RegExp(`${LABELLED.plain}.*Not approved for ${LABELLED.className} and Payroll`),
+    );
+
+    // Enter does not choose it, and the picker stays open to choose another.
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('listbox', { name: 'Models' })).toBeVisible();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('listbox', { name: 'Models' })).toBeHidden();
+    await expect(trigger).toHaveAccessibleName(`Select model. Current model: ${LABELLED.approved}`);
+    await expect(trigger).toBeFocused();
+  });
+
+  test('the label chips are reachable and a person’s own label is removable by keyboard (v0.14)', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await openLabelledConversation(page);
+
+    const remove = page.getByRole('button', { name: 'Remove the Health data label' });
+    await remove.focus();
+    await expect(remove).toBeFocused();
+    // Only the label the person added has one; the rest explain themselves in text.
+    await expect(page.getByRole('button', { name: /^Remove the / })).toHaveCount(1);
+    const outline = await remove.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0;
+    });
+    expect(outline).toBe(true);
+
+    // The Add label menu opens from the keyboard and closes back onto its button.
+    const add = page.getByRole('button', { name: 'Add label' });
+    await add.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('menuitem', { name: 'Research data' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(add).toBeFocused();
   });
 });

@@ -7,10 +7,12 @@ PostgreSQL, with Drizzle. Schema in `packages/db/src/schema/`, migrations in
 
 | File | Holds |
 | --- | --- |
-| `auth.ts` | users, sessions, accounts, SSO providers, invitations |
+| `auth.ts` | users, sessions, accounts, SSO providers, invitations, `two_factor` (an authenticator's key and recovery codes, encrypted by the plugin with `AUTH_SECRET`; migration 0050) and `passkey` (migration 0051); `user.two_factor_enabled` and `session.auth_method` |
 | `chat.ts` | threads, messages, attachments, share links |
 | `provider.ts` | providers and the model catalogue |
-| `usage.ts` | usage events, quotas, audit log |
+| `usage.ts` | usage events, quotas, audit log, personal preferences (`user_preference`, with the language, migration `0055`) |
+| `groups.ts` | groups, their members, and the budgets and models they grant (migration 0053) |
+| `project-shares.ts` | a project shared with a person or a group (0054) |
 | `lifecycle.ts` | retention, storage policies, jobs, saved views, reports |
 | `organization.ts` | the organisation and its settings |
 
@@ -242,6 +244,71 @@ answer for the life of the process and a false one for 30 seconds; a
 database that cannot answer reads as not ready. An index needs no flag when
 the query is the same with or without it: the planner uses it once it is
 valid.
+
+## Project sharing
+
+`project_share` (migration 0054, v0.14) names a project, one subject (a person
+or a group, exactly one column, checked), and a permission (`viewer` or
+`editor`). Ownership stays `project.user_id`. Every foreign key cascades (a
+`created_by` is `SET NULL`): a previous-release replica deleting a project or an
+account is never blocked by rows it cannot see, and deleting a project removes
+its shares.
+
+**One function decides.** `projectAccess(executor, projectId, userId)`
+(`services/project-sharing/access.ts`) returns `owner | editor | viewer | null`:
+the owner, else the highest permission among the shares naming the person or any
+group in `group_member` for them. `projectReadableBy(projectId, userId)` and
+`projectEditableBy` are its raw-SQL twins (an `EXISTS`), used where a query said
+`a.user_id = <person>`; `project-access.live.test.ts` compares the three on
+generated data. `null` is answered 404 (existence never leaks), too little
+permission with access 403. A new query that touches project data must be added
+to `__tests__/unit/project-data-paths.unit.test.ts` with its class (A: access
+aware, O: owner only on purpose, S: system, U: unchanged) and a reason, which the
+test checks; the matrix in `project-access-matrix.live.test.ts` has a row for
+every route that takes a project.
+
+**Invariants** (the tests enforce them).
+
+- **I-1** Every finished project file belongs to the project's owner or to
+  someone who currently has editor access. Unfinished uploads stay with their
+  uploader until they complete.
+- **I-2** A person's conversation points at a project only if they can read it.
+  Reads re-check anyway, so a missed repair leaks nothing.
+- **I-3** No answer about shares or group membership is cached across requests.
+
+**Ending access.** Every event that ends access (a share removed or downgraded,
+leaving, a transfer, a group deleted or a member removed) calls
+`reconcileProject(tx, projectId)` in the same transaction, with the project row
+locked first. It clears `thread.project_id` for people with no access (raw SQL,
+so `updated_at` does not move and recents do not reorder) and moves finished
+files of anyone who is no longer an editor to the owner, setting both
+`storage_usage` rows to the authoritative totals of their files, locked in user-id
+order. It never refuses for lack of allowance (as a fork never does, see
+[Files in forks and edits](#files-in-forks-and-edits)). The job
+`projects.reconcile-access` (every minute) repeats it for leftovers. Code that
+removes group members or deletes groups must call `projectsTouchedBy` /
+`projectsSharedWithGroup` and `reconcileProject` too (or rely on the job). Deleting
+an account hands the files its person added to other people's projects to their
+owners first (`handOverFilesOf`); the cascade on `attachment.user_id` would
+otherwise delete another person's content.
+
+**Lock order**, extending the one in `services/projects.ts`: the acting person's
+`user` row (`KEY SHARE`), the project row (`FOR UPDATE`), thread rows (by id),
+then `storage_usage` rows by user id. Transfer locks the two user rows in id
+order, then the project. Group changes: the group row, then user rows by id.
+Counting a limit (50 shares per project, 100 direct inbound shares per person)
+happens under the project row lock, and the target person's row is locked
+`FOR NO KEY UPDATE` for the inbound count, so concurrent shares cannot both pass.
+
+**Legal hold.** Deleting a project or a project file is refused when the actor
+or the uploader of any affected file is on hold. Handing files to the owner is
+not a deletion and is allowed. `project_share` deletions are configuration
+(`legal-hold-paths.unit.test.ts`).
+
+**Rolling upgrade.** Creating a share (and a transfer, and group grants) is
+refused with 409 while a live replica heartbeat reports an older version
+(`services/project-sharing/upgrade-guard.ts`); see
+[Upgrading to v0.14](../OPERATIONS.md#upgrading-to-v014).
 
 ## Usage rollups
 
@@ -484,6 +551,37 @@ fills a new column first), the feature checks `isPostStepDone` /
 index is dropped by a post-deploy step of the next release. Searches never
 go without an index meanwhile.
 
+## Groups
+
+Migration 0053 adds `group`, `group_member`, `quota_policy_group` and
+`model_group_access` (`schema/groups.ts`); the API is listed in
+[groups-api.md](groups-api.md). `group` is a reserved word: raw SQL must quote it
+(Drizzle does). A group only adds: a person's budgets are the policies attached
+to their role **or** to any of their groups (`quota/applicability.ts`, two
+`EXISTS` so a budget reached twice is one row), and a model is visible by role or
+by group (`services/models.ts`). Neither is cached: membership is read on every
+call, so removal takes effect on the next request.
+
+**Rules the code and tests keep**
+
+- Every foreign key is `ON DELETE CASCADE` (`SET NULL` for "created by" and
+  "added by"), never `RESTRICT`, so a previous-release replica deleting a user,
+  model or budget is never blocked by rows it cannot see.
+- Grants are written only from the group (`PUT /api/admin/groups/:id/grants`),
+  never through the budget or model forms, whose bodies a client may send
+  without a group field. Refused while a replica of an earlier minor release is
+  live (`services/groups/upgrade-guard.ts`).
+- The caps (500 groups, 5,000 members and 20 managers a group, 50 groups a
+  person) are counted in the transaction that writes, after locking the parent.
+
+**Lock order** for a group change: the organization row (creating a group only),
+the group row, then the people's `user` rows in id order (`FOR NO KEY UPDATE`: it
+serialises two groups adding the same person without blocking foreign-key checks
+against the account), then, for what project sharing reconciles, project rows,
+thread rows and `storage_usage` rows by user id
+(`services/groups/access-changes.ts` is where it hooks in). Deleting a group does
+not touch a person's records, so none of these paths checks a legal hold.
+
 ## Encrypted secrets
 
 Values encrypted with `ENCRYPTION_KEY` (`apps/api/src/lib/crypto.ts`) live in
@@ -503,6 +601,20 @@ the list. **A new encrypted column must be added there** (and a JSON field
 must be named `encrypted…`), or key rotation will not rewrite it and System
 health will not count it; the rotation live test
 (`encryption-rotation.live.test.ts`) fills every listed location.
+
+**`two_factor` is absent from that list on purpose** (v0.14, #399). Better
+Auth's `twoFactor` plugin encrypts `two_factor.secret` and
+`two_factor.backup_codes` itself, with `AUTH_SECRET` (XChaCha20-Poly1305 keyed
+from it), and no option moves the authenticator's key to another secret. Listing
+the table here would make the `ENCRYPTION_KEY` rotation try `ENCRYPTION_KEY` on
+`AUTH_SECRET` ciphertext and fail the batch; wrapping the columns in OCI's
+envelope would break the plugin's one-use check on recovery codes (a compare and
+swap on the stored ciphertext, which a random IV never equals). A unit test
+(`mfa-encrypted-locations.unit.test.ts`) keeps both tables out. The consequence
+for operators: changing `AUTH_SECRET` makes every authenticator unreadable
+(`reset-mfa --all --yes`), and a database backup carries values only that secret
+opens ([Two-step verification and `AUTH_SECRET`](../OPERATIONS.md#two-step-verification-and-auth_secret)).
+The reset commands decrypt nothing, so they work with any `AUTH_SECRET`.
 
 Formats: before v0.11 `base64(iv | tag | ciphertext)` (AES-256-GCM, key
 SHA-256 of `ENCRYPTION_KEY`); from v0.11 `oci:v1:<key id>:` followed by the
@@ -620,6 +732,66 @@ function, a **new background migration** (a new name, `0.<release>.…`) that
 recomputes every stored vector, and the search switch moved to that migration,
 exactly as `0.13` did. Do not edit migration 0047, and do not change
 `fold.ts` alone: the unit test fails when they differ.
+
+## Data classification
+
+Data classification (#395, `SPEC-data-classification.md`, migration 0052) is
+join tables, not arrays: a deleted class cannot leave a dangling id, and "which
+models are approved for X" and "is X in use" are indexed lookups. Names live only
+in `data_class`; every other table holds ids, so a rename is one row.
+
+| Table | Holds | Deleting a class |
+|---|---|---|
+| `data_class` | the names, `retired_at` | only when nothing refers to it |
+| `model_data_class` | approvals | cascades |
+| `connector_data_class` | what a connector carries | restricted |
+| `project_data_class` | project labels, `locked` by an administrator | restricted |
+| `thread_data_class` | `person` and `kept` labels, `origin` | restricted |
+| `thread_connector_use` | the sticky fact that a conversation used a connector | n/a |
+
+A connector's classes are read **at decision time**, not copied when its tools
+run, so classifying a connector later reaches the conversations that used it
+earlier. Because that depends on the use being recorded, OCI writes
+`thread_connector_use` before every connector tool runs, in every mode.
+
+**Triggers, so every writer is covered** (the previous release included, as in
+0048): `thread_keep_project_classes` (BEFORE UPDATE OF `project_id`) and
+`project_keep_classes_on_delete` (BEFORE DELETE) freeze a project's labels onto
+its conversations as `kept` rows, and `connector_keep_classes_on_delete` does
+the same for a connector's classes onto the conversations that used it;
+`thread_copy_parent_classes` (AFTER INSERT, parent set) copies a fork's or an
+edit's labels and uses. The project delete trigger is BEFORE on purpose: the
+cascade to `project_data_class` and the `SET NULL` on `thread.project_id` are
+AFTER triggers with no guaranteed order between them
+(`classification-triggers.live.test.ts` proves the trigger works on its own).
+Tests that stand for a v0.13 replica write these rows through raw SQL.
+
+The background migration `0.14.thread-connector-use`
+(`packages/db/src/background/thread-connector-use.ts`) finds uses from before
+0052 in stored messages (`tool-mcp__<slug>__…` or a `dynamic-tool` part named
+`mcp__<slug>__…`), in `message` key order. It follows the usual rules: idempotent
+(`on conflict do nothing`), cursor by key. Code during the gap
+(`services/classification/resolve.ts`): while `isBackgroundMigrationDone` is
+false, a decision also scans **that conversation's** messages for connector tool
+parts, so nothing waits for the migration. A slug reused after its connector was
+deleted over-labels, which is the safe direction.
+
+The `classification` instance setting is
+`{ mode, services: { webSearch, embeddings, reranking } }`; a v0.13 replica
+ignores the unknown key. Setting a mode other than `off` is refused until the
+migration is scheduled (`migrate --post`, after every replica runs 0.14).
+## The person's language (migration 0055)
+
+| Migration | Statement | Why it is safe |
+| --- | --- | --- |
+| `0055_user_locale` (v0.14, #397) | `ALTER TABLE "user_preference" ADD COLUMN IF NOT EXISTS "locale" text` | Nullable, no default: a catalog-only change with no rewrite. A v0.13 replica names its columns when it writes and lists them when it reads, so it neither sees nor needs it. |
+
+`locale` holds `en`, `es` or `ar` (the tags in `packages/shared/src/locales.ts`)
+or null for no choice. The database does not constrain it: the API validates
+what it saves (422 for anything else), and a value this release does not know
+reads as no choice, so a language added in a later release needs no migration.
+The instance's own setting (`language`: `{ default, enabled[] }`) is an
+`instance_setting` JSON value and needs none.
 
 ## Migrations under several replicas
 

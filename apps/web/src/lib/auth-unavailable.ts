@@ -1,3 +1,5 @@
+import { translate } from '~/lib/i18n';
+
 /**
  * Auth requests the service could not answer (#288).
  *
@@ -9,10 +11,10 @@
  * wrong password, and the reset pages for a feature that is turned off.
  */
 
-export const SIGN_IN_UNAVAILABLE = 'Sign-in is temporarily unavailable. Try again in a moment.';
+/** In the language showing now: a function, so it is read when an error happens, not at load. */
+export const signInUnavailable = () => translate('auth.unavailable.signIn');
 
-export const PASSWORD_RESET_UNAVAILABLE =
-  'Password reset is temporarily unavailable. Try again in a moment.';
+export const passwordResetUnavailable = () => translate('auth.unavailable.passwordReset');
 
 /** Better Auth's client error, as the pages read it. */
 export interface AuthClientError {

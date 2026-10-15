@@ -6,6 +6,7 @@ import { useArtifacts } from '~/components/artifacts/artifacts-context';
 import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { CapacityNote, CapacityWait, capacityWaitOf } from '~/components/chat/capacity-wait';
+import { DataClassificationNote } from '~/components/chat/data-classification-note';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
 import { attachmentsOf, MessageAttachments } from '~/components/chat/message-attachments';
@@ -33,6 +34,7 @@ import {
   toolPlaceOf,
 } from '~/components/chat/tool-steps';
 import { returnFocusIfLost } from '~/lib/focus-return';
+import { useT } from '~/lib/i18n';
 import { messageExcerpt } from '~/lib/message-excerpt';
 import { cn } from '~/lib/utils';
 
@@ -90,6 +92,7 @@ export const MessageRow = memo(function MessageRow({
   onStop,
   position,
 }: MessageRowProps) {
+  const t = useT();
   // Without artifact attempts declined as reply content (#201).
   const message = shownReply(stored);
   const text = textOf(message);
@@ -117,7 +120,7 @@ export const MessageRow = memo(function MessageRow({
       <article
         ref={article}
         className="group flex flex-col items-end"
-        aria-label="Your message"
+        aria-label={t('chat.messageRow.yours')}
         data-excerpt={excerpt}
         data-position={place}
         data-message-id={message.id}
@@ -159,16 +162,17 @@ export const MessageRow = memo(function MessageRow({
   return (
     <article
       className="group flex flex-col"
-      aria-label="Assistant message"
+      aria-label={t('chat.messageRow.assistant')}
       data-excerpt={excerpt}
       data-position={place}
       data-message-id={message.id}
     >
       {contextLimitedOf(message) && (
         <p role="note" className="mb-2 text-xs text-[var(--text-muted)]">
-          Earlier conversation context was omitted to fit the input limit.
+          {t('chat.messageRow.contextOmitted')}
         </p>
       )}
+      <DataClassificationNote message={message} />
       <ProjectSearchNote message={message} />
       {capacity &&
         (streaming ? (

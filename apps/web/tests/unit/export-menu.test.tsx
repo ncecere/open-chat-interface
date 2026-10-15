@@ -117,6 +117,23 @@ describe('the export menu on a reply', () => {
     expect(document.activeElement).toBe(trigger());
   });
 
+  it('stops the icon pulsing while a file is prepared for a person who asked for reduced motion', async () => {
+    let finish!: (value: { blob: Blob; filename: string }) => void;
+    api.download.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await mount(TABLE_REPLY);
+    await openWithKeyboard();
+    await click(item('Word document'));
+    const icon = document.querySelector('[data-export-menu] svg');
+    expect(icon?.getAttribute('class')).toContain('animate-pulse');
+    expect(icon?.getAttribute('class')).toContain('motion-reduce:animate-none');
+    await act(async () => finish({ blob: new Blob(['PK']), filename: 'plan.docx' }));
+    await settle();
+  });
+
   it('falls back to a generic name when the response has none', async () => {
     api.download.mockResolvedValue({ blob: new Blob(['%PDF']), filename: null });
     await mount('Text');

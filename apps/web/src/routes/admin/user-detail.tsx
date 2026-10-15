@@ -1,4 +1,4 @@
-import type { AdminUser } from '@oci/shared';
+import type { AdminMfaStatus, AdminUser } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Ban, Scale } from 'lucide-react';
@@ -11,7 +11,10 @@ import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, LoadError, MutationError } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { DeleteUserSection } from '~/components/admin/delete-user';
+import { UserGroupsSection } from '~/components/admin/user-groups';
 import { UserLimitsSection } from '~/components/admin/user-limits';
+import { UserMfaSection } from '~/components/admin/user-mfa';
+import { UserProjectLabels } from '~/components/admin/user-project-labels';
 import {
   ADMIN_USERS_QUERY_KEY,
   ROLE_LABELS,
@@ -42,6 +45,8 @@ interface ThreadRow {
 
 interface UserDetail {
   user: AdminUser;
+  /** Two-step verification (v0.14); absent from an older API. */
+  mfa?: AdminMfaStatus;
   /** Null (or absent, before v0.9) when the person is not on legal hold. */
   legalHold?: { reason: string; placedAt: string; placedByEmail: string | null } | null;
   storage: { bytesUsed: number; fileCount: number };
@@ -56,8 +61,10 @@ interface UserDetail {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 px-4 py-3">
-      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wide">{label}</p>
-      <p className="mt-1 font-semibold text-lg">{value}</p>
+      <p className="[overflow-wrap:anywhere] text-[var(--text-muted)] text-xs uppercase tracking-wide">
+        {label}
+      </p>
+      <p className="mt-1 [overflow-wrap:anywhere] font-semibold text-lg">{value}</p>
     </div>
   );
 }
@@ -128,7 +135,7 @@ export function AdminUserDetailPage() {
           to="/admin/users"
           className="inline-flex items-center gap-1.5 text-[var(--text-muted)] text-sm hover:text-[var(--text-primary)]"
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-4 rtl:-scale-x-100" />
           All users
         </Link>
         <LoadError title="This account could not be loaded." query={detail} className="mt-6" />
@@ -148,7 +155,7 @@ export function AdminUserDetailPage() {
         to="/admin/users"
         className="inline-flex items-center gap-1.5 text-[var(--text-muted)] text-sm hover:text-[var(--text-primary)]"
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft className="size-4 rtl:-scale-x-100" />
         All users
       </Link>
 
@@ -256,7 +263,7 @@ export function AdminUserDetailPage() {
 
       {/* Borders are drawn per cell so the rules stay right when the four
           figures wrap into two rows on a phone. */}
-      <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-l sm:[&>*:nth-child(n+3)]:border-t-0">
+      <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-s [&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-s sm:[&>*:nth-child(n+3)]:border-t-0">
         <Stat label="Conversations" value={String(user.threadCount)} />
         <Stat label="Messages" value={String(user.messageCount)} />
         <Stat label="Storage" value={formatBytes(storage.bytesUsed)} />
@@ -284,10 +291,10 @@ export function AdminUserDetailPage() {
               <table className="w-full min-w-[32rem] text-sm">
                 <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
                   <tr>
-                    <th className="px-4 py-2 text-left">Started</th>
-                    <th className="px-4 py-2 text-left">Expires</th>
-                    <th className="px-4 py-2 text-left">Address</th>
-                    <th className="px-4 py-2 text-left">Client</th>
+                    <th className="px-4 py-2 text-start">Started</th>
+                    <th className="px-4 py-2 text-start">Expires</th>
+                    <th className="px-4 py-2 text-start">Address</th>
+                    <th className="px-4 py-2 text-start">Client</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,7 +306,7 @@ export function AdminUserDetailPage() {
                       </td>
                       <td className="px-4 py-2 font-mono text-xs">{session.ipAddress ?? '—'}</td>
                       <td
-                        className="max-w-xs truncate px-4 py-2 text-[var(--text-muted)] text-xs"
+                        className="max-w-xs [overflow-wrap:anywhere] px-4 py-2 text-[var(--text-muted)] text-xs"
                         title={session.userAgent ?? undefined}
                       >
                         {session.userAgent ?? '—'}
@@ -313,7 +320,12 @@ export function AdminUserDetailPage() {
         )}
       </Section>
 
+      <UserGroupsSection userId={user.id} />
+
       <UserLimitsSection user={user} />
+
+      <UserProjectLabels userId={user.id} />
+      {data.mfa && <UserMfaSection userId={user.id} name={name} mfa={data.mfa} />}
 
       <Section title="Recent conversations">
         {recentThreads.length === 0 ? (
@@ -325,7 +337,10 @@ export function AdminUserDetailPage() {
                 {/* Titles only. An administrator managing an account has no
                     reason to read its contents, and this page should not be
                     the thing that makes that easy. */}
-                <span className="truncate text-sm" title={thread.title || undefined}>
+                <span
+                  className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm"
+                  title={thread.title || undefined}
+                >
                   {thread.title || 'Untitled'}
                 </span>
                 <span className="shrink-0 text-[var(--text-muted)] text-xs">

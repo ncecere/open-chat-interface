@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { QUOTA_METRICS, QUOTA_WINDOW_KINDS, REASONING_EFFORTS, USER_ROLES } from '../constants.js';
 import { roleToolSchema } from '../tools.js';
+import { rolesAccessGroupSchema } from './groups.js';
 import { rateLimitSettingsSchema, storagePolicySchema } from './lifecycle.js';
 
 export const CONFIG_SOURCES = ['database', 'environment', 'default'] as const;
@@ -114,7 +115,14 @@ export const roleAccessSchema = z.object({
   fixedRules: z.array(z.string()),
 });
 
-export const rolesAccessSchema = z.object({ roles: z.array(roleAccessSchema) });
+export const rolesAccessSchema = z.object({
+  roles: z.array(roleAccessSchema),
+  /**
+   * The groups (v0.14), read-only: what each adds on top of a role. Absent from
+   * an older server.
+   */
+  groups: z.array(rolesAccessGroupSchema).optional(),
+});
 
 export type RoleAccess = z.infer<typeof roleAccessSchema>;
 export type RolesAccess = z.infer<typeof rolesAccessSchema>;

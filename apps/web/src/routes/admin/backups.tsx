@@ -144,7 +144,7 @@ function Overview({ status }: { status: BackupStatus }) {
 
       {status.issues.length > 0 && (
         <Notice id={blockedId} tone="warning" title="Backups cannot run yet">
-          <ul className="list-disc pl-4">
+          <ul className="list-disc ps-4">
             {status.issues.map((issue) => (
               <li key={issue}>{issue}</li>
             ))}

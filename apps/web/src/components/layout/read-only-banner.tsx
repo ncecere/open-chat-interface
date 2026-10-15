@@ -2,6 +2,7 @@ import type { ReadOnlyStatus } from '@oci/shared';
 import { Lock } from 'lucide-react';
 import { useEffect } from 'react';
 import { api } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 import {
   isReadOnlyStatus,
   readOnlyMessage,
@@ -68,6 +69,8 @@ export function useReadOnlyPolling(): ReadOnlyStatus {
  * The announcement ahead of a scheduled window is an ordinary broadcast.
  */
 export function ReadOnlyBanner({ className }: { className?: string }) {
+  // Subscribes to the language: the message is built outside React.
+  useT();
   const status = useReadOnlyPolling();
   if (!status.active) return null;
   return (

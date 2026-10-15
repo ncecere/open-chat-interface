@@ -14,7 +14,10 @@ import {
   THEME_MODES,
   USER_ROLES,
 } from '../constants.js';
+import { languageSettingsSchema, localeSchema } from '../locales.js';
 import { DEFAULT_MAX_TOOL_STEPS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from '../tools.js';
+import { groupRefSchema } from './groups.js';
+import { MFA_DEFAULT_GRACE_DAYS, mfaRequirementInputSchema, mfaRequirementSchema } from './mfa.js';
 import { patchSchema } from './patch.js';
 
 export const adminUserSchema = z.object({
@@ -118,12 +121,27 @@ export const instanceSettingsSchema = z.object({
   loginMessage: z.string().nullable(),
   defaultTheme: z.enum(THEME_MODES),
   colorTheme: z.enum(COLOR_THEMES),
+  /**
+   * The language people get who have not chosen one, and the languages they
+   * may choose from (v0.14). Absent from an older API's response, which reads
+   * as English only.
+   */
+  language: languageSettingsSchema.optional(),
   registrationMode: z.enum(REGISTRATION_MODES),
   emailVerificationRequired: z.boolean(),
   localAuthEnabled: z.boolean(),
   /** Days a session stays valid, and how often activity extends it. */
   sessionLifetimeDays: z.number().int().min(1).max(365).default(30),
   sessionRefreshDays: z.number().int().min(1).max(365).default(1),
+  /**
+   * Two-step verification required per role (v0.14, #399). Absent from an
+   * older API's response and from settings saved before v0.14: nobody.
+   */
+  mfaRequirement: mfaRequirementSchema.default({
+    roles: [],
+    graceDays: MFA_DEFAULT_GRACE_DAYS,
+    since: {},
+  }),
   defaultSystemPrompt: z.string().nullable(),
   /**
    * Reasoning level a new conversation starts at. Clients lower it to what the
@@ -230,11 +248,22 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
       .regex(HEX_COLOR_PATTERN, 'Use a hex colour such as #3366ff.')
       .nullable()
       .optional(),
+    // Either part may be sent alone; English is always enabled (the server
+    // adds it) and the default must be one of the enabled languages.
+    language: z
+      .object({
+        default: localeSchema.nullable().optional(),
+        enabled: z.array(localeSchema).min(1).max(20).optional(),
+      })
+      .strict()
+      .optional(),
     // `memory` arrived in v0.9: a client that does not know it must not
     // switch it off by leaving it out of the (otherwise whole) object.
     features: instanceSettingsSchema.shape.features
       .extend({ memory: z.boolean().optional() })
       .optional(),
+    // The roles and the grace only: the server stamps `since` itself.
+    mfaRequirement: mfaRequirementInputSchema.optional(),
     storage: instanceSettingsSchema.shape.storage
       // localPath is reported for reference only; it is fixed by the
       // deployment and must not be writable through the admin API.
@@ -298,6 +327,8 @@ export const quotaPolicySchema = z.object({
   modelSlugs: z.array(z.string()),
   /** How many people hold a per-user override of this policy's limit. */
   overrideCount: z.number().int().nonnegative(),
+  /** Groups the policy is attached to (v0.14), read-only; set from the group. */
+  groups: z.array(groupRefSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

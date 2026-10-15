@@ -3,6 +3,7 @@ import {
   type AdminModel,
   capacityLimitsSchema,
   modelLimitsProblem,
+  setDataClassIdsSchema,
   updateModelSchema,
   upsertModelSchema,
 } from '@oci/shared';
@@ -12,6 +13,7 @@ import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody, parseChanges } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
+import { modelClassIds, namesOf, setModelClasses } from '../../services/classification/store.js';
 import { saveModelLimits } from '../../services/limits/capacity/settings.js';
 import { getDefaultOrganizationId } from '../../services/organization.js';
 import { diffSettings } from '../../services/settings-diff.js';
@@ -28,6 +30,25 @@ modelRoutes.get('/', async (c) => {
     .from(schema.model)
     .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id))
     .orderBy(asc(schema.model.sortOrder), asc(schema.model.displayName));
+
+  const approvals = await modelClassIds();
+
+  // Groups granted each model, as read-only chips: grants are written from the group.
+  const granted = await db
+    .select({
+      modelId: schema.modelGroupAccess.modelId,
+      id: schema.group.id,
+      name: schema.group.name,
+    })
+    .from(schema.modelGroupAccess)
+    .innerJoin(schema.group, eq(schema.modelGroupAccess.groupId, schema.group.id))
+    .orderBy(asc(schema.group.name));
+  const groupsByModel = new Map<string, { id: string; name: string }[]>();
+  for (const row of granted) {
+    const existing = groupsByModel.get(row.modelId) ?? [];
+    existing.push({ id: row.id, name: row.name });
+    groupsByModel.set(row.modelId, existing);
+  }
 
   const models: AdminModel[] = rows.map(({ model, providerKind, providerLabel }) => ({
     id: model.id,
@@ -49,6 +70,8 @@ modelRoutes.get('/', async (c) => {
     sortOrder: model.sortOrder,
     enabled: model.enabled,
     visibleToRoles: model.visibleToRoles,
+    dataClassIds: approvals.get(model.id) ?? [],
+    groups: groupsByModel.get(model.id) ?? [],
     createdAt: model.createdAt.toISOString(),
     updatedAt: model.updatedAt.toISOString(),
   }));
@@ -243,6 +266,29 @@ modelRoutes.patch('/:id', async (c) => {
   });
 
   return c.json({ id: updated?.id });
+});
+
+/**
+ * The data classes the model is approved for (v0.14, #395): the whole list is
+ * replaced. A model approved for nothing cannot receive labelled content.
+ */
+modelRoutes.put('/:id/data-classes', async (c) => {
+  const actor = currentUser(c);
+  const input = await parseBody(c, setDataClassIdsSchema);
+  const result = await setModelClasses(c.req.param('id'), input.classIds);
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'model.data_classes.update',
+    targetType: 'model',
+    targetId: c.req.param('id'),
+    metadata: {
+      slug: result.slug,
+      before: await namesOf(result.before),
+      after: await namesOf(result.after),
+    },
+  });
+  return c.json({ dataClassIds: result.after });
 });
 
 /** A model's own provider capacity limits (v0.11), within its provider's. */

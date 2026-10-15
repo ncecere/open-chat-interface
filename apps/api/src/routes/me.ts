@@ -2,6 +2,7 @@ import { and, count, eq, isNull, schema } from '@oci/db';
 import {
   completeOnboardingSchema,
   deleteOwnAccountSchema,
+  localeSchema,
   myShareLinksQuerySchema,
   personalDefaultsInputSchema,
   type ReasoningEffort,
@@ -24,6 +25,8 @@ import {
 import { recordAudit } from '../services/audit.js';
 import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
 import { userConnectors } from '../services/connectors/people.js';
+import { countManagedGroups } from '../services/groups/membership.js';
+import { mfaSummaryFor } from '../services/mfa/state.js';
 import { listAvailableModels } from '../services/models.js';
 import {
   acceptPolicy,
@@ -35,6 +38,7 @@ import {
   assertPersonalDefaultsAllowed,
   resolvePersonalDefaults,
 } from '../services/personal-defaults.js';
+import { accountSharingImpact } from '../services/project-sharing/impact.js';
 import { getUsageSummary } from '../services/quota/index.js';
 import { combineFeatures, roleFeatures } from '../services/role-features.js';
 import { getSetting } from '../services/settings.js';
@@ -54,6 +58,8 @@ const preferenceSchema = z
     occupation: z.string().max(200).nullable().optional(),
     traits: z.array(z.string().max(60)).max(20).optional(),
     additionalContext: z.string().max(4000).nullable().optional(),
+    /** The language of the web app (v0.14); null returns to the instance default. */
+    locale: localeSchema.nullable().optional(),
   })
   .extend(personalDefaultsInputSchema.shape);
 
@@ -106,6 +112,8 @@ meRoutes.get('/', async (c) => {
     memoryEntries,
     connectors,
     shareLinks,
+    mfa,
+    managedGroups,
   ] = await Promise.all([
     loadPreferences(user.id),
     getSetting('features'),
@@ -117,6 +125,8 @@ meRoutes.get('/', async (c) => {
     memoryEntryCount(user.id),
     userConnectors(user),
     activeShareLinkCount(user.id),
+    mfaSummaryFor({ id: user.id, role: user.role }, c.get('mfa')),
+    countManagedGroups(user.id),
   ]);
   const { reasoningEfforts, ...effective } = combineFeatures(features, search, own);
   const instanceEffort: ReasoningEffort = chat.defaultEffort ?? 'instant';
@@ -126,7 +136,9 @@ meRoutes.get('/', async (c) => {
     defaultEffort: preferences?.defaultEffort ?? null,
   };
   const personal = resolvePersonalDefaults(saved, {
-    catalog: saved.defaultModelSlug ? await listAvailableModels(user.role) : null,
+    catalog: saved.defaultModelSlug
+      ? await listAvailableModels({ userId: user.id, role: user.role })
+      : null,
     roleEfforts: reasoningEfforts,
     instanceEffort,
   });
@@ -144,11 +156,22 @@ meRoutes.get('/', async (c) => {
     /** v0.9.1: which sign-in methods the person has, for Settings → Account. */
     signIn,
     /**
+     * v0.14: two-step verification: what is set up, whether the role requires
+     * it, until when, and whether this session is limited (#399).
+     */
+    mfa: mfa.summary,
+    /**
      * v0.9.1: what Settings needs to hide sections with nothing in them
      * without fetching each section on every settings page. `shareLinks`
-     * (v0.10) counts links not yet revoked.
+     * (v0.10) counts links not yet revoked. `managedGroups` (v0.14) is how
+     * many groups the person manages: Settings → Groups shows for managers only.
      */
-    settingsSummary: { memoryEntries, connectors: connectors.length, shareLinks },
+    settingsSummary: {
+      memoryEntries,
+      connectors: connectors.length,
+      shareLinks,
+      managedGroups,
+    },
     // Instance switches narrowed by the role's own. Web search is advertised
     // only when a search would actually run.
     features: { ...features, ...effective },
@@ -237,7 +260,7 @@ meRoutes.patch('/preferences', async (c) => {
   const current = await loadPreferences(user.id);
   if (patch.defaultModelSlug !== undefined || patch.defaultEffort !== undefined) {
     const [catalog, own] = await Promise.all([
-      listAvailableModels(user.role),
+      listAvailableModels({ userId: user.id, role: user.role }),
       roleFeatures(user.role),
     ]);
     assertPersonalDefaultsAllowed(
@@ -296,6 +319,11 @@ meRoutes.post('/share-links/revoke-all', async (c) => {
     });
   }
   return c.json({ revoked });
+});
+
+/** What deleting the signed-in person's own account would do through project sharing (v0.14), as counts, for the dialog. */
+meRoutes.get('/sharing-impact', async (c) => {
+  return c.json(await accountSharingImpact(currentUser(c).id));
 });
 
 /**

@@ -1,4 +1,5 @@
 import { recordAudit } from '../services/audit.js';
+import { mfaVerifications } from '../services/observability/metrics.js';
 
 /**
  * Authentication events worth recording.
@@ -30,6 +31,20 @@ const AUDITED_PATHS = new Map<string, string>([
   ['/revoke-session', 'auth.session.revoked'],
   ['/revoke-sessions', 'auth.sessions.revoked'],
   ['/revoke-other-sessions', 'auth.sessions.revoked_others'],
+  // Two-step verification (v0.14, #399). The code and the passkey are never recorded, only the outcome.
+  ['/two-factor/verify-totp', 'auth.mfa.verify'],
+  ['/two-factor/verify-backup-code', 'auth.mfa.verify'],
+  ['/passkey/verify-authentication', 'auth.passkey.signin'],
+  ['/passkey/verify-registration', 'auth.passkey.added'],
+  ['/passkey/update-passkey', 'auth.passkey.renamed'],
+  ['/passkey/delete-passkey', 'auth.passkey.removed'],
+]);
+
+/** The second-step method an audited path verifies, for the metadata and the metric. */
+const VERIFY_METHODS = new Map<string, 'totp' | 'recovery_code' | 'passkey'>([
+  ['/two-factor/verify-totp', 'totp'],
+  ['/two-factor/verify-backup-code', 'recovery_code'],
+  ['/passkey/verify-authentication', 'passkey'],
 ]);
 
 /** Path prefixes whose outcome is a completed SSO sign-in. */
@@ -69,6 +84,17 @@ export interface AuthAuditContext {
    * `status: 403` (#375). It is the code the person was sent already.
    */
   failureCode?: string | null;
+  /**
+   * The password was right and the person now has to pass a second step: a 200
+   * `/sign-in/email` for an account with the second step on (the plugin deletes
+   * the session the password made, just after the audit hook runs). Recorded as
+   * `auth.signin.local.challenged`, not as a sign-in.
+   */
+  challenged?: boolean;
+  /** The passkey or recovery code a request was about, for rename and remove. */
+  targetId?: string | null;
+  /** After a recovery code worked: how many remain. */
+  recoveryCodesLeft?: number | null;
 }
 
 export async function recordAuthEvent(context: AuthAuditContext): Promise<void> {
@@ -76,6 +102,24 @@ export async function recordAuthEvent(context: AuthAuditContext): Promise<void> 
   if (!action) return;
 
   const outcome = outcomeFor(context.status);
+  const method = VERIFY_METHODS.get(context.path);
+  if (method) mfaVerifications.inc({ method, outcome });
+
+  if (context.challenged && context.path === '/sign-in/email') {
+    await recordAudit({
+      actorUserId: null,
+      actorEmail: context.actorEmail,
+      action: 'auth.signin.local.challenged',
+      targetType: 'session',
+      targetId: null,
+      ipAddress: context.ipAddress,
+      metadata: {
+        status: context.status,
+        ...(context.userAgent ? { userAgent: context.userAgent.slice(0, 300) } : {}),
+      },
+    });
+    return;
+  }
 
   // A sign-in that begins a redirect to an identity provider has not succeeded
   // yet, and recording it as such would double-count against the callback.
@@ -86,12 +130,31 @@ export async function recordAuthEvent(context: AuthAuditContext): Promise<void> 
     actorEmail: context.actorEmail,
     action: `${action}.${outcome}`,
     targetType: 'session',
-    targetId: null,
+    targetId: context.targetId ?? null,
     ipAddress: context.ipAddress,
     metadata: {
       status: context.status,
+      ...(method ? { method } : {}),
       ...(outcome === 'failure' && context.failureCode ? { reason: context.failureCode } : {}),
       ...(context.userAgent ? { userAgent: context.userAgent.slice(0, 300) } : {}),
     },
+  });
+}
+
+/** A recovery code was used up (`auth.mfa.recovery_code.used`): how many are left, never which. */
+export async function recordRecoveryCodeUsed(context: {
+  actorUserId: string | null;
+  actorEmail: string | null;
+  ipAddress: string | null;
+  remaining: number | null;
+}): Promise<void> {
+  await recordAudit({
+    actorUserId: context.actorUserId,
+    actorEmail: context.actorEmail,
+    action: 'auth.mfa.recovery_code.used',
+    targetType: 'user',
+    targetId: context.actorUserId,
+    ipAddress: context.ipAddress,
+    metadata: { remaining: context.remaining },
   });
 }

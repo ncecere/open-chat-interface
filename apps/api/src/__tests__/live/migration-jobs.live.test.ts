@@ -86,10 +86,11 @@ describe.skipIf(!available)('live PostgreSQL migration jobs', () => {
     // #342, 0009 validates the code-artifact kind for #298, 0011 and 0012 index
     // stored objects for #358, 0013 drops the table v0.11.0 replaced, 0014 indexes the
     // folded message text for #362 and 0015 drops the optional index v0.12 allowed),
-    // ten background migrations scheduled (the usage rollup backfill, the five
-    // secret re-encryptions, the attachment own-rows migration and the folded
-    // message and passage search vectors every instance has, and the test one).
-    expect(await job.run()).toBe(25);
+    // eleven background migrations scheduled (the usage rollup backfill, the five
+    // secret re-encryptions, the attachment own-rows migration, the folded
+    // message and passage search vectors, the connector uses for data
+    // classification (0.14) every instance has, and the test one).
+    expect(await job.run()).toBe(26);
     expect(await jobs.postWorkPending()).toBe(false);
     expect(await job.run()).toBe(0);
 

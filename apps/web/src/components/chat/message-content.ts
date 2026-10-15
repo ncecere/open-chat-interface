@@ -1,6 +1,7 @@
 import { isToolPart } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import type { SearchGroundingView, SourceLink } from '~/components/chat/search-grounding';
+import { translate } from '~/lib/i18n';
 
 /** The responding model and effort, sent as stream metadata and persisted per message. */
 export function metadataOf(message: UIMessage): {
@@ -41,7 +42,7 @@ export function interruptionOf(message: UIMessage): string | null {
 export function failureOf(message: UIMessage): string | null {
   const { status, errorMessage } = metadataOf(message);
   if (message.role !== 'assistant' || status !== 'error') return null;
-  return errorMessage ?? 'The reply could not be generated.';
+  return errorMessage ?? translate('chat.reply.couldNotGenerate');
 }
 
 /**
@@ -61,13 +62,13 @@ export function stoppedOf(message: UIMessage): boolean {
  * watched being written, "before it began" contradicted the screen (#253).
  */
 export function stoppedNoteOf(message: UIMessage, text: string): string {
-  if (text.trim()) return 'You stopped this reply.';
+  if (text.trim()) return translate('chat.reply.stopped');
   const worked = message.parts.some(
     (part) => (part.type === 'reasoning' && part.text.trim().length > 0) || isToolPart(part),
   );
   return worked
-    ? 'You stopped this reply before it started answering.'
-    : 'You stopped this reply before it began.';
+    ? translate('chat.reply.stoppedBeforeAnswering')
+    : translate('chat.reply.stoppedBeforeBegan');
 }
 
 export function contextLimitedOf(message: UIMessage): boolean {

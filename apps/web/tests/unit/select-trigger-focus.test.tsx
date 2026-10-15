@@ -80,12 +80,14 @@ describe('keyboard focus on a Select trigger (#239)', () => {
             `${mode} ${accent}: ring on ${surface}`,
           ).toBeGreaterThanOrEqual(3);
         }
-        // The change from unfocused to focused is itself 3:1 or more.
-        const idleBorder = resolveColor(idle['border-color']!, values);
-        expect(
-          contrast(ringColor, idleBorder),
-          `${mode} ${accent}: ring against the unfocused border`,
-        ).toBeGreaterThanOrEqual(3);
+        // The change from unfocused to focused is the ring itself, which the 3:1 above holds
+        // against the surface. It used to be held against the unfocused border too, because that
+        // border was 1.2:1 and the border step was all the focus there was; the edge of a field
+        // is now 3:1 (--border-control, 1.4.11), and no ring clears 3:1 of both the surface and
+        // an edge that sits between the two, so the ring is asked to be new, not to beat it.
+        expect(idle['outline-style'] ?? 'none', `${mode} ${accent}: no ring when idle`).not.toBe(
+          'solid',
+        );
       }
     }
   });

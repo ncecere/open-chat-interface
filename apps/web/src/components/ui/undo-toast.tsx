@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { translate } from '~/lib/i18n';
 
 /**
  * How long a notice with Undo stays (#205). Sonner's default of 4 seconds was
@@ -45,7 +46,7 @@ export function undoToast(input: {
             input.onUndo();
           }}
         >
-          Undo
+          {translate('ui.undoToast.undo')}
         </button>
       ),
     });

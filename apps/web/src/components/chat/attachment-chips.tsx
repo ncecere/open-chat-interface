@@ -2,7 +2,8 @@ import { AlertCircle, FileText, X } from 'lucide-react';
 import { type RefObject, useState } from 'react';
 import type { PendingAttachment } from '~/hooks/use-attachments';
 import { keepFocusWhenRemoved, rememberPlace } from '~/lib/focus-return';
-import { cn, formatBytes } from '~/lib/utils';
+import { formatFileSize, translate, useT } from '~/lib/i18n';
+import { cn } from '~/lib/utils';
 
 /**
  * Why a file was refused, naming it once (#180): the API's reasons and the
@@ -10,8 +11,10 @@ import { cn, formatBytes } from '~/lib/utils';
  * of them again ("walk2-big.txt: walk2-big.txt is larger…").
  */
 export function failureText(item: Pick<PendingAttachment, 'filename' | 'error'>): string {
-  const reason = item.error ?? 'This file could not be attached.';
-  return reason.startsWith(item.filename) ? reason : `${item.filename}: ${reason}`;
+  const reason = item.error ?? translate('chat.attachmentChips.couldNotAttach');
+  return reason.startsWith(item.filename)
+    ? reason
+    : translate('chat.attachmentChips.failure', { name: item.filename, reason });
 }
 
 /** Uploaded and in-flight files shown above the composer textarea. */
@@ -28,6 +31,7 @@ export function AttachmentChips({
   // Previews the browser could not draw: a file named .png that is not an
   // image shows as a document while it uploads, not as a broken image (#209).
   const [unreadable, setUnreadable] = useState<ReadonlySet<string>>(new Set());
+  const t = useT();
   if (items.length === 0) return null;
   const failures = items.filter((item) => item.status === 'error');
 
@@ -48,7 +52,7 @@ export function AttachmentChips({
                   ? 'border-[var(--danger)]/50 bg-[var(--danger)]/10'
                   : 'border-[var(--border-strong)] bg-[var(--bg-control-alt)]',
               )}
-              title={failed ? item.error : `${item.filename} · ${formatBytes(item.sizeBytes)}`}
+              title={failed ? item.error : `${item.filename} · ${formatFileSize(item.sizeBytes)}`}
               aria-describedby={failed ? `attachment-error-${item.localId}` : undefined}
             >
               {/* A refused "image" may not be one (a renamed archive): no preview. */}
@@ -72,12 +76,14 @@ export function AttachmentChips({
                 </span>
               )}
 
-              <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
+              <span dir="auto" className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
                 {item.filename}
               </span>
 
               {item.status === 'uploading' && (
-                <span className="text-[0.625rem] text-[var(--text-muted)]">uploading…</span>
+                <span className="text-[0.625rem] text-[var(--text-muted)]">
+                  {t('chat.attachmentChips.uploading')}
+                </span>
               )}
 
               <button
@@ -95,7 +101,7 @@ export function AttachmentChips({
                   }
                   onRemove(item.localId);
                 }}
-                aria-label={`Remove ${item.filename}`}
+                aria-label={t('chat.attachmentChips.remove', { name: item.filename })}
                 className="rounded p-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
               >
                 <X className="size-3.5" />

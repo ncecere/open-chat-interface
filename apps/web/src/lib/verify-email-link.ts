@@ -1,3 +1,5 @@
+import { translate } from '~/lib/i18n';
+
 /**
  * Where an email-verification link that did not work lands (#329).
  *
@@ -25,12 +27,11 @@ export function failedVerificationCode(pathname: string, searchStr: string): str
 export function verifyLinkProblem(code: string | null): { title: string; message: string } {
   if (code === 'TOKEN_EXPIRED')
     return {
-      title: 'Verification link expired',
-      message: 'This verification link has expired: each link works for 1 hour.',
+      title: translate('auth.verifyEmail.expiredTitle'),
+      message: translate('auth.verifyEmail.expiredMessage'),
     };
   return {
-    title: 'Verification link unavailable',
-    message:
-      'This verification link does not work. It may not have been copied in full, or the account may no longer exist.',
+    title: translate('auth.verifyEmail.invalidTitle'),
+    message: translate('auth.verifyEmail.invalidMessage'),
   };
 }

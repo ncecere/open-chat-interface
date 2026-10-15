@@ -285,7 +285,7 @@ function AcceptanceList({ policy }: { policy: UsagePolicy }) {
                   </span>
                   {entry.accountDeleted && <Badge variant="outline">account deleted</Badge>}
                   <span
-                    className="ml-auto shrink-0 text-[var(--text-muted)] text-xs"
+                    className="ms-auto shrink-0 text-[var(--text-muted)] text-xs"
                     title={entry.acceptedAt}
                   >
                     {formatDateTime(entry.acceptedAt)}
@@ -391,7 +391,9 @@ export function AdminPoliciesPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate font-medium">{policy.title}</p>
+                      <p className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium">
+                        {policy.title}
+                      </p>
                       <Badge variant="neutral">v{policy.version}</Badge>
                       {policy.id === current?.id ? (
                         <Badge variant="accent">in force</Badge>
@@ -453,7 +455,7 @@ export function AdminPoliciesPage() {
                             aria-label={`Publish ${policy.title} v${policy.version}`}
                             onClick={() => setPublishing(policy)}
                           >
-                            <Send />
+                            <Send className="rtl:-scale-x-100" />
                             Publish
                           </Button>
                         )}

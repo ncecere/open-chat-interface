@@ -5,6 +5,7 @@ import { IntroductionWizard } from '~/components/onboarding/introduction-wizard'
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { ApiError, api } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 import { onPolicyRequired } from '~/lib/policy-required';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
@@ -17,6 +18,7 @@ import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
  * scrolled to the end, so accepting is at least a deliberate act.
  */
 function PolicyGate({ policy }: { policy: NonNullable<OnboardingState['pendingPolicy']> }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [readToEnd, setReadToEnd] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +29,7 @@ function PolicyGate({ policy }: { policy: NonNullable<OnboardingState['pendingPo
     mutationFn: () => api.post('/me/onboarding/accept-policy', { policyId: policy.id }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me', 'onboarding'] }),
     onError: (cause) =>
-      setError(cause instanceof ApiError ? cause.message : 'The acceptance could not be recorded.'),
+      setError(cause instanceof ApiError ? cause.message : t('onboarding.policy.acceptFailed')),
   });
 
   return (
@@ -35,9 +37,7 @@ function PolicyGate({ policy }: { policy: NonNullable<OnboardingState['pendingPo
       <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6">
         <h1 className="font-semibold text-xl">{policy.title}</h1>
         <p className="mt-1 text-[var(--text-muted)] text-sm">
-          {policy.isUpdate
-            ? 'This policy has changed since you last accepted it. Please read it again.'
-            : 'Please read and accept this policy to continue.'}
+          {policy.isUpdate ? t('onboarding.policy.updated') : t('onboarding.policy.firstTime')}
         </p>
 
         <div
@@ -62,14 +62,17 @@ function PolicyGate({ policy }: { policy: NonNullable<OnboardingState['pendingPo
 
         <div className="mt-5 flex items-center justify-between gap-4">
           <p className="text-[var(--text-muted)] text-xs">
-            {readToEnd ? `Version ${policy.version}` : 'Scroll to the end to continue.'}
+            {readToEnd
+              ? t('onboarding.policy.version', { version: policy.version })
+              : t('onboarding.policy.scrollToEnd')}
           </p>
           <Button
             variant="primary"
             disabled={!readToEnd || accept.isPending}
             onClick={() => accept.mutate()}
           >
-            {accept.isPending && <Spinner />}I accept
+            {accept.isPending && <Spinner />}
+            {t('onboarding.policy.accept')}
           </Button>
         </div>
       </div>

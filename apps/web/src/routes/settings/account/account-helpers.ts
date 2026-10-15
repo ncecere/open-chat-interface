@@ -1,3 +1,4 @@
+import { translate } from '~/lib/i18n';
 import { authReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
 
 /** The instance's password rules (Better Auth `emailAndPassword`). */
@@ -19,15 +20,15 @@ export function authErrorMessage(result: AuthResult, fallback: string): string |
   if (readOnly) return readOnlyMessage(readOnly);
   switch (error.code) {
     case 'INVALID_PASSWORD':
-      return 'Your current password is not correct.';
+      return translate('settings.account.errorInvalidPassword');
     case 'PASSWORD_TOO_SHORT':
-      return `Your new password must be at least ${PASSWORD_MIN} characters.`;
+      return translate('settings.account.passwordTooShort', { count: PASSWORD_MIN });
     case 'PASSWORD_TOO_LONG':
-      return `Your new password must be at most ${PASSWORD_MAX} characters.`;
+      return translate('settings.account.passwordTooLong', { count: PASSWORD_MAX });
     case 'LOCAL_AUTH_DISABLED':
-      return 'Email and password sign-in is turned off on this instance.';
+      return translate('settings.account.localAuthDisabled');
     case 'PROFILE_MANAGED_BY_SSO':
-      return "Your name comes from your organisation's sign-in.";
+      return translate('settings.account.nameFromSso');
     default:
       return error.message || fallback;
   }

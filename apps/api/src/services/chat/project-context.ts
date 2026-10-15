@@ -4,6 +4,7 @@ import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { validationFailed } from '../../lib/errors.js';
 import { clip, singleLine } from '../../lib/text.js';
+import { guardService, type TurnClassification } from '../classification/guard.js';
 import { passageHeadings } from '../project-search/excerpts.js';
 import { hybridRanking } from '../project-search/fusion.js';
 import {
@@ -20,6 +21,7 @@ import {
   rankProjectChunks,
 } from '../project-search/retrieval.js';
 import { semanticProjectChunks } from '../project-search/semantic.js';
+import { projectReadableBy } from '../project-sharing/access.js';
 import { roleFeatures } from '../role-features.js';
 import { getSetting } from '../settings.js';
 import {
@@ -38,6 +40,12 @@ import { addCost, type ContextCost, emptyCost, fitsContext, textCost } from './c
  */
 type ProjectContext = {
   id: string;
+  /**
+   * The person whose conversation this is: the **actor** who asks the questions,
+   * is charged for them, and whose access to the project every read below
+   * re-checks. Not necessarily the project's owner (v0.14: a viewer or editor of
+   * a shared project uses it in their own conversation).
+   */
   userId: string;
   name: string;
   instructions: string;
@@ -68,6 +76,12 @@ const chunkKey = (chunk: RetrievedChunk) => `${chunk.attachmentId}:${chunk.ordin
 /**
  * Loads the project of a conversation, or null when there is nothing to add.
  *
+ * The person must be able to read the project (owner, editor or viewer, checked
+ * now, not remembered): without access (a share removed, a group left) the
+ * conversation carries on as an ordinary one with no instructions and no
+ * passages, as with the switch off. A reply already streaming finishes with the
+ * context it began with.
+ *
  * With the role's `projects` feature off, the conversation carries on as an
  * ordinary one: the project row is kept but contributes nothing. Files also
  * need attachments to be allowed for the role and the instance, like any
@@ -84,7 +98,7 @@ export async function loadProjectContext(
   const [project] = await db
     .select({ name: schema.project.name, instructions: schema.project.instructions })
     .from(schema.project)
-    .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, user.id)))
+    .where(and(eq(schema.project.id, projectId), projectReadableBy(projectId, user.id)))
     .limit(1);
   if (!project) return null;
 
@@ -104,7 +118,7 @@ export async function loadProjectContext(
 
 /**
  * Checks the files a message asks to leave out (v0.10): each must be a file
- * of the conversation's project, owned by the person. A file deleted since the
+ * of the conversation's project, which the person can read. A file deleted since the
  * composer listed it still passes, so a send never fails over it. Runs before
  * the turn is claimed.
  */
@@ -123,8 +137,8 @@ export async function assertExcludableProjectFiles(
     .where(
       and(
         inArray(schema.attachment.id, unique),
-        eq(schema.attachment.userId, userId),
         eq(schema.attachment.projectId, projectId),
+        projectReadableBy(projectId, userId),
       ),
     );
   if (rows.length !== unique.length)
@@ -144,8 +158,8 @@ async function projectFileNames(
     .where(
       and(
         inArray(schema.attachment.id, [...order.keys()]),
-        eq(schema.attachment.userId, userId),
         eq(schema.attachment.projectId, projectId),
+        projectReadableBy(projectId, userId),
       ),
     );
   return rows
@@ -269,6 +283,8 @@ export async function selectProjectFiles(
   budget: ContextCost,
   supportsVision: boolean,
   latestText: string,
+  /** What the conversation carries: gates the calls to embeddings and reranking (data classification). */
+  classification?: TurnClassification,
 ): Promise<ProjectFileSelection> {
   const selection = await selectIncludedFiles(
     project,
@@ -276,6 +292,7 @@ export async function selectProjectFiles(
     budget,
     supportsVision,
     latestText,
+    classification,
   );
   // Files the person left out (v0.10) are named on the reply, with or without
   // searched passages, so the reply says what it did not look at.
@@ -299,6 +316,7 @@ async function selectIncludedFiles(
   budget: ContextCost,
   supportsVision: boolean,
   latestText: string,
+  classification?: TurnClassification,
 ): Promise<ProjectFileSelection> {
   if (!project || project.files.length === 0) return noProjectFiles();
   const whole = fitWholeFiles(
@@ -324,13 +342,36 @@ async function selectIncludedFiles(
     projectId: project.id,
     fileIds: searchable.map((file) => file.id),
   };
+  // The outside services this reply was not allowed to use, for its note.
+  const withheld: Array<'embeddings' | 'reranking'> = [];
+  const gate = (name: 'embeddings' | 'reranking', point: 'embedding' | 'rerank') =>
+    classification
+      ? async () => {
+          const allowed = await guardService({
+            userId: project.userId,
+            name,
+            point,
+            projectId: project.id,
+            known: classification,
+          });
+          if (!allowed) withheld.push(name);
+          return allowed;
+        }
+      : undefined;
   const terms = await projectSearchTerms(latestText);
   let ranking: ProjectSearchData['ranking'] = 'keyword';
   let candidates = await rankProjectChunks(scope, terms, PASSAGE_CANDIDATES);
   // Meaning-based search (v0.9) joins in when it is configured and available;
   // otherwise, or if it fails, the keyword ranking stands alone as in v0.8.
   const semantic =
-    terms.length > 0 ? await semanticProjectChunks(scope, latestText, PASSAGE_CANDIDATES) : null;
+    terms.length > 0
+      ? await semanticProjectChunks(
+          scope,
+          latestText,
+          PASSAGE_CANDIDATES,
+          gate('embeddings', 'embedding'),
+        )
+      : null;
   if (semantic && semantic.length > 0) {
     ranking = 'hybrid';
     candidates = hybridRanking(candidates, semantic, chunkKey, PASSAGE_CANDIDATES);
@@ -339,7 +380,12 @@ async function selectIncludedFiles(
   // any failure keeps the order above.
   let reranked: boolean | undefined;
   if (candidates.length > 0) {
-    ({ candidates, reranked } = await rerankProjectCandidates(scope, latestText, candidates));
+    ({ candidates, reranked } = await rerankProjectCandidates(
+      scope,
+      latestText,
+      candidates,
+      gate('reranking', 'rerank'),
+    ));
   }
   if (candidates.length === 0) {
     // Nothing relevant. Until v0.9 each file's opening passages were used
@@ -388,6 +434,7 @@ async function selectIncludedFiles(
         ),
         ranking,
         ...(reranked !== undefined && { reranked }),
+        ...(withheld.length > 0 && { withheld }),
       },
     },
   };

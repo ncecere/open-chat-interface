@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
 import { BroadcastBanner, useBroadcastsSettled } from '~/components/layout/broadcast-banner';
+import { MfaBanner } from '~/components/layout/mfa-banner';
 import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
@@ -36,7 +37,9 @@ function GlobalShortcuts({ onToggleSidebar }: { onToggleSidebar: () => void }) {
  * and an inset rounded main panel below it.
  */
 const DOCKED_SIDEBAR = '(min-width: 1024px)';
-const DRAWER = 'aside[aria-label="Conversation sidebar"]';
+const DRAWER = 'aside[data-sidebar-drawer]';
+/** The top bar's Open sidebar button, found by attribute: its name follows the language. */
+const OPEN_SIDEBAR = '[data-open-sidebar]';
 
 export function AppShell({ children }: { children: ReactNode }) {
   // A drawer below 1024px, as on phones: docked at 768 it left the chat 512px,
@@ -84,7 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (event.key !== 'Escape') return;
       setSidebarOpen(false);
       requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>('[aria-label="Open sidebar"]')?.focus();
+        document.querySelector<HTMLElement>(OPEN_SIDEBAR)?.focus();
       });
     };
     window.addEventListener('keydown', closeOnEscape);
@@ -96,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!mobile) return;
     // Back to "Open sidebar" once the page behind is no longer inert, unless
     // the page has already taken focus (a navigation from the drawer, #242).
-    focusWhenReady(() => document.querySelector<HTMLElement>('[aria-label="Open sidebar"]'), {
+    focusWhenReady(() => document.querySelector<HTMLElement>(OPEN_SIDEBAR), {
       until: () => {
         const active = document.activeElement;
         return Boolean(active && active !== document.body && !active.closest(DRAWER));
@@ -124,7 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenCommandPalette={commandPalette.show}
           />
-          <main className="flex min-h-0 flex-1 flex-col rounded-tl-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
+          <main className="flex min-h-0 flex-1 flex-col rounded-ss-xl bg-[var(--bg-root)] bg-[image:var(--root-gradient)]">
             {/*
              * The top bar's floating controls (absolute, top-6, about 2.6rem
              * tall) get a strip of their own, always: the page scrolls below
@@ -137,6 +140,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className={cn('shrink-0', sidebarOpen ? 'pt-[3.25rem]' : 'pt-[4.25rem]')}
             >
               <ReadOnlyBanner />
+              <MfaBanner />
               <BroadcastBanner />
             </div>
             <div

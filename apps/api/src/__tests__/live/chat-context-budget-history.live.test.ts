@@ -96,6 +96,8 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'roleFeatures') return {};
     // These tests cover trimming without summaries (chat-compaction covers those).
     if (key === 'chat') return { autoCompact: false };
+    // Data classification is off (v0.14): the default, nothing carried.
+    if (key === 'classification') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

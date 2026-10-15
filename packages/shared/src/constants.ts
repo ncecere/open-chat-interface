@@ -168,6 +168,27 @@ export const PROTECTED_AUDIT_ACTIONS = [
   'compliance.settings.update',
   'compliance.hold.place',
   'compliance.hold.lift',
+  // Classification decides which models and connectors may see labelled
+  // content (v0.14, #395). Changes to it are an incident reviewer's first
+  // question. `thread.data_class.*` and `classification.block/warn` are the
+  // person's own and keep the normal retention.
+  'data_class.create',
+  'data_class.update',
+  'data_class.retire',
+  'data_class.delete',
+  'model.data_classes.update',
+  'connector.data_classes.update',
+  'settings.classification.update',
+  'project.data_classes.update',
+  // Groups carry budgets and model access and let managers change who belongs
+  // (#394); who held which access when is what an incident review asks.
+  'group.create',
+  'group.update',
+  'group.delete',
+  'group.member.add',
+  'group.member.remove',
+  'group.member.role',
+  'group.grants.update',
 ] as const;
 
 /** Rate limiting and concurrency defaults, overridable per role by an admin. */

@@ -1,5 +1,6 @@
 import { eq, schema } from '@oci/db';
 import {
+  addThreadDataClassSchema,
   branchMessageSchema,
   compactThreadSchema,
   contentDisposition,
@@ -33,6 +34,9 @@ import {
   compactionState,
   requestCompaction,
 } from '../services/chat/compaction-queue.js';
+import { loadClasses } from '../services/classification/resolve.js';
+import { addThreadClass, removeThreadClass } from '../services/classification/store.js';
+import { toClassificationClass } from '../services/classification/view.js';
 import { consumeFileExport, exportReply } from '../services/documents/export.js';
 import { exportFilename, exportThreadMarkdown, exportTimeZone } from '../services/export.js';
 import {
@@ -44,16 +48,13 @@ import {
 } from '../services/lifecycle/trash.js';
 import { chatRateLimit, threadCreateRateLimit } from '../services/limits/rate-limit.js';
 import { resolveModelForRole } from '../services/models.js';
-import {
-  assertProjectsAllowed,
-  getOwnedProject,
-  moveThreadToProject,
-} from '../services/projects.js';
+import { requireProjectAccess } from '../services/project-sharing/access.js';
+import { assertProjectsAllowed, moveThreadToProject } from '../services/projects.js';
 import { activateReply } from '../services/replies.js';
 import { roleFeatures } from '../services/role-features.js';
 import { decodeThreadHistoryCursor, listThreadHistory } from '../services/thread-history.js';
 import { searchThreads } from '../services/thread-search.js';
-import { serializeThread } from '../services/thread-summary.js';
+import { serializeThreads, serializeThreadWithClasses } from '../services/thread-summary.js';
 import {
   assertBranchingAllowed,
   assertNotLeavingUnusedThreads,
@@ -78,7 +79,7 @@ const listQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
-  /** Only conversations in this project (the caller's own). */
+  /** Only the caller's own conversations in this project (any project they can read). */
   projectId: z.string().min(1).max(200).optional(),
   /**
    * `sidebar` (v0.9.1): the sidebar's general list, which leaves out
@@ -132,17 +133,21 @@ threadRoutes.get('/', async (c) => {
       before: cursor,
       limit: limit ?? THREAD_HISTORY_PAGE_SIZE,
     });
-    return c.json({ threads: page.threads.map(serializeThread), nextCursor: page.nextCursor });
+    return c.json({
+      threads: await serializeThreads(page.threads),
+      nextCursor: page.nextCursor,
+    });
   }
   if (projectId) {
     await assertProjectsAllowed(user.role);
-    await getOwnedProject(projectId, user.id);
+    // Any access level lists the person's own conversations in it; none is a 404.
+    await requireProjectAccess(projectId, user.id, 'viewer');
   }
   // A role without projects has no project tree in its sidebar, so its
   // project conversations stay in the general list rather than vanish.
   const outsideProjects = view === 'sidebar' && (await roleFeatures(user.role)).projects;
   const threads = await listThreads(user.id, { search, archived, projectId, outsideProjects });
-  return c.json({ threads: threads.map(serializeThread) });
+  return c.json({ threads: await serializeThreads(threads) });
 });
 
 /**
@@ -169,7 +174,7 @@ threadRoutes.post('/', async (c) => {
     temporary: input.temporary,
     projectId: input.projectId,
   });
-  return c.json({ thread: serializeThread(thread) }, 201);
+  return c.json({ thread: await serializeThreadWithClasses(thread) }, 201);
 });
 
 /**
@@ -181,8 +186,9 @@ threadRoutes.get('/search', async (c) => {
   const user = currentUser(c);
   const { q, limit } = parseQuery(c, searchQuerySchema);
   const hits = await searchThreads(user.id, q, { limit });
-  const results: ThreadSearchResult[] = hits.map((hit) => ({
-    thread: serializeThread(hit.thread),
+  const summaries = await serializeThreads(hits.map((hit) => hit.thread));
+  const results: ThreadSearchResult[] = hits.map((hit, index) => ({
+    thread: summaries[index]!,
     rank: hit.rank,
     titleHighlight: hit.titleHighlight,
     matches: hit.matches,
@@ -282,7 +288,7 @@ threadRoutes.post('/:id/forks', async (c) => {
   const fork = await forkFromMessage(c.req.param('id'), user.id, input);
   // The copy of the message forked at: a question is answered in the fork.
   const message = await forkedMessage(fork.id, input.messageId);
-  return c.json({ thread: serializeThread(fork), message }, 201);
+  return c.json({ thread: await serializeThreadWithClasses(fork), message }, 201);
 });
 
 threadRoutes.post('/:id/branches', async (c) => {
@@ -296,7 +302,7 @@ threadRoutes.post('/:id/branches', async (c) => {
 
   return c.json(
     {
-      thread: serializeThread(result.thread),
+      thread: await serializeThreadWithClasses(result.thread),
       message: {
         id: result.message.id,
         modelSlug: result.message.modelSlug,
@@ -367,7 +373,7 @@ threadRoutes.post('/:id/compact', async (c) => {
   const input = await parseBody(c, compactThreadSchema);
   const slug = input.modelSlug ?? (await defaultSummaryModel(thread.id, user.id, user.role));
   if (!slug) throw validationFailed(NOTHING_TO_COMPACT);
-  const model = await resolveModelForRole(slug, user.role);
+  const model = await resolveModelForRole(slug, { userId: user.id, role: user.role });
   await assertCompactionPossible({
     user,
     threadId: thread.id,
@@ -392,7 +398,7 @@ threadRoutes.get('/:id', async (c) => {
   const gone = await unavailableFileIds(user.id, messages);
 
   return c.json({
-    thread: serializeThread(thread),
+    thread: await serializeThreadWithClasses(thread),
     messages: messages
       .map((stored) => markUnavailableFiles(stored, gone))
       .map((message) => ({
@@ -436,7 +442,53 @@ threadRoutes.patch('/:id', async (c) => {
       .where(eq(schema.thread.id, thread.id))
       .returning();
   }
-  return c.json({ thread: serializeThread(updated ?? thread) });
+  return c.json({ thread: await serializeThreadWithClasses(updated ?? thread) });
+});
+
+/**
+ * Labels the person's own conversation with a data class (v0.14, #395). 201
+ * when added, 200 when it already carried that label of theirs. Takes the
+ * conversation's lock, so it serialises with a send claiming it.
+ */
+threadRoutes.post('/:id/data-classes', async (c) => {
+  const user = currentUser(c);
+  const input = await parseBody(c, addThreadDataClassSchema);
+  const threadId = c.req.param('id');
+  const added = await addThreadClass(threadId, user.id, input.classId);
+  if (added.created)
+    await recordAudit({
+      actorUserId: user.id,
+      actorEmail: user.email,
+      action: 'thread.data_class.add',
+      targetType: 'thread',
+      targetId: threadId,
+      metadata: { classId: input.classId, name: added.name },
+    });
+  return c.json(
+    { classes: (await loadClasses({ threadId })).map(toClassificationClass) },
+    added.created ? 201 : 200,
+  );
+});
+
+/**
+ * Removes a label the person added. A label that comes from the project, a
+ * connector the conversation used, or was kept when either went away answers
+ * 409 with the reason: it is removed only by whoever may change what gave it.
+ */
+threadRoutes.delete('/:id/data-classes/:classId', async (c) => {
+  const user = currentUser(c);
+  const threadId = c.req.param('id');
+  const classId = c.req.param('classId');
+  const removed = await removeThreadClass(threadId, user.id, classId);
+  await recordAudit({
+    actorUserId: user.id,
+    actorEmail: user.email,
+    action: 'thread.data_class.remove',
+    targetType: 'thread',
+    targetId: threadId,
+    metadata: { classId, name: removed.name },
+  });
+  return c.json({ classes: (await loadClasses({ threadId })).map(toClassificationClass) });
 });
 
 /**

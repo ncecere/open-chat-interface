@@ -5,11 +5,25 @@ import { useState } from 'react';
 import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useAutoRetry } from '~/hooks/use-auto-retry';
-import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
+import {
+  useProjectsAvailable,
+  useSidebarProjects,
+  useSidebarSharedProjects,
+} from '~/hooks/use-projects';
 import { useArchiveThread, useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
+import { type MessageKey, useT } from '~/lib/i18n';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
+
+type GroupId = 'pinned' | 'today' | 'yesterday' | 'older';
+
+const GROUP_LABELS: Record<GroupId, MessageKey> = {
+  pinned: 'shell.threadList.pinned',
+  today: 'shell.threadList.today',
+  yesterday: 'shell.threadList.yesterday',
+  older: 'shell.threadList.older',
+};
 
 /** Groups by local calendar date, matching the reference's Today/Yesterday buckets. */
 function groupThreads(threads: ThreadSummary[]) {
@@ -17,11 +31,11 @@ function groupThreads(threads: ThreadSummary[]) {
   today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const groups: { label: string; threads: ThreadSummary[] }[] = [
-    { label: 'Pinned', threads: [] },
-    { label: 'Today', threads: [] },
-    { label: 'Yesterday', threads: [] },
-    { label: 'Older', threads: [] },
+  const groups: { id: GroupId; threads: ThreadSummary[] }[] = [
+    { id: 'pinned', threads: [] },
+    { id: 'today', threads: [] },
+    { id: 'yesterday', threads: [] },
+    { id: 'older', threads: [] },
   ];
 
   for (const thread of threads) {
@@ -35,8 +49,21 @@ function groupThreads(threads: ThreadSummary[]) {
   return groups.filter((group) => group.threads.length > 0);
 }
 
+/**
+ * 24 by 24 px, the WCAG 2.2 target floor (2.5.8): the 14 px icon with `p-1` was 22 by 22, with
+ * 2 px between the three, so neither the size nor the spacing exception held.
+ */
 const ROW_ACTION =
-  'rounded p-1 text-[var(--text-muted)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+  'flex size-6 items-center justify-center rounded text-[var(--text-muted)] enabled:hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+
+/**
+ * The room the three actions take at the end of a row: 4 px from the edge, three 24 px buttons and
+ * two 2 px gaps, 80 px. The link gives it up while the actions show (`me-20` is 5rem), so they sit
+ * beside the conversation title, not over its last letters or over the link's own box, which is
+ * what the audit counted as the focused link being partly covered (2.4.11). Not animated: the
+ * link must be clear of them the moment it has focus, not 200 ms later.
+ */
+const ACTIONS_ROOM = 'group-hover:me-20 group-focus-within:me-20';
 
 /** One conversation in the sidebar, with its pin, rename and archive actions. */
 export function ThreadRow({
@@ -49,6 +76,7 @@ export function ThreadRow({
   /** Shown lightly after the title of a pinned project conversation. */
   projectName?: string;
 }) {
+  const t = useT();
   const update = useUpdateThread({ reportErrors: true });
   const archive = useArchiveThread();
   const [renaming, setRenaming] = useState(false);
@@ -71,11 +99,11 @@ export function ThreadRow({
           params={{ threadId: thread.parentThreadId }}
           // Each row's controls are named for the row, as memory's are, so a
           // screen reader's list of buttons is not N copies of one name (#111).
-          aria-label={`Go to parent conversation of: ${thread.title}`}
-          title="Go to parent conversation"
+          aria-label={t('shell.threadRow.parent', { title: thread.title })}
+          title={t('shell.threadRow.parentTitle')}
           // 24 × 24, the WCAG 2.2 target floor; it was the 14 px icon plus
           // padding, 22 × 22, right against the row's link (#193).
-          className="ml-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className="ms-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <GitFork className="size-3.5" aria-hidden="true" />
         </Link>
@@ -84,10 +112,20 @@ export function ThreadRow({
         to="/chat/$threadId"
         params={{ threadId: thread.id }}
         aria-current={active ? 'page' : undefined}
-        className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
-        title={projectName ? `${thread.title} (${projectName})` : thread.title}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]',
+          ACTIONS_ROOM,
+        )}
+        title={
+          projectName
+            ? t('shell.threadRow.titleInProject', { title: thread.title, project: projectName })
+            : thread.title
+        }
       >
-        <span dir="auto" className="min-w-0 flex-1 truncate">
+        <span
+          dir="auto"
+          className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]"
+        >
           {thread.title}
         </span>
         {projectName && (
@@ -99,15 +137,17 @@ export function ThreadRow({
             )}
           >
             <Folder className="size-3 shrink-0" aria-hidden="true" />
-            <span className="sr-only">, in project </span>
-            <span className="truncate">{projectName}</span>
+            <span className="sr-only">{t('shell.threadRow.inProject')} </span>
+            <span className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+              {projectName}
+            </span>
           </span>
         )}
       </Link>
 
       <div
         className={cn(
-          'pointer-events-none absolute right-1 flex translate-x-3 items-center gap-0.5 rounded-lg bg-inherit pl-2 opacity-0',
+          'pointer-events-none absolute end-1 flex translate-x-3 items-center gap-0.5 opacity-0 rtl:-translate-x-3',
           'transition-[transform,opacity] duration-200 ease-out',
           'group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100',
           'group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100',
@@ -116,7 +156,9 @@ export function ThreadRow({
       >
         <button
           type="button"
-          aria-label={`${thread.pinned ? 'Unpin' : 'Pin'} conversation: ${thread.title}`}
+          aria-label={t(thread.pinned ? 'shell.threadRow.unpin' : 'shell.threadRow.pin', {
+            title: thread.title,
+          })}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={() => update.mutate({ id: thread.id, pinned: !thread.pinned })}
@@ -126,7 +168,7 @@ export function ThreadRow({
         </button>
         <button
           type="button"
-          aria-label={`Rename conversation: ${thread.title}`}
+          aria-label={t('shell.threadRow.rename', { title: thread.title })}
           aria-haspopup="dialog"
           disabled={readOnly.active}
           title={lockedTitle}
@@ -137,7 +179,7 @@ export function ThreadRow({
         </button>
         <button
           type="button"
-          aria-label={`Archive conversation: ${thread.title}`}
+          aria-label={t('shell.threadRow.archive', { title: thread.title })}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={(event) => {
@@ -169,6 +211,7 @@ export function ThreadRow({
  * (SidebarProjects).
  */
 export function ThreadList() {
+  const t = useT();
   const { data: threads, isLoading, isError, refetch } = useSidebarThreads();
   // A refresh that failed while the server was unreachable (the end of a new
   // chat's first reply during an outage) is tried again by itself, as the
@@ -176,7 +219,10 @@ export function ThreadList() {
   useAutoRetry(isError, () => void refetch());
   const projectsAvailable = useProjectsAvailable();
   const { data: projects } = useSidebarProjects(projectsAvailable);
-  const projectNames = new Map(projects?.map((project) => [project.id, project.name]));
+  const { data: shared } = useSidebarSharedProjects(projectsAvailable);
+  const projectNames = new Map(
+    [...(projects ?? []), ...(shared ?? [])].map((project) => [project.id, project.name]),
+  );
   const params = useParams({ strict: false }) as { threadId?: string };
   const [pinnedOpen, setPinnedOpen] = useState(true);
 
@@ -190,10 +236,11 @@ export function ThreadList() {
 
   if (!threads || threads.length === 0) {
     // Someone whose every conversation is in a project has nothing to add here.
-    if (projects?.some((project) => project.threadCount > 0)) return null;
+    if ([...(projects ?? []), ...(shared ?? [])].some((project) => project.threadCount > 0))
+      return null;
     return (
       <p className="px-2 py-8 text-center text-xs text-[var(--text-muted)]">
-        Your conversations will appear here.
+        {t('shell.threadList.empty')}
       </p>
     );
   }
@@ -201,11 +248,11 @@ export function ThreadList() {
   return (
     <div className="flex flex-col gap-4">
       {groupThreads(threads).map((group) => {
-        const isPinned = group.label === 'Pinned';
+        const isPinned = group.id === 'pinned';
         const visible = !isPinned || pinnedOpen;
 
         return (
-          <div key={group.label}>
+          <div key={group.id}>
             {/* Every group is a heading, as Projects is, so heading navigation
                 reaches each day; they were paragraphs, and Pinned a bare
                 button (#198). Pinned's disclosure sits inside its heading. */}
@@ -218,18 +265,18 @@ export function ThreadList() {
                   onClick={() => setPinnedOpen((open) => !open)}
                   // min-h keeps the target at the 24px WCAG 2.2 floor; the label
                   // itself is deliberately small, so padding carries the height.
-                  className="flex min-h-6 w-full items-center gap-1 rounded px-2.5 pb-1 text-left text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
+                  className="flex min-h-6 w-full items-center gap-1 rounded px-2.5 pb-1 text-start text-[0.6875rem] font-semibold text-[var(--accent-bright)] hover:text-[var(--text-primary)]"
                 >
                   <ChevronDown
                     className={cn('size-3 transition-transform', !pinnedOpen && '-rotate-90')}
                     aria-hidden="true"
                   />
-                  Pinned
+                  {t(GROUP_LABELS.pinned)}
                 </button>
               </h2>
             ) : (
               <h2 className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]">
-                {group.label}
+                {t(GROUP_LABELS[group.id])}
               </h2>
             )}
             {visible && (

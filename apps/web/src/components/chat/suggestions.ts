@@ -1,55 +1,66 @@
 import { Code2, Compass, GraduationCap, Sparkles } from 'lucide-react';
+import type { MessageKey } from '~/lib/i18n';
 
+/**
+ * The starter chips on the home page, as catalog keys: the label of each group
+ * and the prompts a click sends. A prompt is the message the person sends, so
+ * it is in the language shown.
+ */
 export const SUGGESTION_CATEGORIES = [
   {
     id: 'create',
-    label: 'Create',
+    label: 'chat.suggestions.createLabel',
     icon: Sparkles,
     prompts: [
-      'Write a short story about a robot discovering emotions',
-      'Help me outline a sci-fi novel set in a post-apocalyptic world',
-      'Create a character profile for a complex villain with sympathetic motives',
-      'Give me 5 creative writing prompts for flash fiction',
+      'chat.suggestions.create1',
+      'chat.suggestions.create2',
+      'chat.suggestions.create3',
+      'chat.suggestions.create4',
     ],
   },
   {
     id: 'explore',
-    label: 'Explore',
+    label: 'chat.suggestions.exploreLabel',
     icon: Compass,
     prompts: [
-      'Good books for fans of Rick Rubin',
-      'Countries ranked by number of corgis',
-      'Most successful companies in the world',
-      'How much does Claude cost?',
+      'chat.suggestions.explore1',
+      'chat.suggestions.explore2',
+      'chat.suggestions.explore3',
+      'chat.suggestions.explore4',
     ],
   },
   {
     id: 'code',
-    label: 'Code',
+    label: 'chat.suggestions.codeLabel',
     icon: Code2,
     prompts: [
-      'Write code to invert a binary search tree in Python',
-      "What's the difference between Promise.all and Promise.allSettled?",
-      "Explain React's useEffect cleanup function",
-      'Best practices for error handling in Rust',
+      'chat.suggestions.code1',
+      'chat.suggestions.code2',
+      'chat.suggestions.code3',
+      'chat.suggestions.code4',
     ],
   },
   {
     id: 'learn',
-    label: 'Learn',
+    label: 'chat.suggestions.learnLabel',
     icon: GraduationCap,
     prompts: [
-      "Beginner's guide to TypeScript",
-      'Explain the CAP theorem in distributed systems',
-      'Why is AI so expensive?',
-      'Are black holes real?',
+      'chat.suggestions.learn1',
+      'chat.suggestions.learn2',
+      'chat.suggestions.learn3',
+      'chat.suggestions.learn4',
     ],
   },
-] as const;
+] as const satisfies ReadonlyArray<{
+  id: string;
+  label: MessageKey;
+  icon: unknown;
+  prompts: readonly MessageKey[];
+}>;
 
 export const DEFAULT_PROMPTS = [
-  'How does AI work?',
-  'Are black holes real?',
-  'How many Rs are in the word "strawberry"?',
-  'What is the meaning of life?',
-];
+  'chat.suggestions.default1',
+  'chat.suggestions.default2',
+  'chat.suggestions.default3',
+  'chat.suggestions.default4',
+] as const satisfies readonly MessageKey[];

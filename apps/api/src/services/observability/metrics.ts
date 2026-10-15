@@ -237,6 +237,18 @@ export const chatReplyDuration = register(
 export const toolCalls = register(
   new Counter('oci_tool_calls_total', 'Tool calls by tool id and outcome.', ['tool', 'outcome']),
 );
+/**
+ * Data classification decisions (v0.14): counted only for a conversation that
+ * carries at least one class. No class label: names may be sensitive and the
+ * set is open-ended.
+ */
+export const classificationDecisions = register(
+  new Counter(
+    'oci_classification_decisions_total',
+    'Data classification decisions by point and outcome.',
+    ['point', 'outcome'],
+  ),
+);
 export const toolCallDuration = register(
   new Histogram(
     'oci_tool_call_duration_seconds',
@@ -276,6 +288,17 @@ export const webhookDeliveries = register(
     'oci_webhook_deliveries_total',
     'Webhook delivery attempts by outcome (succeeded, retrying, failed).',
     ['outcome'],
+  ),
+);
+/**
+ * Second-step verifications (v0.14, #399). `method` is totp, recovery_code or
+ * passkey; `outcome` is success or failure. Never a person or a code.
+ */
+export const mfaVerifications = register(
+  new Counter(
+    'oci_mfa_verifications_total',
+    'Second-step verifications by method (totp, recovery_code, passkey) and outcome (success, failure).',
+    ['method', 'outcome'],
   ),
 );
 export const backupRuns = register(

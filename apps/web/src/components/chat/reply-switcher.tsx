@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '~/components/ui/button';
+import { useT } from '~/lib/i18n';
 
 export interface ReplySwitch {
   /** Zero-based position of the reply on screen among all replies to the turn. */
@@ -16,43 +17,44 @@ export interface ReplySwitch {
  * the first or last reply is reached or a reply starts generating.
  */
 export function ReplySwitcher({ index, count, disabled, onSelect }: ReplySwitch) {
+  const t = useT();
   const previous = disabled || index <= 0;
   const next = disabled || index >= count - 1;
 
   return (
     <fieldset
-      aria-label="Replies"
+      aria-label={t('chat.replySwitcher.label')}
       className="m-0 mt-2 flex min-w-0 items-center gap-0.5 border-0 p-0 text-xs text-[var(--text-muted)]"
     >
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Previous reply"
+        aria-label={t('chat.replySwitcher.previous')}
         aria-disabled={previous}
         className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
         onClick={() => {
           if (!previous) onSelect(index - 1);
         }}
       >
-        <ChevronLeft />
+        <ChevronLeft className="rtl:-scale-x-100" />
       </Button>
       <span aria-hidden="true" className="min-w-10 text-center tabular-nums">
-        {index + 1} / {count}
+        {t('chat.replySwitcher.position', { current: index + 1, count })}
       </span>
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Next reply"
+        aria-label={t('chat.replySwitcher.next')}
         aria-disabled={next}
         className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
         onClick={() => {
           if (!next) onSelect(index + 1);
         }}
       >
-        <ChevronRight />
+        <ChevronRight className="rtl:-scale-x-100" />
       </Button>
       <span role="status" className="sr-only">
-        Reply {index + 1} of {count}
+        {t('chat.replySwitcher.status', { current: index + 1, count })}
       </span>
     </fieldset>
   );

@@ -45,6 +45,11 @@ export async function rerankProjectCandidates(
   scope: { userId: string; projectId: string },
   raw: string,
   candidates: RetrievedChunk[],
+  /**
+   * Data classification: asked just before the question and the passages would
+   * go to the reranker. False keeps the fused order, as when reranking fails.
+   */
+  mayRerank?: () => Promise<boolean>,
 ): Promise<RerankedCandidates> {
   const settings = await rerankingSettings();
   if (!isRerankingActive(settings)) return { candidates, reranked: undefined };
@@ -52,6 +57,7 @@ export async function rerankProjectCandidates(
   const head = candidates.slice(0, RERANK_CANDIDATES);
   // One candidate (or none) has no order to change, and nothing to send.
   if (!query || head.length < 2) return { candidates, reranked: false };
+  if (mayRerank && !(await mayRerank())) return { candidates, reranked: false };
   try {
     const reranker = await resolveReranker(settings.providerId, settings.modelId);
     const { ranking, tokens } = await rerank({

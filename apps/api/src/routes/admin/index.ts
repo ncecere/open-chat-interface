@@ -3,9 +3,16 @@ import { type AppBindings, requireAdmin } from '../../middleware/context.js';
 import { auditRoutes } from './audit.js';
 import { backupRoutes } from './backups.js';
 import { broadcastRoutes } from './broadcasts.js';
+import {
+  adminProjectLabelRoutes,
+  adminUserProjectRoutes,
+  classificationSettingsRoutes,
+  dataClassRoutes,
+} from './classification.js';
 import { complianceRoutes } from './compliance.js';
 import { connectorRoutes } from './connectors.js';
 import { embeddingsRoutes } from './embeddings.js';
+import { groupAdminRoutes, userGroupRoutes } from './groups.js';
 import { healthRoutes as adminHealthRoutes } from './health.js';
 import { inviteRoutes } from './invites.js';
 import { lifecycleRoutes } from './lifecycle.js';
@@ -38,11 +45,17 @@ adminRoutes.route('/roles', rolesRoutes);
 // Mounted before the user routes so the override paths are not shadowed by a
 // broader `/users/:id` handler.
 adminRoutes.route('/users', overrideRoutes);
+adminRoutes.route('/users', userGroupRoutes);
 adminRoutes.route('/users', userRoutes);
+adminRoutes.route('/users', adminUserProjectRoutes);
+adminRoutes.route('/groups', groupAdminRoutes);
 adminRoutes.route('/invites', inviteRoutes);
 adminRoutes.route('/providers', providerRoutes);
 adminRoutes.route('/models', modelRoutes);
 adminRoutes.route('/connectors', connectorRoutes);
+adminRoutes.route('/data-classes', dataClassRoutes);
+adminRoutes.route('/classification', classificationSettingsRoutes);
+adminRoutes.route('/projects', adminProjectLabelRoutes);
 adminRoutes.route('/embeddings', embeddingsRoutes);
 adminRoutes.route('/reranking', rerankingRoutes);
 adminRoutes.route('/broadcasts', broadcastRoutes);

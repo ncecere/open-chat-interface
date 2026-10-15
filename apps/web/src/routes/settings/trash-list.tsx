@@ -2,27 +2,24 @@ import type { TrashedThread } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type MouseEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { SettingsConfirmDialog } from '~/components/settings/confirm-dialog';
+import { tWithUserText } from '~/components/settings/user-text';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
+import { formatRelativeTime, type Translate, translate, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
-import { formatRelativeTime } from '~/lib/utils';
 
-function purgeCountdown(purgeAt: string): string {
+function purgeCountdown(t: Translate, purgeAt: string): string {
   const remaining = new Date(purgeAt).getTime() - Date.now();
-  if (remaining <= 0) return 'deleting soon';
+  if (remaining <= 0) return t('settings.trash.purgeSoon');
 
   const days = Math.ceil(remaining / 86_400_000);
-  if (days > 1) return `deletes in ${days} days`;
+  if (days > 1) return t('settings.trash.purgeDays', { count: days });
   const hours = Math.max(1, Math.ceil(remaining / 3_600_000));
-  return `deletes in ${hours} hour${hours === 1 ? '' : 's'}`;
-}
-
-function messages(count: number): string {
-  return `${count} message${count === 1 ? '' : 's'}`;
+  return t('settings.trash.purgeHours', { count: hours });
 }
 
 /**
@@ -31,6 +28,7 @@ function messages(count: number): string {
  * deletion does, because it removes the trash's safety net (#132).
  */
 export function TrashList() {
+  const t = useT();
   const queryClient = useQueryClient();
   // Restoring and deleting are refused while read-only (#353).
   const lock = useReadOnlyLock();
@@ -54,11 +52,13 @@ export function TrashList() {
     // Said, as Delete is: the row only vanished, with no word of where the
     // conversation went (#250). It returns to where it was when deleted.
     onSuccess: (_, thread) => {
-      toast.success(`Restored “${thread.title}” from the trash.`);
+      toast.success(translate('settings.trash.restored', { title: thread.title }));
       return invalidate();
     },
     onError: (error, thread) =>
-      toast.error(apiErrorMessage(error, `“${thread.title}” could not be restored. Try again.`)),
+      toast.error(
+        apiErrorMessage(error, translate('settings.trash.restoreFailed', { title: thread.title })),
+      ),
   });
 
   /** The row leaves once the trash refetches; focus goes to the next one, not the body (#250). */
@@ -79,16 +79,13 @@ export function TrashList() {
   }
 
   if (threads.length === 0) {
-    return <p className="mt-10 text-sm text-[var(--text-muted)]">Trash is empty.</p>;
+    return <p className="mt-10 text-sm text-[var(--text-muted)]">{t('settings.trash.empty')}</p>;
   }
 
   return (
     <>
       <div className="mt-6 flex items-center justify-between gap-4">
-        <p className="text-xs text-[var(--text-muted)]">
-          Deleted conversations stay here until their deletion date, then are removed permanently.
-          Deleting now cannot be undone, so download anything you want to keep first.
-        </p>
+        <p className="text-xs text-[var(--text-muted)]">{t('settings.trash.intro')}</p>
         <Button
           variant="danger"
           size="sm"
@@ -96,18 +93,24 @@ export function TrashList() {
           locked={lock.title}
           onClick={() => setEmptying(true)}
         >
-          Empty trash
+          {t('settings.trash.emptyButton')}
         </Button>
       </div>
 
       <div className="mt-4 flex flex-col">
         {threads.map((thread) => {
           // One string, shown and as the tooltip when a phone cuts it short (#130).
-          const detail = `${messages(thread.messageCount)} · ${
+          const detail =
             thread.deletedReason === 'retention'
-              ? 'removed automatically'
-              : `deleted ${formatRelativeTime(thread.deletedAt)}`
-          } · ${purgeCountdown(thread.purgeAt)}`;
+              ? t('settings.trash.detailAuto', {
+                  count: thread.messageCount,
+                  purge: purgeCountdown(t, thread.purgeAt),
+                })
+              : t('settings.trash.detailUser', {
+                  count: thread.messageCount,
+                  when: formatRelativeTime(thread.deletedAt),
+                  purge: purgeCountdown(t, thread.purgeAt),
+                });
           return (
             <div
               key={thread.id}
@@ -117,12 +120,15 @@ export function TrashList() {
               <div className="min-w-0 flex-1">
                 <p
                   dir="auto"
-                  className="truncate text-[var(--text-primary)] text-sm"
+                  className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-[var(--text-primary)] text-sm"
                   title={thread.title}
                 >
                   {thread.title}
                 </p>
-                <p className="truncate text-[var(--text-muted)] text-xs" title={detail}>
+                <p
+                  className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-[var(--text-muted)] text-xs"
+                  title={detail}
+                >
                   {detail}
                 </p>
               </div>
@@ -134,43 +140,45 @@ export function TrashList() {
                 // Only this row's: a disabled neighbour cannot take focus when this row goes.
                 locked={lock.title}
                 disabled={restore.isPending && restore.variables?.id === thread.id}
-                aria-label={`Restore ${thread.title}`}
+                aria-label={t('settings.trash.restoreLabel', { title: thread.title })}
                 onClick={(event) => restoreRow(event, thread)}
               >
-                Restore
+                {t('settings.trash.restore')}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 aria-haspopup="dialog"
-                aria-label={`Delete ${thread.title} now`}
+                aria-label={t('settings.trash.deleteNowLabel', { title: thread.title })}
                 locked={lock.title}
                 onClick={() => setPurging(thread)}
               >
-                Delete now
+                {t('settings.trash.deleteNow')}
               </Button>
             </div>
           );
         })}
       </div>
 
-      <ConfirmDialog
+      <SettingsConfirmDialog
         open={purging !== null}
         onOpenChange={(open) => {
           if (!open) setPurging(null);
         }}
-        title="Delete this conversation now?"
+        title={t('settings.trash.purgeTitle')}
         description={
-          <>
-            {/* Quoted, as the project dialog does: a title's own full stop ran
-                into "and its 2 messages" (#254). */}
-            “{purging?.title}” and its {messages(purging?.messageCount ?? 0)} are deleted
-            permanently, with its files and artifacts. This cannot be undone.
-          </>
+          // Quoted, as the project dialog does: a title's own full stop ran
+          // into "and its 2 messages" (#254).
+          tWithUserText(
+            t,
+            'settings.trash.purgeDescription',
+            { title: purging?.title ?? '', count: purging?.messageCount ?? 0 },
+            ['title'],
+          )
         }
-        confirmLabel="Delete now"
-        pendingLabel="Deleting…"
-        errorMessage="The conversation could not be deleted."
+        confirmLabel={t('settings.trash.deleteNow')}
+        pendingLabel={t('settings.trash.deleting')}
+        errorMessage={t('settings.trash.purgeFailed')}
         confirmDisabled={lock.locked}
         onConfirm={async () => {
           if (!purging) return;
@@ -178,22 +186,14 @@ export function TrashList() {
           await invalidate();
         }}
       />
-      <ConfirmDialog
+      <SettingsConfirmDialog
         open={emptying}
         onOpenChange={setEmptying}
-        title={
-          threads.length === 1
-            ? 'Empty the trash?'
-            : `Empty the trash of ${threads.length} conversations?`
-        }
-        description={
-          threads.length === 1
-            ? 'The conversation in the trash is deleted permanently, with its files and artifacts. This cannot be undone.'
-            : `All ${threads.length} conversations in the trash are deleted permanently, with their files and artifacts. This cannot be undone.`
-        }
-        confirmLabel="Empty trash"
-        pendingLabel="Deleting…"
-        errorMessage="The trash could not be emptied."
+        title={t('settings.trash.emptyTitle', { count: threads.length })}
+        description={t('settings.trash.emptyDescription', { count: threads.length })}
+        confirmLabel={t('settings.trash.emptyButton')}
+        pendingLabel={t('settings.trash.deleting')}
+        errorMessage={t('settings.trash.emptyFailed')}
         confirmDisabled={lock.locked}
         onConfirm={async () => {
           await api.delete('/threads/trash');

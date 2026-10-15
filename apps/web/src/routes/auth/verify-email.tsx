@@ -5,6 +5,7 @@ import { ResendVerification } from '~/components/auth/resend-verification';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
+import { useT } from '~/lib/i18n';
 import { verifyLinkProblem } from '~/lib/verify-email-link';
 import { AuthCard } from './password-reset';
 
@@ -14,6 +15,7 @@ import { AuthCard } from './password-reset';
  * landed on the sign-in page, or the home page, with no word about it.
  */
 export function VerifyEmailPage() {
+  const t = useT();
   const searchStr = useRouterState({ select: (state) => state.location.searchStr });
   const code = new URLSearchParams(searchStr).get('error');
   const [email, setEmail] = useState('');
@@ -25,14 +27,13 @@ export function VerifyEmailPage() {
         <MailWarning className="mx-auto size-8 text-[var(--text-muted)]" aria-hidden="true" />
         <h1 className="text-lg font-semibold">{problem.title}</h1>
         <p className="text-sm text-[var(--text-muted)]">
-          {problem.message} Sign in with your email and password and we will send you a new link, or
-          ask for one here.
+          {t('auth.verifyEmail.body', { message: problem.message })}
         </p>
         <Button asChild variant="primary" className="w-full">
-          <Link to="/auth/login">Sign in</Link>
+          <Link to="/auth/login">{t('auth.common.signIn')}</Link>
         </Button>
-        <div className="flex flex-col gap-1.5 text-left">
-          <Label htmlFor="verify-email-address">Email</Label>
+        <div className="flex flex-col gap-1.5 text-start">
+          <Label htmlFor="verify-email-address">{t('auth.common.email')}</Label>
           <Input
             id="verify-email-address"
             type="email"

@@ -323,6 +323,8 @@ describe.skipIf(!available)('live: migrations administration and the upgrade pre
       ['0.11.attachment-own-rows', 'not_scheduled'],
       ['0.13.message-search-folded', 'not_scheduled'],
       ['0.13.chunk-search-folded', 'not_scheduled'],
+      // Connector tools used before 0.14, for data classification (#395).
+      ['0.14.thread-connector-use', 'not_scheduled'],
     ]);
 
     expect(

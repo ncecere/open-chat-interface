@@ -67,6 +67,34 @@ The accessibility check is a **regression net, not a conformance claim**.
 Automation covers perhaps a third of the criteria — contrast, names, roles,
 structure. Whether an error message actually helps still needs a person.
 
+## Translations
+
+`pnpm lint` also runs `node scripts/check-i18n.mjs` (catalogs against `en`,
+literals in migrated directories, locale formatting outside the formatter) and
+`node scripts/check-logical-css.mjs` (no physical `ml-`/`left-`/`text-left`...,
+no unmirrored pointing icon, no `:dir()`), and `node --test scripts/*.test.mjs`
+tests both. `pnpm build` ends by holding the initial JavaScript to its size
+budget and by failing if a message catalog is in it. In the unit suite English
+is active before every test (`tests/unit/setup.ts`): `useT()` returns the real
+strings with nothing to await.
+
+Two browser specs cover languages. `tests/e2e/language.spec.ts` switches
+language (`<html lang dir>`, the picker, a language switched off) and, in real
+Arabic, sweeps the pages for overflow at 320, 768 and 1280 px, checks the sidebar
+is on the right and runs axe. `tests/e2e/rtl.spec.ts` does the same sweep in the
+forced right-to-left pseudo-locale `ar-XB` (plus the administration console,
+focus order on sign-in and the drawer), and writes a screenshot of every page to
+`/tmp/v014/rtl-shots` (`RTL_SHOTS_DIR` changes it; look at them, they are not
+committed). **`rtl.spec.ts` needs a web build made with
+`VITE_OCI_PSEUDO_LOCALES=1`**, which is what makes the pseudo-locales exist in a
+production build:
+
+```bash
+VITE_OCI_PSEUDO_LOCALES=1 pnpm --filter @oci/web build
+```
+
+See [Translations](translations.md).
+
 ## GitHub Actions
 
 Pull requests and `main` pushes run read-only validation with Node 22 and pnpm

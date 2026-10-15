@@ -1,3 +1,4 @@
+import { ChevronsLeftRight, ChevronsRightLeft } from 'lucide-react';
 import {
   type KeyboardEvent,
   type PointerEvent,
@@ -6,6 +7,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Button } from '~/components/ui/button';
+import { useT } from '~/lib/i18n';
 
 /** The docked panel's width in CSS pixels, remembered in this browser. */
 export const PANEL_WIDTH_STORAGE_KEY = 'oci.artifacts.panelWidth';
@@ -16,6 +19,8 @@ export const PANEL_MIN_WIDTH = 352;
 export const PANEL_MAX_SHARE = 0.7;
 /** One arrow-key step; Shift makes it four times as large. */
 export const PANEL_KEY_STEP = 32;
+/** One press of Wider or Narrower: a click is a bigger move than a key press. */
+export const PANEL_BUTTON_STEP = PANEL_KEY_STEP * 2;
 
 /** The widest the panel may be in a window this wide (never below the minimum). */
 export function maxPanelWidth(windowWidth: number): number {
@@ -56,20 +61,26 @@ function writePanelWidth(width: number | null) {
 
 /**
  * The width a key press asks for, or null for a key the separator ignores.
- * The separator is the panel's left edge, so Left widens and Right narrows.
+ * The separator is the panel's inner edge, the one facing the conversation:
+ * its left edge, so Left widens and Right narrows; in right-to-left the panel
+ * is docked on the left and the separator is its right edge, so it is the
+ * other way round.
  */
 export function widthForKey(
   key: string,
   shift: boolean,
   width: number,
   windowWidth: number,
+  rtl = false,
 ): number | null {
   const step = shift ? PANEL_KEY_STEP * 4 : PANEL_KEY_STEP;
+  const widen = rtl ? 'ArrowRight' : 'ArrowLeft';
+  const narrow = rtl ? 'ArrowLeft' : 'ArrowRight';
   switch (key) {
-    case 'ArrowLeft':
+    case widen:
     case 'ArrowUp':
       return clampPanelWidth(width + step, windowWidth);
-    case 'ArrowRight':
+    case narrow:
     case 'ArrowDown':
       return clampPanelWidth(width - step, windowWidth);
     case 'Home':
@@ -79,6 +90,61 @@ export function widthForKey(
     default:
       return null;
   }
+}
+
+/** What the panel's header needs to offer Wider and Narrower; absent where it cannot be resized. */
+export interface PanelResize {
+  width: number;
+  min: number;
+  max: number;
+  /** The handle's own `onResize`: null restores the default. */
+  onResize: (width: number | null, persist?: boolean) => void;
+}
+
+/**
+ * Wider and Narrower: a way to resize the panel with a single click, for a
+ * person who cannot drag the handle (WCAG 2.5.7) and does not use the keyboard.
+ * They set the same width the handle's keys do, through the same `onResize`;
+ * the separator's value announces the result. The icons are symmetric, so they
+ * read the same whichever side the panel is docked on, and "wider" is a width,
+ * not a direction. A button at its limit is disabled (the Button keeps focus on
+ * it, so a held Enter does not fall out of the toolbar).
+ */
+export function PanelWidthButtons({ resize }: { resize: PanelResize }) {
+  const t = useT();
+  const { width, min, max, onResize } = resize;
+  const widerName = t('artifacts.resize.wider');
+  const narrowerName = t('artifacts.resize.narrower');
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={narrowerName}
+        title={narrowerName}
+        data-panel-narrower=""
+        className="shrink-0"
+        disabled={width <= min}
+        onClick={() => onResize(Math.max(min, width - PANEL_BUTTON_STEP))}
+      >
+        <ChevronsRightLeft aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={widerName}
+        title={widerName}
+        data-panel-wider=""
+        className="shrink-0"
+        disabled={width >= max}
+        onClick={() => onResize(Math.min(max, width + PANEL_BUTTON_STEP))}
+      >
+        <ChevronsLeftRight aria-hidden="true" />
+      </Button>
+    </>
+  );
 }
 
 /** Keeps a drag's pointer events on the handle, even over the preview's frame. */
@@ -147,7 +213,7 @@ export function usePanelWidth(measured: number | null = null) {
 }
 
 /**
- * The drag handle on the docked panel's left edge: a focusable vertical
+ * The drag handle on the docked panel's inner edge (its left, in left-to-right): a focusable vertical
  * separator. Drag it, or use the arrow keys (Shift for larger steps), Home
  * (narrowest) and End (widest); Enter or a double click restores the default.
  */
@@ -168,6 +234,7 @@ export function PanelResizeHandle({
   /** null restores the default; `persist` false while a drag is still moving. */
   onResize: (width: number | null, persist?: boolean) => void;
 }) {
+  const t = useT();
   const drag = useRef<{ x: number; width: number; last: number } | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -181,7 +248,11 @@ export function PanelResizeHandle({
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const start = drag.current;
     if (!start) return;
-    start.last = clampPanelWidth(start.width + (start.x - event.clientX), windowWidth);
+    // Dragging away from the panel's docked edge widens it: left in
+    // left-to-right, right in right-to-left (the panel is on the left there).
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const moved = rtl ? event.clientX - start.x : start.x - event.clientX;
+    start.last = clampPanelWidth(start.width + moved, windowWidth);
     onResize(start.last, false);
   };
   const endDrag = (event: PointerEvent<HTMLDivElement>) => {
@@ -199,7 +270,8 @@ export function PanelResizeHandle({
       onResize(null);
       return;
     }
-    const next = widthForKey(event.key, event.shiftKey, width, windowWidth);
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const next = widthForKey(event.key, event.shiftKey, width, windowWidth, rtl);
     if (next === null) return;
     event.preventDefault();
     onResize(next);
@@ -210,13 +282,13 @@ export function PanelResizeHandle({
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize artifact panel"
+      aria-label={t('artifacts.resize.label')}
       aria-controls={controls}
       aria-valuenow={width}
       aria-valuemin={min}
       aria-valuemax={max}
-      aria-valuetext={`${width} pixels wide`}
-      title="Drag to resize; double-click to reset"
+      aria-valuetext={t('artifacts.resize.valueText', { width })}
+      title={t('artifacts.resize.title')}
       tabIndex={0}
       data-panel-resize=""
       data-dragging={dragging ? '' : undefined}
@@ -227,7 +299,7 @@ export function PanelResizeHandle({
       onLostPointerCapture={endDrag}
       onDoubleClick={() => onResize(null)}
       onKeyDown={onKeyDown}
-      className="group absolute inset-y-0 left-0 z-10 flex w-2 cursor-col-resize touch-none select-none justify-center focus-visible:outline-offset-[-2px]"
+      className="group absolute inset-y-0 start-0 z-10 flex w-2 cursor-col-resize touch-none select-none justify-center focus-visible:outline-offset-[-2px]"
     >
       <span
         aria-hidden="true"

@@ -55,7 +55,7 @@ export function EndpointCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 id={headingId} className="truncate font-semibold">
+            <h2 id={headingId} className="[overflow-wrap:anywhere] font-semibold">
               {endpoint.description || endpoint.url}
             </h2>
             {!endpoint.enabled && <Badge variant="warning">disabled</Badge>}
@@ -69,7 +69,9 @@ export function EndpointCard({
             </Badge>
           </div>
           {endpoint.description && (
-            <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{endpoint.url}</p>
+            <p className="mt-0.5 [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]">
+              {endpoint.url}
+            </p>
           )}
           {!endpoint.allActions && (
             <p className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">
@@ -99,7 +101,7 @@ export function EndpointCard({
               aria-label={`Send test to ${endpoint.url}`}
               onClick={() => test.mutate()}
             >
-              {test.isPending ? <Spinner /> : <Send />}
+              {test.isPending ? <Spinner /> : <Send className="rtl:-scale-x-100" />}
               Send test
             </Button>
             <Button

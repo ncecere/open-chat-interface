@@ -6,11 +6,13 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { authClient } from '~/lib/auth-client';
+import { translate, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { type AuthResult, authErrorMessage } from './account-helpers';
 
 export function NameRow({ name, editable }: { name: string; editable: boolean }) {
+  const t = useT();
   const queryClient = useQueryClient();
   // Changing the name is refused while read-only, so it is off with the reason (#353).
   const lock = useReadOnlyLock();
@@ -54,7 +56,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
   const save = useMutation({
     mutationFn: async (next: string) => {
       const result = (await authClient.updateUser({ name: next })) as AuthResult;
-      const message = authErrorMessage(result, 'Your name could not be saved. Try again.');
+      const message = authErrorMessage(result, translate('settings.account.nameSaveFailed'));
       if (message) throw new Error(message);
     },
     onSuccess: async () => {
@@ -68,7 +70,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
   function submit(event: FormEvent) {
     event.preventDefault();
     if (trimmed.length < 1 || trimmed.length > PROFILE_NAME_MAX_LENGTH) {
-      setError(`Your name must be 1 to ${PROFILE_NAME_MAX_LENGTH} characters.`);
+      setError(t('settings.account.nameLength', { max: PROFILE_NAME_MAX_LENGTH }));
       return;
     }
     setError(null);
@@ -79,7 +81,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
     return (
       <form noValidate onSubmit={submit} className="border-b border-[var(--border-subtle)] pb-3">
         <label htmlFor={inputId} className="text-[var(--text-muted)]">
-          Name
+          {t('settings.account.name')}
         </label>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <Input
@@ -104,10 +106,10 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
               disabled={save.isPending}
             >
               {save.isPending && <Spinner />}
-              Save
+              {t('settings.account.save')}
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={cancel}>
-              Cancel
+              {t('settings.account.cancel')}
             </Button>
           </div>
         </div>
@@ -122,20 +124,20 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
-      <span className="text-[var(--text-muted)]">Name</span>
+      <span className="text-[var(--text-muted)]">{t('settings.account.name')}</span>
       <span className="flex min-w-0 items-center gap-2">
         {saved && (
           <span role="status" className="text-xs text-[var(--success)]">
-            Saved
+            {t('settings.account.saved')}
           </span>
         )}
-        <span className="truncate text-[var(--text-primary)]">{name}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere] text-[var(--text-primary)]">{name}</span>
         {editable ? (
           <Button
             ref={editRef}
             variant="ghost"
             size="sm"
-            aria-label="Edit name"
+            aria-label={t('settings.account.editName')}
             locked={lock.title}
             onClick={() => {
               setDraft(name);
@@ -143,7 +145,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
               setEditing(true);
             }}
           >
-            Edit
+            {t('settings.account.edit')}
           </Button>
         ) : null}
       </span>

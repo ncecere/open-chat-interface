@@ -283,6 +283,36 @@ Where the connector build differs from, or decides something left open above
   authorization server (`apps/api/test/mcp-server.ts`) on 127.0.0.1, so no
   `@modelcontextprotocol/sdk` dependency was added.
 
+## Data classification (v0.14)
+
+`services/classification/` (`SPEC-data-classification.md`, `docs/admin/data-classification.md`)
+decides whether what a conversation carries may go to a model or an outside
+service. `resolve.ts` reads the classes (project labels, connector use, labels
+of the person, kept labels) and the destination's approvals; `guard.ts` is what
+each enforcement point asks; mode `off` reads only the cached setting.
+
+For tools there are **two layers**, and the second never trusts the first:
+
+- **Offer** (`resolveTurnTools` -> `offerTools`): in `block`, a connector tool
+  whose connector carries a class the model is not approved for is not offered,
+  `web_search` is not offered when the conversation carries a class not approved
+  for web search, and `remember` is not offered in a conversation that carries
+  any class (also in `warn`). The model never sees what it must not use.
+- **Execute** (`buildSdkTools` -> `guardToolRun`): judged again when the call is
+  about to run, with the labels as they are now and, for a connector tool, with
+  its connector's classes counted as if already in the conversation
+  (`extraClassIds`). A refusal throws `ToolFailure('This tool is not available in
+  this conversation.')` (so no class name reaches the provider), audits
+  `tool.call` with outcome `refused` and `classification.block`, and never
+  calls `callConnectorTool`. An allowed connector call writes
+  `thread_connector_use` **first**, then runs, so a crash after the call still
+  leaves the label. `ToolCaller` carries `modelSlug` for this.
+
+A tool in `warn` runs and is audited (`classification.warn`); it does not add a
+notice to the reply. Search, embeddings and reranking follow the same pattern
+(`guardService`), and `data-classification` reply parts exist only for a send
+that went ahead in `warn`.
+
 ## Not in v0.8
 
 Tools inside artifacts, code execution, assistants that bundle tools, and

@@ -68,6 +68,13 @@
   --border-subtle: oklch(26.9% 0 0);
   --border-strong: oklch(37.1% 0 0);
   --border-panel: oklch(24% 0 0);
+  /*
+   * The edge of a form control, and the off track of a switch: what tells a person where a
+   * field is, so WCAG 1.4.11 asks 3:1 against the surface it sits on. #696969, 3.1:1 or more
+   * on every surface a field is put on (the lightest, a control's own card, is 22%). The
+   * dividers above stay faint on purpose: they separate, they do not identify.
+   */
+  --border-control: oklch(52% 0 0);
 
   --text-primary: oklch(98.5% 0 0);
   --text-secondary: oklch(80% 0 0);
@@ -128,6 +135,8 @@
   --border-subtle: oklch(92.2% 0 0);
   --border-strong: oklch(87% 0 0);
   --border-panel: oklch(92.2% 0 0);
+  /* #808080: 3.3:1 on the darkest surface a field sits on (94%), 4:1 on white. */
+  --border-control: oklch(60% 0 0);
 
   --text-primary: oklch(14.5% 0 0);
   --text-secondary: oklch(37.1% 0 0);
@@ -314,18 +323,24 @@
 /* Emerald */
 [data-color-theme="emerald"],
 [data-color-theme="emerald"].dark {
-  --accent: oklch(59.6% 0.145 163.225);
+  /*
+   * The fill under white text: emerald-600 measured 3.51:1 (1.4.3); this is
+   * the lightest shade that reaches 4.5:1 (4.66) and still stands 3:1 against
+   * the lightest dark surface (3.11), where the light theme's emerald-700
+   * would not (2.82). Found by the final accessibility audit (#401).
+   */
+  --accent: oklch(53% 0.125 165);
   --accent-bright: oklch(76.5% 0.177 163.223);
   --accent-soft: oklch(30% 0.06 163.225);
   --accent-foreground: oklch(98.5% 0 0);
 
-  --accent-button: oklch(59.6% 0.145 163.225);
-  --accent-button-hover: oklch(50.8% 0.118 165.612);
-  --accent-button-border: oklch(59.6% 0.145 163.225);
+  --accent-button: oklch(53% 0.125 165);
+  --accent-button-hover: oklch(45% 0.1 166);
+  --accent-button-border: oklch(53% 0.125 165);
   --accent-button-foreground: oklch(98.5% 0 0);
 
-  --accent-send: oklch(59.6% 0.145 163.225);
-  --accent-send-hover: oklch(50.8% 0.118 165.612);
+  --accent-send: oklch(53% 0.125 165);
+  --accent-send-hover: oklch(45% 0.1 166);
 }
 
 [data-color-theme="emerald"].light {
@@ -354,6 +369,7 @@
 
   --color-border-subtle: var(--border-subtle);
   --color-border-strong: var(--border-strong);
+  --color-border-control: var(--border-control);
 
   --color-accent: var(--accent);
   --color-accent-bright: var(--accent-bright);

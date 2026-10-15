@@ -90,6 +90,12 @@ export async function semanticProjectChunks(
   scope: Scope,
   raw: string,
   limit: number,
+  /**
+   * Data classification: asked just before the question would go to the
+   * embeddings provider, once everything else says it would. False skips the
+   * meaning-based side, as when embeddings fail.
+   */
+  mayEmbed?: () => Promise<boolean>,
 ): Promise<RetrievedChunk[] | null> {
   const text = stripControls(raw.normalize('NFC').slice(0, QUERY_MAX_CHARS)).trim();
   if (!text || scope.fileIds.length === 0 || limit <= 0) return null;
@@ -100,6 +106,7 @@ export async function semanticProjectChunks(
     const store = vectorStore();
     const filter = { personId: scope.userId, projectId: scope.projectId, fileIds: scope.fileIds };
     if (!(await store.hasVectors(current, filter))) return null;
+    if (mayEmbed && !(await mayEmbed())) return null;
     const embedder = await generationEmbedder(current);
     const { vectors, tokens } = await embedValues(embedder.model, [text], {
       dimensions: current.dimensions,

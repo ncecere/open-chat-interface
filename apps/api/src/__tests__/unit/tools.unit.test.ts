@@ -109,7 +109,13 @@ describe('tool registry', () => {
         return { answer: 'PRIVATE_RESULT' };
       }),
     };
-    const caller = { userId: 'u', role: 'user' as const, threadId: 't', messageId: 'm' };
+    const caller = {
+      userId: 'u',
+      role: 'user' as const,
+      threadId: 't',
+      messageId: 'm',
+      modelSlug: 'm1',
+    };
     const tools = buildSdkTools({ definitions: [definition] }, caller);
     const execute = tools.lookup!.execute!;
     await expect(

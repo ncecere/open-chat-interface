@@ -100,11 +100,11 @@ describe('Settings → Attachments', () => {
     const breakdown = document.querySelector('dl[aria-label="Storage by kind"]')!;
     const entries = [...breakdown.querySelectorAll('div')].map((row) => row.textContent);
     expect(entries).toEqual([
-      'Chat files2 KB · 1 file',
-      'Project files198 KB · 1 file',
-      'Artifacts100 KB · 3 artifacts',
+      'Chat files2 kB · 1 file',
+      'Project files198 kB · 1 file',
+      'Artifacts100 kB · 3 artifacts',
     ]);
-    expect(document.body.textContent).toContain('300 KB · 2 files');
+    expect(document.body.textContent).toContain('300 kB · 2 files');
   });
 
   it('marks a file attached in a composer and not sent, unlike sent ones (#297)', async () => {
@@ -137,8 +137,8 @@ describe('Settings → Attachments', () => {
       [['/chat/t2', 'Fork of Grant questions']],
     ]);
     expect(rows.map((row) => row.querySelector('p')?.textContent)).toEqual([
-      expect.stringMatching(/^In Grant questions · text\/plain · 2.0 KB/),
-      expect.stringMatching(/^In Fork of Grant questions · text\/plain · 2.0 KB/),
+      expect.stringMatching(/^In Grant questions · text\/plain · 2 kB/),
+      expect.stringMatching(/^In Fork of Grant questions · text\/plain · 2 kB/),
     ]);
     // Each has its own checkbox and delete button.
     expect(document.querySelectorAll('[aria-label="Delete walk9-grant.pdf"]')).toHaveLength(2);
@@ -157,6 +157,18 @@ describe('Settings → Attachments', () => {
     expect(document.querySelector('[aria-label="Select reading.txt"]')).toBeNull();
     expect(document.querySelector('[aria-label="Delete reading.txt"]')).toBeNull();
     expect(document.querySelector('[aria-label="Select chat-notes.txt"]')).not.toBeNull();
+  });
+
+  it('copes with a file left in a project the person can no longer read (v0.14)', async () => {
+    // The API keeps the file (it is theirs, and counts against them) but stands in "Project"
+    // for the name once the project is no longer readable by them.
+    files = [file('a3', 'left-behind.txt', { id: 'gone', name: 'Project' })];
+    await render();
+    const link = document.querySelector<HTMLAnchorElement>('a[href="/projects/gone?tab=files"]');
+    expect(link?.textContent).toBe('Project');
+    // Still managed from the project page (which says what happened), never deleted here.
+    expect(document.querySelector('[aria-label="Delete left-behind.txt"]')).toBeNull();
+    expect(document.body.textContent).toContain('left-behind.txt');
   });
 
   it("lets a file's details wrap rather than cut them off without a tooltip (#195)", async () => {
@@ -226,7 +238,7 @@ describe('Settings → Attachments', () => {
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain(
         // No limit applies to this role, so none is spoken of (#254).
-        '6 KB of deleted files, and of conversations in the trash, is not counted in the storage used.',
+        '6 kB of deleted files, and of conversations in the trash, is not counted in the storage used.',
       ),
     );
     expect(document.body.textContent).toContain('No storage limit applies to your role.');
@@ -240,7 +252,7 @@ describe('Settings → Attachments', () => {
     await render();
     await vi.waitFor(() =>
       expect(document.body.textContent).toContain(
-        '6 KB of deleted files, and of conversations in the trash, no longer counts against your limit.',
+        '6 kB of deleted files, and of conversations in the trash, no longer counts against your limit.',
       ),
     );
   });

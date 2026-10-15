@@ -139,13 +139,23 @@ services:
       postgres:
         condition: service_healthy
 
+  # OCI_VERSION is set only for replicas of the release under test, and only
+  # when its version is not newer than FROM's (a checkout not yet bumped for
+  # release): the mixed-version guard (project sharing) compares replica
+  # versions, and FROM releases read the variable too, so FROM's stays empty.
   api-1:
     <<: *api
     image: ${OCI_API1_IMAGE:-oci-upgrade-api:from}
+    environment:
+      <<: *api-env
+      OCI_VERSION: ${OCI_API1_VERSION:-}
 
   api-2:
     <<: *api
     image: ${OCI_API2_IMAGE:-oci-upgrade-api:from}
+    environment:
+      <<: *api-env
+      OCI_VERSION: ${OCI_API2_VERSION:-}
 
   web-1:
     <<: *web

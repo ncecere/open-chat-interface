@@ -20,8 +20,12 @@ jobs:
     name: Application checks
     runs-on: ubuntu-24.04
     # The full run (static checks, coverage with live services, the browser
-    # suite) took 22-26 minutes at v0.9.1; leave room as the suites grow.
-    timeout-minutes: 45
+    # suite) took 22-26 minutes at v0.9.1. At v0.14 it takes 43 minutes on a
+    # fast runner and about 50 on a slow one: the browser step alone runs 495
+    # tests on two workers, 28 minutes or more. A 45-minute limit cancelled a
+    # run with no failure, 429 tests in and 66 to go. The suite should be split
+    # into jobs that run side by side; until then, leave room for a slow runner.
+    timeout-minutes: 75
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -76,8 +80,11 @@ jobs:
       TEST_REDIS_URL: redis://127.0.0.1:6389
       AUTH_SECRET: ci-auth-secret-at-least-32-characters
       ENCRYPTION_KEY: ci-encryption-key-at-least-32-characters
-      APP_URL: http://127.0.0.1:4173
-      E2E_BASE_URL: http://127.0.0.1:4173
+      # `localhost`, not 127.0.0.1: WebAuthn (the passkey browser tests) refuses an IP
+      # address as the relying party. The preview server listens on 127.0.0.1 and
+      # Chromium reaches it through the name.
+      APP_URL: http://localhost:4173
+      E2E_BASE_URL: http://localhost:4173
       VITE_API_PROXY: http://127.0.0.1:3000
       INITIAL_ADMIN_EMAIL: admin@example.test
       INITIAL_ADMIN_PASSWORD: ci-admin-password-1234
@@ -187,8 +194,14 @@ jobs:
       - name: Browser and accessibility regression tests
         run: |
           pnpm --filter @oci/web exec playwright install --with-deps chromium
+          # The right-to-left browser tests choose a forced-RTL pseudo-locale, which only
+          # a build made with this flag offers (the build step above is the production one).
+          VITE_OCI_PSEUDO_LOCALES=1 pnpm --filter @oci/web build
           pnpm db:migrate
           pnpm db:seed
+          # Schedules the background migrations: the classification browser tests turn
+          # Warn and Block on, which the API refuses until it has.
+          pnpm db:migrate:post
           node apps/api/dist/server.js > /tmp/oci-api.log 2>&1 &
           api_pid=$!
           pnpm --filter @oci/web exec vite preview --host 127.0.0.1 --port 4173 > /tmp/oci-web.log 2>&1 &

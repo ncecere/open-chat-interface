@@ -1,12 +1,8 @@
-import {
-  type ArtifactDetail,
-  type ArtifactVersionDetail,
-  artifactKindLabel,
-  type DocumentFormat,
-} from '@oci/shared';
+import type { ArtifactDetail, ArtifactVersionDetail, DocumentFormat } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Check, Copy, Download, Pencil } from 'lucide-react';
 import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
+import { artifactKindName } from '~/components/artifacts/artifact-labels';
 import { ArtifactSource } from '~/components/artifacts/artifact-source';
 import { type ArtifactRef, useArtifacts } from '~/components/artifacts/artifacts-context';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
@@ -14,6 +10,7 @@ import { Button } from '~/components/ui/button';
 import { PillTabs } from '~/components/ui/pill-tabs';
 import { api } from '~/lib/api-client';
 import { returnFocusIfLost } from '~/lib/focus-return';
+import { useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { ArtifactPreview } from './artifact-preview';
 import { DocumentEditor } from './document-editor';
@@ -32,6 +29,7 @@ export function ArtifactPanelBody({
   setEditing: (editing: boolean) => void;
   chrome: Chrome;
 }) {
+  const t = useT();
   const context = useArtifacts();
   const owner = context?.mode === 'owner' && artifact.id !== null;
   const id = artifact.id ?? '';
@@ -94,9 +92,9 @@ export function ArtifactPanelBody({
   const exporting = useDocumentExport(exportPath, filenameBase(title));
 
   const tabs = [
-    { id: 'preview' as const, label: 'Preview' },
-    { id: 'source' as const, label: 'Source' },
-    ...(owner ? [{ id: 'versions' as const, label: 'Versions' }] : []),
+    { id: 'preview' as const, label: t('artifacts.panel.preview') },
+    { id: 'source' as const, label: t('artifacts.panel.source') },
+    ...(owner ? [{ id: 'versions' as const, label: t('artifacts.panel.versions') }] : []),
   ];
 
   async function copy() {
@@ -112,13 +110,23 @@ export function ArtifactPanelBody({
         chrome={chrome}
         title={title}
         description={
-          <>
-            {artifactKindLabel(artifact.kind, artifact.language)} · version {shownVersion}
-            {older !== null ? ` of ${current}` : ''}
-          </>
+          older !== null
+            ? t('artifacts.panel.versionOf', {
+                kind: artifactKindName(artifact.kind, artifact.language),
+                version: shownVersion,
+                total: current,
+              })
+            : t('artifacts.card.meta', {
+                kind: artifactKindName(artifact.kind, artifact.language),
+                version: shownVersion,
+              })
         }
         toolbar={
-          <div className="flex flex-wrap items-center gap-1" role="toolbar" aria-label="Artifact">
+          <div
+            className="flex flex-wrap items-center gap-1"
+            role="toolbar"
+            aria-label={t('artifacts.panel.toolbar')}
+          >
             <Button
               type="button"
               variant="ghost"
@@ -127,7 +135,7 @@ export function ArtifactPanelBody({
               disabled={content === undefined}
             >
               {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? t('artifacts.panel.copied') : t('artifacts.panel.copy')}
             </Button>
             <Button
               type="button"
@@ -139,7 +147,7 @@ export function ArtifactPanelBody({
               disabled={content === undefined}
             >
               <Download aria-hidden="true" />
-              Download
+              {t('artifacts.panel.download')}
             </Button>
             {canExport && (
               <ExportMenu
@@ -159,14 +167,14 @@ export function ArtifactPanelBody({
                 disabled={content === undefined}
               >
                 <Pencil aria-hidden="true" />
-                Edit
+                {t('artifacts.panel.edit')}
               </Button>
             )}
           </div>
         }
       >
         <span className="sr-only" role="status" aria-live="polite">
-          {copied ? 'Copied to the clipboard' : ''}
+          {copied ? t('artifacts.panel.copiedAnnouncement') : ''}
         </span>
         {canExport && <ExportNotice state={exporting} className="basis-full" />}
       </PanelHeader>
@@ -185,7 +193,13 @@ export function ArtifactPanelBody({
       ) : (
         <>
           <div className="border-b border-[var(--border-subtle)] px-4 py-2 sm:px-5">
-            <PillTabs tabs={tabs} active={view} onChange={setView} label="View" controls={viewId} />
+            <PillTabs
+              tabs={tabs}
+              active={view}
+              onChange={setView}
+              label={t('artifacts.panel.view')}
+              controls={viewId}
+            />
           </div>
           <section
             id={viewId}
@@ -206,11 +220,11 @@ export function ArtifactPanelBody({
               />
             ) : loading ? (
               <p role="status" className="p-4 text-sm text-[var(--text-muted)]">
-                Loading…
+                {t('artifacts.panel.loading')}
               </p>
             ) : loadError || content === undefined ? (
               <p role="alert" className="p-4 text-sm text-[var(--danger-on-tint)]">
-                This artifact could not be loaded.
+                {t('artifacts.panel.loadFailed')}
               </p>
             ) : view === 'source' ? (
               <ArtifactSource kind={artifact.kind} language={artifact.language} content={content} />

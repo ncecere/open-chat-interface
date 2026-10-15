@@ -28,6 +28,7 @@ import { EmbeddingsSection } from '~/components/admin/embeddings-section';
 import { ModelFormDialog } from '~/components/admin/model-form-dialog';
 // One name per capability across admin and the model picker (#228).
 import { CAPABILITY_LABELS } from '~/components/chat/model-picker-data';
+import { GroupChips } from '~/components/groups/group-chips';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -41,7 +42,7 @@ import { Switch } from '~/components/ui/switch';
 import { SETUP_STATUS_QUERY_KEY, useSetupCheck } from '~/hooks/use-setup-status';
 import { DEFAULT_MODELS_TAB, type ModelsTab, validateModelsSearch } from '~/lib/admin-search';
 import { api } from '~/lib/api-client';
-import { cn } from '~/lib/utils';
+import { cn, plural } from '~/lib/utils';
 import { ProvidersSection } from '~/routes/admin/providers';
 
 /**
@@ -158,18 +159,25 @@ function ModelRow({
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
-          className="min-w-0 flex-1 text-left"
+          className="min-w-0 flex-1 text-start"
         >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <LabLogo labId={model.labId} className="size-4" />
             {/* Full values on hover when a narrow screen cuts them short (#130). */}
-            <span className="min-w-0 truncate font-medium" title={model.displayName}>
+            <span
+              className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium"
+              title={model.displayName}
+            >
               {model.displayName}
             </span>
             {model.isDefault && <Badge variant="accent">default</Badge>}
+            {/* Read-only: which groups are granted it is set from each group (v0.14). */}
+            {(model.groups?.length ?? 0) > 0 && (
+              <Badge variant="outline">{plural(model.groups?.length ?? 0, 'group')}</Badge>
+            )}
           </div>
           <p
-            className="truncate text-xs text-[var(--text-muted)]"
+            className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]"
             title={`${model.providerLabel} · ${model.upstreamModelId}`}
           >
             {model.providerLabel} · {model.upstreamModelId}
@@ -279,6 +287,16 @@ function ModelRow({
               })}
             </div>
           </div>
+
+          {(model.groups?.length ?? 0) > 0 && (
+            <div>
+              <p className="mb-2 text-sm text-[var(--text-secondary)]">Also visible to groups</p>
+              <GroupChips groups={model.groups} label="Groups granted this model" />
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Chosen on each group’s own page, under Budgets and models.
+              </p>
+            </div>
+          )}
 
           <div>
             <p className="mb-2 text-sm text-[var(--text-secondary)]">Visible to roles</p>

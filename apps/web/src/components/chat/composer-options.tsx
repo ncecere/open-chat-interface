@@ -1,4 +1,9 @@
-import { type CatalogModel, effectiveSupportedEfforts, type ReasoningEffort } from '@oci/shared';
+import {
+  type CatalogModel,
+  type ClassificationResponse,
+  effectiveSupportedEfforts,
+  type ReasoningEffort,
+} from '@oci/shared';
 import { Brain, Check, ChevronRight, Globe, Paperclip, Plus, Zap } from 'lucide-react';
 import { type ChangeEvent, type ComponentPropsWithoutRef, forwardRef, useRef } from 'react';
 import { ModelPicker } from '~/components/chat/model-picker';
@@ -12,6 +17,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
+import { useT } from '~/lib/i18n';
+import { effortLabel } from '~/lib/reasoning';
 import { cn } from '~/lib/utils';
 
 export interface ComposerOptionsProps {
@@ -33,6 +40,8 @@ export interface ComposerOptionsProps {
    * hiding Attach until they arrive (#156).
    */
   loading?: boolean;
+  /** What the conversation's data classes allow each model (v0.14, #395). */
+  classification?: ClassificationResponse | null | undefined;
 }
 
 /**
@@ -87,7 +96,9 @@ export function ComposerOptions({
   attachmentsPausedReason,
   onAttachFiles,
   loading = false,
+  classification,
 }: ComposerOptionsProps) {
+  const t = useT();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const availableEfforts = selectedModel ? effectiveSupportedEfforts(selectedModel) : [];
   const supportsEffort = availableEfforts.length > 0;
@@ -107,7 +118,7 @@ export function ComposerOptions({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="More composer options"
+            aria-label={t('chat.composerOptions.more')}
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-[var(--accent-button-border)] bg-[var(--accent-soft)] text-[var(--text-primary)] md:hidden"
           >
             <Plus className="size-4" />
@@ -123,8 +134,10 @@ export function ComposerOptions({
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Brain />
-                <span className="flex-1 capitalize">Reasoning: {effort}</span>
-                <ChevronRight className="ml-auto" />
+                <span className="flex-1 capitalize">
+                  {t('chat.composerOptions.reasoning', { level: effortLabel(effort) })}
+                </span>
+                <ChevronRight className="ms-auto rtl:-scale-x-100" />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 {availableEfforts.map((option) => (
@@ -134,7 +147,7 @@ export function ComposerOptions({
                     className="capitalize"
                   >
                     <span className="w-4">{option === effort && <Check />}</span>
-                    {option}
+                    {effortLabel(option)}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuSubContent>
@@ -148,7 +161,7 @@ export function ComposerOptions({
             onCheckedChange={(checked) => onWebSearchChange(checked === true)}
           >
             <Globe />
-            Search the web
+            {t('chat.composerOptions.searchWeb')}
           </DropdownMenuCheckboxItem>
           {/* Not offered where attachments are not allowed (for this role, or
               while read-only), as the user guide says, rather than a disabled
@@ -159,7 +172,7 @@ export function ComposerOptions({
               onSelect={() => fileInputRef.current?.click()}
             >
               <Paperclip />
-              Attach
+              {t('chat.composerOptions.attach')}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -170,6 +183,7 @@ export function ComposerOptions({
         selected={selectedModel}
         onSelect={onSelectModel}
         loading={loading}
+        classification={classification}
       />
 
       {supportsEffort && (
@@ -179,7 +193,7 @@ export function ComposerOptions({
             directly; a wrapping span would receive button semantics it
             cannot legally carry. */}
             <DropdownMenuTrigger asChild>
-              <Pill icon={Zap} label={effort} className="capitalize" />
+              <Pill icon={Zap} label={effortLabel(effort)} className="capitalize" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top">
               {availableEfforts.map((option) => (
@@ -188,7 +202,7 @@ export function ComposerOptions({
                   onSelect={() => onEffortChange(option)}
                   className="capitalize"
                 >
-                  {option}
+                  {effortLabel(option)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -198,7 +212,7 @@ export function ComposerOptions({
 
       <Pill
         icon={Globe}
-        label="Search"
+        label={t('chat.composerOptions.search')}
         active={webSearch}
         disabled={!supportsSearch}
         onClick={() => onWebSearchChange(!webSearch)}
@@ -210,13 +224,13 @@ export function ComposerOptions({
         type="file"
         multiple
         hidden
-        aria-label="Attach a file"
+        aria-label={t('chat.composerOptions.attachFile')}
         onChange={handleFileChange}
       />
       {attachmentsAvailable && (
         <Pill
           icon={Paperclip}
-          label="Attach"
+          label={t('chat.composerOptions.attach')}
           disabled={!onAttachFiles || Boolean(attachmentsPausedReason) || loading}
           title={attachmentsPausedReason}
           onClick={() => fileInputRef.current?.click()}

@@ -2,6 +2,8 @@ import type { Attachment } from '@oci/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { ApiError, api } from '~/lib/api-client';
+import { translate } from '~/lib/i18n';
+import { noteMfaRequiredResponse } from '~/lib/mfa-required';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { formatLimit } from '~/lib/utils';
 
@@ -28,9 +30,7 @@ interface AttachmentResource {
 /** An upload that got no answer: the server was out of reach or the file unreadable. */
 class UploadNotSent extends Error {
   constructor(filename: string) {
-    super(
-      `${filename} was not uploaded: the server could not be reached, or the file could not be read. Try again.`,
-    );
+    super(translate('chat.attachments.notSent', { name: filename }));
   }
 }
 
@@ -87,9 +87,12 @@ export function useAttachments() {
     for (const file of picked) {
       const reason =
         file.size > maxBytes
-          ? `${file.name} is larger than the ${formatLimit(maxBytes)} limit, so it was not uploaded.`
+          ? translate('chat.attachments.tooLarge', {
+              name: file.name,
+              limit: formatLimit(maxBytes),
+            })
           : attached.current + files.length >= maxFiles
-            ? `Only ${maxFiles} files can be sent with one message, so this one was not attached. Remove a file to add another.`
+            ? translate('chat.attachments.tooMany', { count: maxFiles })
             : null;
       if (reason) {
         refused.push({
@@ -155,13 +158,15 @@ export function useAttachments() {
 
           if (!response.ok) {
             void notePolicyRequiredResponse(response);
+            void noteMfaRequiredResponse(response);
             const payload = (await response.json().catch(() => null)) as {
               error?: { message?: string };
             } | null;
             throw new ApiError(
               response.status,
               'UPLOAD_FAILED',
-              payload?.error?.message ?? `${file.name} could not be uploaded. Try again.`,
+              payload?.error?.message ??
+                translate('chat.attachments.uploadFailed', { name: file.name }),
             );
           }
 
@@ -207,7 +212,7 @@ export function useAttachments() {
                     error:
                       error instanceof ApiError || error instanceof UploadNotSent
                         ? error.message
-                        : `${file.name} could not be uploaded. Try again.`,
+                        : translate('chat.attachments.uploadFailed', { name: file.name }),
                   }
                 : item,
             ),

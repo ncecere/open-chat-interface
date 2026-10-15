@@ -1,21 +1,25 @@
-import type { CatalogModel } from '@oci/shared';
+import type { CatalogModel, ClassificationResponse } from '@oci/shared';
 import { useNavigate } from '@tanstack/react-router';
 import { Clock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
+import { translatedNodes } from '~/components/chat/translated-nodes';
 import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
 import { useAttachments } from '~/hooks/use-attachments';
+import { useClassification } from '~/hooks/use-classification';
 import { useComposerEffort } from '~/hooks/use-composer-effort';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { useModels, useModelsHiddenFromRole } from '~/hooks/use-models';
 import { useCreateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
+import { blockedSlugs } from '~/lib/classification';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
 import { greetingName } from '~/lib/greeting-name';
+import { translate, useT } from '~/lib/i18n';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
-import { forgetBrowserModel, startingModel } from '~/lib/starting-model';
+import { forgetBrowserModel, startingModelAmong } from '~/lib/starting-model';
 import { clearRestoredDraft, peekRestoredDraft } from '~/lib/unused-conversation';
 import { cn } from '~/lib/utils';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
@@ -41,6 +45,23 @@ const PENDING_FOCUS_KEY = 'oci.pendingComposerFocus';
  * created inside that project. A project chat is never temporary.
  */
 export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
+  // Only a chat in a project can carry data classes before its first message (v0.14, #395).
+  return projectId ? <ProjectChatHome projectId={projectId} /> : <ChatHome />;
+}
+
+function ProjectChatHome({ projectId }: { projectId: string }) {
+  const { data } = useClassification({ projectId });
+  return <ChatHome projectId={projectId} classification={data} />;
+}
+
+function ChatHome({
+  projectId,
+  classification,
+}: {
+  projectId?: string;
+  classification?: ClassificationResponse | undefined;
+}) {
+  const t = useT();
   const { data } = useCurrentUser();
   const modelsQuery = useModels();
   const hiddenFromRole = useModelsHiddenFromRole();
@@ -95,16 +116,23 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
   // the person arrived (#251). Not on a touch-only device (see touchOnly).
   useEffect(() => focusComposerOnArrival(), []);
 
-  const selectedModel = startingModel(models, modelSlug, data?.chat?.defaultModelSlug);
+  // A new chat in a labelled project starts on a model approved for its labels (v0.14, #395).
+  const selectedModel = startingModelAmong(
+    models,
+    blockedSlugs(classification),
+    modelSlug,
+    data?.chat?.defaultModelSlug,
+  );
   // The person's default level, else the administrator's, clamped to what this
   // model and role allow.
   const [effort, setEffort] = useComposerEffort(selectedModel);
 
   // What the introduction asked to be called, else the account's given name (#315).
   const firstName = data && greetingName(data.user.name, data.preferences?.displayName);
-  const prompts =
+  const promptKeys =
     SUGGESTION_CATEGORIES.find((category) => category.id === activeCategory)?.prompts ??
     DEFAULT_PROMPTS;
+  const prompts = promptKeys.map((key) => t(key));
 
   const selectModel = useCallback((model: CatalogModel) => setModelSlug(model.slug), []);
 
@@ -113,7 +141,8 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
       // Read before any await: the composer is replaced when the conversation opens.
       const typing =
         document.activeElement instanceof HTMLTextAreaElement &&
-        document.activeElement.getAttribute('aria-label') === 'Message input';
+        document.activeElement.getAttribute('aria-label') ===
+          translate('chat.composer.messageInput');
 
       const { thread } = await createThread(
         projectId ? { temporary: false, projectId } : { temporary },
@@ -173,7 +202,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
         started.current = false;
         setSubmitting(false);
         // Such as the server's limit on starting conversations (429).
-        setStartError(apiErrorMessage(error, 'The conversation could not be started. Try again.'));
+        setStartError(apiErrorMessage(error, translate('chat.home.startFailed')));
         throw error;
       } finally {
         creating.current = false;
@@ -190,26 +219,31 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
       {/* On phones, room between the greeting and the centred composer (#102). */}
       <div className="flex-none px-4 pb-8 md:flex-1 md:overflow-y-auto md:pt-[11vh] md:pb-0">
         <div className="mx-auto w-full max-w-[41.75rem]">
-          <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-left md:text-[1.875rem]">
+          <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-start md:text-[1.875rem]">
             {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}
             {temporary ? (
-              'Temporary chat'
+              t('chat.home.temporaryTitle')
             ) : (
               // One text item, so the flex gap (for the icon) never lands after
               // the comma, and the name is in the DOM once, not once per
               // breakpoint (#94). On phones the name wraps to its own line.
               // Hidden, with room for the name, until it is known.
               <span className={cn(!data && 'invisible')}>
-                How can I help you{firstName || !data ? ', ' : '?'}
-                {(firstName || !data) && (
-                  <span className="block md:inline">{firstName ?? '\u00a0'}?</span>
-                )}
+                {firstName || !data
+                  ? translatedNodes(t, 'chat.home.greetingNamed', {
+                      name: (
+                        <span dir="auto" className="block md:inline">
+                          {firstName ?? '\u00a0'}
+                        </span>
+                      ),
+                    })
+                  : t('chat.home.greeting')}
               </span>
             )}
           </h1>
           {temporary && (
-            <p className="mt-2 text-center text-sm text-[var(--text-muted)] md:text-left">
-              This conversation stays out of history and expires automatically after 24 hours.
+            <p className="mt-2 text-center text-sm text-[var(--text-muted)] md:text-start">
+              {t('chat.home.temporaryNote')}
             </p>
           )}
           {projectId && <ProjectChatNotice projectId={projectId} />}
@@ -231,7 +265,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
                   )}
                 >
                   <category.icon />
-                  {category.label}
+                  {t(category.label)}
                 </button>
               );
             })}
@@ -248,7 +282,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
                   startThread(prompt).catch(() => undefined);
                 }}
                 className={cn(
-                  'block h-[3.0625rem] w-full pr-8 text-left text-[0.9375rem] text-[var(--text-secondary)]',
+                  'block h-[3.0625rem] w-full pe-8 text-start text-[0.9375rem] text-[var(--text-secondary)]',
                   'transition-colors hover:text-[var(--text-primary)]',
                   index < prompts.length - 1 && 'border-b border-[var(--border-subtle)]/45',
                 )}
@@ -262,9 +296,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
             <p className="mt-8 rounded-xl bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
               {/* Kept from every model by their role, the person needs to ask, not
                   wait for the instance to be set up (#303). */}
-              {hiddenFromRole
-                ? 'No models are available to your role. Ask an administrator.'
-                : 'No models are available yet. An administrator needs to add a provider and enable a model in the catalog.'}
+              {hiddenFromRole ? t('chat.home.noModelsRole') : t('chat.home.noModelsYet')}
             </p>
           )}
           {modelsQuery.isError && (
@@ -272,7 +304,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
               role="alert"
               className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
             >
-              The list of models could not be loaded. Reload the page to try again.
+              {t('chat.home.modelsFailed')}
             </p>
           )}
           {startError && (
@@ -302,6 +334,7 @@ export function ChatHomePage({ projectId }: { projectId?: string } = {}) {
         // Shown (waiting) until known, so it does not appear later and move the row.
         attachmentsAvailable={data ? data.features.attachments : true}
         loading={loading}
+        classification={classification}
         attachments={attachmentItems}
         onAttachFiles={upload}
         onRemoveAttachment={remove}

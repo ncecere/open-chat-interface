@@ -29,11 +29,15 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   },
   'services/projects.ts project': {
     hold: 'checked',
-    how: 'Refused under hold: projects have no trash and their files go with them (live row "Deleting a project").',
+    how: 'Refused under hold: projects have no trash and their files go with them, so also when the owner or anyone who added a file is held (live rows "Deleting a project", "refuses to delete a project that holds a held person’s files" in project-sharing-lifecycle).',
   },
   'services/projects.ts attachment': {
     hold: 'checked',
-    how: 'Refused under hold (live row "Deleting a project file").',
+    how: 'Refused under hold, the actor’s or the uploader’s (live rows "Deleting a project file", "refuses to delete a project that holds a held person’s files" in project-sharing-lifecycle).',
+  },
+  'services/project-sharing/shares.ts projectShare': {
+    hold: 'exempt',
+    how: 'A share is configuration, not a person’s record: removing one (or leaving) hands any files the person added to the owner, which is a move and not a deletion, and is allowed under a hold (project-sharing-lifecycle live row "does not stop a transfer of ownership of files").',
   },
   'services/memory/store.ts userMemory': {
     hold: 'checked',
@@ -128,6 +132,16 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   },
   'services/admin-users/mutations.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },
   'services/lifecycle/retention.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },
+  // Two-step verification reset (v0.14, #399): credentials, not content.
+  'services/mfa/reset.ts session': { hold: 'exempt', how: 'Sessions are credentials.' },
+  'services/mfa/reset.ts twoFactor': {
+    hold: 'exempt',
+    how: 'An authenticator and its recovery codes are credentials; resetting them removes no content, and a held person must still be able to get back in.',
+  },
+  'services/mfa/reset.ts passkey': {
+    hold: 'exempt',
+    how: 'Passkeys are credentials, not content.',
+  },
   'services/lifecycle/retention.ts verification': {
     hold: 'exempt',
     how: 'Expired verification tokens are credentials.',
@@ -186,6 +200,46 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   'services/quota/policy-assignments.ts quotaPolicyRole': {
     hold: 'exempt',
     how: 'Instance configuration.',
+  },
+  // Data classification (v0.14, #395): labels and approvals are configuration about
+  // content, never the content; every change is audited with the names at the time.
+  'services/classification/store.ts dataClass': {
+    hold: 'exempt',
+    how: 'Instance configuration: a class nothing refers to (the keys refuse otherwise), audited as data_class.delete.',
+  },
+  'services/classification/store.ts modelDataClass': {
+    hold: 'exempt',
+    how: 'Instance configuration: which classes a model is approved for, audited as model.data_classes.update.',
+  },
+  'services/classification/store.ts connectorDataClass': {
+    hold: 'exempt',
+    how: 'Instance configuration: which classes a connector carries, audited as connector.data_classes.update.',
+  },
+  'services/classification/store.ts projectDataClass': {
+    hold: 'exempt',
+    how: 'A label on a project, not its content; audited as project.data_classes.update with the names before and after.',
+  },
+  'services/classification/store.ts threadDataClass': {
+    hold: 'exempt',
+    how: 'Only a label the person added to their own conversation; the conversation and its messages are untouched, and thread.data_class.remove is audited.',
+  },
+  // Groups (v0.14): who belongs to a group, and what a group grants, are configuration. No
+  // record of anyone's conversations, files or usage is removed with them.
+  'services/groups/groups.ts group': {
+    hold: 'exempt',
+    how: 'Instance configuration: deleting a group removes its membership and grants, never a person’s records.',
+  },
+  'services/groups/membership.ts groupMember': {
+    hold: 'exempt',
+    how: 'Membership is configuration; a held person can be removed from a group (their records are untouched).',
+  },
+  'services/groups/grants.ts quotaPolicyGroup': {
+    hold: 'exempt',
+    how: 'Instance configuration: which budgets a group carries.',
+  },
+  'services/groups/grants.ts modelGroupAccess': {
+    hold: 'exempt',
+    how: 'Instance configuration: which models a group may use.',
   },
   'services/webhooks/delivery.ts webhookDelivery': {
     hold: 'exempt',

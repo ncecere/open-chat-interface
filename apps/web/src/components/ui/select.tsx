@@ -2,6 +2,7 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ComponentProps, ReactNode, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';
+import { useLocale, useT } from '~/lib/i18n';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import { useFieldDescribedBy } from './field-hint';
@@ -11,7 +12,11 @@ import { MENU_ITEM_FOCUS } from './item-focus';
 // An open Select hides the page; it is also made inert, so nothing hidden takes focus (#172).
 keepHiddenContentInert();
 
-export const SelectRoot = SelectPrimitive.Root;
+/** Radix reads the direction from a prop, not from the document: pass it, so the list opens and moves as the page reads. */
+export function SelectRoot(props: ComponentProps<typeof SelectPrimitive.Root>) {
+  const { dir } = useLocale();
+  return <SelectPrimitive.Root dir={dir} {...props} />;
+}
 export const SelectGroup = SelectPrimitive.Group;
 export const SelectValue = SelectPrimitive.Value;
 
@@ -27,13 +32,13 @@ export function SelectTrigger({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        'flex h-9 w-full items-center justify-between gap-2 rounded-lg px-3 text-sm',
-        'border border-[var(--border-subtle)] bg-[var(--bg-control)] text-[var(--text-primary)]',
+        'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-3 py-1 text-sm',
+        'border border-[var(--border-control)] bg-[var(--bg-control)] text-[var(--text-primary)]',
         'transition-colors hover:bg-[var(--bg-control-hover)]',
         // The 2 px accent ring every other control gets from :focus-visible
         // (#239). A border step alone was 1.2:1 against the unfocused one, so a
         // keyboard user could not see which row's role select had focus.
-        'focus-visible:border-[var(--border-strong)]',
+        'focus-visible:border-[var(--text-muted)]',
         'focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2',
         'focus-visible:outline-[var(--accent-bright)]',
         'disabled:cursor-not-allowed disabled:opacity-50',
@@ -43,7 +48,10 @@ export function SelectTrigger({
       )}
       {...props}
     >
-      <span className="min-w-0 truncate text-left" title={valueTitle}>
+      <span
+        className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-start"
+        title={valueTitle}
+      >
         {children}
       </span>
       <SelectPrimitive.Icon asChild>
@@ -104,7 +112,7 @@ export function SelectItem({
   return (
     <SelectPrimitive.Item
       className={cn(
-        'relative flex cursor-pointer select-none items-center gap-2 rounded-lg py-2 pr-2 pl-8',
+        'relative flex cursor-pointer select-none items-center gap-2 rounded-lg py-2 pe-2 ps-8',
         'text-sm transition-colors',
         // A visible ring on the keyboard-focused option, as in menus (#135).
         MENU_ITEM_FOCUS,
@@ -113,7 +121,7 @@ export function SelectItem({
       )}
       {...props}
     >
-      <span className="absolute left-2 flex size-4 items-center justify-center">
+      <span className="absolute start-2 flex size-4 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
           <Check className="size-3.5 text-[var(--accent-bright)]" />
         </SelectPrimitive.ItemIndicator>
@@ -216,6 +224,7 @@ export function Select({
   /** A note about the field, such as why it is disabled. */
   'aria-describedby'?: string;
 }) {
+  const t = useT();
   // Described by the hint of the Field it is in, too (#295).
   const describedBy = useFieldDescribedBy(ariaDescribedBy);
   // The popup's listbox is named like the field (#114): by its aria-label, or
@@ -240,7 +249,7 @@ export function Select({
         aria-describedby={describedBy}
         valueTitle={options.find((option) => option.value === value)?.label}
       >
-        <SelectValue placeholder={placeholder ?? 'Select an option'} />
+        <SelectValue placeholder={placeholder ?? t('ui.select.placeholder')} />
       </SelectTrigger>
       <SelectContent {...held.contentProps} aria-label={ariaLabel ?? labelText}>
         {options.map((option) => (
@@ -279,6 +288,7 @@ export function GroupedSelect({
   'aria-label'?: string;
   'aria-describedby'?: string;
 }) {
+  const t = useT();
   // The popup's listbox is named like the field (#114): by its aria-label, or
   // else by the <label> pointing at it, read when the popup opens.
   const [labelText, setLabelText] = useState<string | undefined>(undefined);
@@ -305,7 +315,7 @@ export function GroupedSelect({
           groups.flatMap((group) => group.options).find((option) => option.value === value)?.label
         }
       >
-        <SelectValue placeholder={placeholder ?? 'Select an option'} />
+        <SelectValue placeholder={placeholder ?? t('ui.select.placeholder')} />
       </SelectTrigger>
       <SelectContent {...held.contentProps} aria-label={ariaLabel ?? labelText}>
         {groups.map((group) => (

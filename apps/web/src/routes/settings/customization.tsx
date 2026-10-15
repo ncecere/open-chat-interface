@@ -4,11 +4,13 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useState } from 'react';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { InstallAppSection } from '~/components/settings/install-app-section';
+import { LanguagePicker } from '~/components/settings/language-picker';
 import { TraitChips, traitChange } from '~/components/settings/trait-chips';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { type MessageKey, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { withTrait } from '~/lib/traits';
 import { cn } from '~/lib/utils';
@@ -33,12 +35,13 @@ function CountedInput({
   multiline?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
+  const t = useT();
   // The limit is heard with the field, not only seen beside it (#310).
   const countId = `${id}-count`;
   const shared = cn(
-    'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/60 px-3 text-sm',
+    'w-full rounded-lg border border-[var(--border-control)] bg-[var(--bg-control)]/60 px-3 text-sm',
     'text-[var(--text-primary)] placeholder:text-[var(--text-muted)]',
-    'transition-colors focus:border-[var(--border-strong)]',
+    'transition-colors focus:border-[var(--text-muted)]',
   );
 
   return (
@@ -63,15 +66,15 @@ function CountedInput({
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className={cn(shared, 'h-11 pr-16')}
+          className={cn(shared, 'h-11 pe-16')}
         />
       )}
       <span
         id={countId}
-        className="pointer-events-none absolute bottom-2.5 right-3 text-xs text-[var(--text-muted)]"
+        className="pointer-events-none absolute bottom-2.5 end-3 text-xs text-[var(--text-muted)]"
       >
         {value.length}/{max}
-        <span className="sr-only"> characters</span>
+        <span className="sr-only"> {t('settings.customization.characters')}</span>
       </span>
     </div>
   );
@@ -87,10 +90,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 const APPEARANCES = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
-] as const;
+  { value: 'light', label: 'settings.customization.light', icon: Sun },
+  { value: 'dark', label: 'settings.customization.dark', icon: Moon },
+  { value: 'system', label: 'settings.customization.system', icon: Monitor },
+] as const satisfies readonly { value: string; label: MessageKey; icon: unknown }[];
 
 /**
  * Light, Dark or System, the same choice as the chat's appearance menu and
@@ -98,50 +101,54 @@ const APPEARANCES = [
  * work as they do everywhere else.
  */
 function AppearanceRow() {
+  const t = useT();
   const { theme, setTheme } = useTheme();
   const id = useId();
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-      <div>
-        <p id={`${id}-label`} className="text-sm font-medium text-[var(--text-primary)]">
-          Appearance
-        </p>
-        <p
-          id={`${id}-description`}
-          className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]"
-        >
-          Light, dark, or follow your device's setting. Saved in this browser.
-        </p>
-      </div>
-      <div
-        role="radiogroup"
-        aria-labelledby={`${id}-label`}
-        aria-describedby={`${id}-description`}
-        className="inline-flex shrink-0 gap-1 self-start rounded-xl bg-[var(--bg-segment-track)] p-1"
-      >
-        {APPEARANCES.map((option) => (
-          <label
-            key={option.value}
-            className={cn(
-              'flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
-              'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--accent-bright)]',
-              theme === option.value
-                ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-            )}
+    // Side by side by the room the row has, not the window: at larger text it stacks (1.4.4).
+    <div className="@container">
+      <div className="flex flex-col gap-3 @[40rem]:flex-row @[40rem]:items-start @[40rem]:justify-between @[40rem]:gap-6">
+        <div>
+          <p id={`${id}-label`} className="text-sm font-medium text-[var(--text-primary)]">
+            {t('settings.customization.appearance')}
+          </p>
+          <p
+            id={`${id}-description`}
+            className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]"
           >
-            <input
-              type="radio"
-              name={`${id}-appearance`}
-              value={option.value}
-              checked={theme === option.value}
-              onChange={() => setTheme(option.value as ThemeMode)}
-              className="sr-only"
-            />
-            <option.icon className="size-3.5" aria-hidden="true" />
-            {option.label}
-          </label>
-        ))}
+            {t('settings.customization.appearanceDescription')}
+          </p>
+        </div>
+        <div
+          role="radiogroup"
+          aria-labelledby={`${id}-label`}
+          aria-describedby={`${id}-description`}
+          className="inline-flex shrink-0 gap-1 self-start rounded-xl bg-[var(--bg-segment-track)] p-1"
+        >
+          {APPEARANCES.map((option) => (
+            <label
+              key={option.value}
+              className={cn(
+                'flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--accent-bright)]',
+                theme === option.value
+                  ? 'bg-[var(--bg-segment-active)] font-medium text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+              )}
+            >
+              <input
+                type="radio"
+                name={`${id}-appearance`}
+                value={option.value}
+                checked={theme === option.value}
+                onChange={() => setTheme(option.value as ThemeMode)}
+                className="sr-only"
+              />
+              <option.icon className="size-3.5" aria-hidden="true" />
+              {t(option.label)}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -201,6 +208,7 @@ function ToggleRow({
 }
 
 export function SettingsCustomizationPage() {
+  const t = useT();
   const { data } = useCurrentUser();
   const queryClient = useQueryClient();
   const {
@@ -281,45 +289,45 @@ export function SettingsCustomizationPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Customize your assistant</h1>
+      <h1 className="text-2xl font-bold">{t('settings.customization.title')}</h1>
 
       <div className="mt-6 flex flex-col gap-6">
         <div>
           <label htmlFor="name" className="mb-2 block text-sm font-medium">
-            What should the assistant call you?
+            {t('settings.customization.nameLabel')}
           </label>
           <CountedInput
             id="name"
             value={name}
             onChange={setName}
-            placeholder="Enter your name"
+            placeholder={t('settings.customization.namePlaceholder')}
             max={LIMITS.name}
           />
         </div>
 
         <div>
           <label htmlFor="occupation" className="mb-2 block text-sm font-medium">
-            What do you do?
+            {t('settings.customization.occupationLabel')}
           </label>
           <CountedInput
             id="occupation"
             value={occupation}
             onChange={setOccupation}
-            placeholder="Engineer, student, etc."
+            placeholder={t('settings.customization.occupationPlaceholder')}
             max={LIMITS.occupation}
           />
         </div>
 
         <div>
           <label htmlFor="traits" className="mb-2 block text-sm font-medium">
-            What traits should the assistant have?
+            {t('settings.customization.traitsLabel')}
           </label>
           <CountedInput
             id="traits"
             value={traitDraft}
             onChange={setTraitDraft}
             onKeyDown={handleTraitKey}
-            placeholder="Type a trait and press Enter or Tab..."
+            placeholder={t('settings.customization.traitsPlaceholder')}
             max={LIMITS.trait}
           />
 
@@ -332,13 +340,13 @@ export function SettingsCustomizationPage() {
 
         <div>
           <label htmlFor="context" className="mb-2 block text-sm font-medium">
-            Anything else it should know about you?
+            {t('settings.customization.contextLabel')}
           </label>
           <CountedInput
             id="context"
             value={context}
             onChange={setContext}
-            placeholder="Interests, values, or preferences to keep in mind"
+            placeholder={t('settings.customization.contextPlaceholder')}
             max={LIMITS.context}
             multiline
           />
@@ -346,16 +354,18 @@ export function SettingsCustomizationPage() {
 
         <div className="flex items-center justify-end gap-3">
           <span role="status" className="text-xs text-[var(--success)]">
-            {saved ? 'Saved' : ''}
+            {saved ? t('settings.customization.saved') : ''}
           </span>
           {/* An edit looked applied until Save was pressed (#314). */}
           {dirty && !save.isPending && (
-            <span className="text-xs text-[var(--text-muted)]">Not saved yet</span>
+            <span className="text-xs text-[var(--text-muted)]">
+              {t('settings.customization.notSaved')}
+            </span>
           )}
           {save.isError && (
             <span role="alert" className="text-xs text-[var(--danger)]">
               {/* A read-only refusal gives its reason, not "Try again" (#159). */}
-              {apiErrorMessage(save.error, 'Your preferences could not be saved. Try again.')}
+              {apiErrorMessage(save.error, t('settings.customization.saveFailed'))}
             </span>
           )}
           <Button
@@ -364,34 +374,36 @@ export function SettingsCustomizationPage() {
             disabled={save.isPending || !dirty}
             onClick={() => save.mutate({ ...draft })}
           >
-            Save Preferences
+            {t('settings.customization.save')}
           </Button>
         </div>
       </div>
 
-      <Section title="Appearance">
+      <LanguagePicker />
+
+      <Section title={t('settings.customization.appearance')}>
         <AppearanceRow />
       </Section>
 
-      <Section title="Behavior Options">
+      <Section title={t('settings.customization.behavior')}>
         <ToggleRow
-          label="Invert Send/New Line Behavior"
-          description="When enabled, Enter starts a new line and Cmd/Ctrl + Enter sends. When disabled, Enter sends and Shift + Enter starts a new line. Saved in this browser."
+          label={t('settings.customization.invertSend')}
+          description={t('settings.customization.invertSendDescription')}
           checked={invertSend}
           onChange={setInvertSend}
         />
       </Section>
 
-      <Section title="Visual Options">
+      <Section title={t('settings.customization.visual')}>
         <ToggleRow
-          label="Wrap Long Code Lines"
-          description="Wrap long lines in code blocks instead of scrolling them sideways."
+          label={t('settings.customization.wrapCode')}
+          description={t('settings.customization.wrapCodeDescription')}
           checked={codeWrap}
           onChange={setCodeWrap}
         />
         <ToggleRow
-          label="Open artifacts automatically"
-          description="On wide screens, open the artifact panel beside the conversation when a reply starts writing a page, image, diagram or document, so you can watch it being written."
+          label={t('settings.customization.autoArtifacts')}
+          description={t('settings.customization.autoArtifactsDescription')}
           checked={autoOpenArtifacts}
           onChange={setAutoOpenArtifacts}
         />

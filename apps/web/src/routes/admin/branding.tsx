@@ -6,6 +6,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { brandingFromResponse } from './branding/branding-draft';
 import { BrandingForm } from './branding/branding-form';
+import { LanguageSection } from './branding/language-section';
 
 function LoadingBranding() {
   return (
@@ -64,7 +65,12 @@ export function AdminBrandingPage() {
           </Button>
         </div>
       ) : (
-        <BrandingForm initialSettings={brandingFromResponse(settings.data)} />
+        <>
+          <BrandingForm initialSettings={brandingFromResponse(settings.data)} />
+          <div className="mt-10 max-w-3xl border-t border-[var(--border-subtle)] pt-8">
+            <LanguageSection language={settings.data.language} />
+          </div>
+        </>
       )}
     </div>
   );

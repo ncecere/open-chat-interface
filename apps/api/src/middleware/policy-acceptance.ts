@@ -47,6 +47,11 @@ export const POLICY_ALLOWLIST: readonly PolicyAllowance[] = [
   },
   {
     method: 'POST',
+    path: '/api/me/mfa/*',
+    why: 'Setting up two-step verification is identity, not use; a limited person could otherwise be stuck between this refusal and the two-step one (#399)',
+  },
+  {
+    method: 'POST',
     path: '/api/me/onboarding/accept-policy',
     why: 'Accepting the policy, which is the way out of this refusal',
   },

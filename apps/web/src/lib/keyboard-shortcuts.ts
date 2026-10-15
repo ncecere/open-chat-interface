@@ -1,3 +1,5 @@
+import { type MessageKey, translate } from '~/lib/i18n';
+
 /**
  * The app-wide keyboard shortcuts, in one place so the handler, the
  * `aria-keyshortcuts` on each control, the Settings card and the command
@@ -10,17 +12,27 @@
 export type ShortcutId = 'search' | 'new-chat' | 'toggle-sidebar' | 'model-picker';
 
 interface ShortcutDefinition {
-  label: string;
+  /** What the shortcut does, in the language showing (the keys themselves stay as typed). */
+  readonly label: string;
   /** `KeyboardEvent.key`, lower case. */
   key: string;
   shift: boolean;
 }
 
+const define = (labelKey: MessageKey, key: string, shift: boolean): ShortcutDefinition => ({
+  // Read when asked, so a list drawn after a language change is in the new language.
+  get label() {
+    return translate(labelKey);
+  },
+  key,
+  shift,
+});
+
 export const SHORTCUTS: Record<ShortcutId, ShortcutDefinition> = {
-  search: { label: 'Search', key: 'k', shift: false },
-  'new-chat': { label: 'New Chat', key: 'o', shift: true },
-  'toggle-sidebar': { label: 'Toggle Sidebar', key: 'b', shift: false },
-  'model-picker': { label: 'Open Model Picker', key: '/', shift: false },
+  search: define('shell.shortcuts.search', 'k', false),
+  'new-chat': define('shell.shortcuts.newChat', 'o', true),
+  'toggle-sidebar': define('shell.shortcuts.toggleSidebar', 'b', false),
+  'model-picker': define('shell.shortcuts.modelPicker', '/', false),
 };
 
 /** In display order. */

@@ -1,6 +1,15 @@
 import type { ClaimRoleMapping } from '@oci/shared';
-import { boolean, index, jsonb, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
-import { primaryId, timestamps } from './_shared.js';
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+import { createdAt, primaryId, timestamps } from './_shared.js';
 import { pgTable } from './_table.js';
 import { organization } from './organization.js';
 
@@ -26,6 +35,12 @@ export const user = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: 'cascade' }),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    /**
+     * Better Auth's twoFactor plugin flag (migration 0050, #399): true once an
+     * authenticator code was confirmed. The plugin challenges password sign-in
+     * for these accounts, and the per-role requirement reads it.
+     */
+    twoFactorEnabled: boolean('two_factor_enabled').notNull().default(false),
     ...timestamps(),
   },
   (t) => [uniqueIndex('user_email_unique').on(t.email), index('user_org_idx').on(t.organizationId)],
@@ -43,6 +58,14 @@ export const session = pgTable(
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
     impersonatedBy: text('impersonated_by'),
+    /**
+     * How the session was created (migration 0051, #399): `password`, `totp`,
+     * `recovery_code`, `passkey`, `sso` or `other`, set by OCI when the session
+     * is created. NULL (older sessions, or one made by a v0.13 replica) reads as
+     * `password`. The per-role requirement tells a password-only session from
+     * one that passed a second step by this.
+     */
+    authMethod: text('auth_method'),
     ...timestamps(),
   },
   (t) => [uniqueIndex('session_token_unique').on(t.token), index('session_user_idx').on(t.userId)],
@@ -82,6 +105,64 @@ export const verification = pgTable(
     ...timestamps(),
   },
   (t) => [index('verification_identifier_idx').on(t.identifier)],
+);
+
+/**
+ * Better Auth's twoFactor plugin table (migration 0050, #399): one row per
+ * person with an authenticator. The property names are the plugin's field
+ * names (the Drizzle adapter looks them up by name), mapped to snake_case.
+ *
+ * `secret` and `backupCodes` are encrypted by the plugin with AUTH_SECRET, not
+ * with ENCRYPTION_KEY, so this table is deliberately absent from
+ * ENCRYPTED_LOCATIONS (background/reencrypt-secrets.ts): rotating
+ * ENCRYPTION_KEY would otherwise try the wrong key on these values.
+ */
+export const twoFactor = pgTable(
+  'two_factor',
+  {
+    id: primaryId(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    secret: text('secret').notNull(),
+    backupCodes: text('backup_codes').notNull(),
+    verified: boolean('verified').notNull().default(true),
+    failedVerificationCount: integer('failed_verification_count').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  // Unique: the plugin deletes then inserts, so a race fails instead of
+  // leaving two rows for one person.
+  (t) => [uniqueIndex('two_factor_user_id_unique').on(t.userId)],
+);
+
+/**
+ * Passkeys (migration 0051, #399), the table of @better-auth/passkey. The
+ * public key and the signature counter; the private key never leaves the
+ * authenticator. Property names are the plugin's (`credentialID`).
+ */
+export const passkey = pgTable(
+  'passkey',
+  {
+    id: primaryId(),
+    name: text('name'),
+    publicKey: text('public_key').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    credentialID: text('credential_id').notNull(),
+    // bigint: WebAuthn counters are unsigned 32-bit.
+    counter: bigint('counter', { mode: 'number' }).notNull(),
+    deviceType: text('device_type').notNull(),
+    backedUp: boolean('backed_up').notNull(),
+    transports: text('transports'),
+    createdAt: createdAt(),
+    aaguid: text('aaguid'),
+  },
+  (t) => [
+    uniqueIndex('passkey_credential_id_unique').on(t.credentialID),
+    index('passkey_user_idx').on(t.userId),
+  ],
 );
 
 /**

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { COLOR_THEMES, REGISTRATION_MODES, THEME_MODES, USER_ROLES } from '../constants.js';
+import { languageSettingsSchema } from '../locales.js';
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(320);
 
@@ -67,6 +68,11 @@ export const authStatusSchema = z.object({
     colorTheme: z.enum(COLOR_THEMES),
     defaultTheme: z.enum(THEME_MODES),
   }),
+  /**
+   * The instance's language setting (v0.14), public like the branding so the
+   * sign-in page can use it. Absent from an older API, which reads as English.
+   */
+  language: languageSettingsSchema.optional(),
 });
 
 export const sessionUserSchema = z.object({

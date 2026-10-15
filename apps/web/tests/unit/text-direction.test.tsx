@@ -86,14 +86,36 @@ describe('a reply with right-to-left text', () => {
     expect(container.querySelectorAll('li[dir="auto"]')).toHaveLength(3);
   });
 
-  it('leaves code blocks and inline code alone', async () => {
+  it('keeps code blocks and inline code left to right and isolated, in a right-to-left reply', async () => {
     await render(REPLY);
-    const block = container.querySelector('[data-streamdown="code-block"]')!;
-    expect(block).not.toBeNull();
-    expect(block.hasAttribute('dir')).toBe(false);
-    expect(block.querySelector('[dir]')).toBeNull();
-    expect(container.querySelector('pre')?.closest('[dir]')).toBeNull();
-    expect(container.querySelector('code')?.hasAttribute('dir')).toBe(false);
+    expect(container.querySelector('[data-streamdown="code-block"]')).not.toBeNull();
+    // Inline code carries dir="ltr"; nothing around it (auto, rtl) reaches into it.
+    const inline = [...container.querySelectorAll('code')].find((code) => !code.closest('pre'));
+    expect(inline?.getAttribute('dir')).toBe('ltr');
+    // Streamdown builds a code block's own markup, so its direction is the prose
+    // classes': left to right and isolated from the Arabic around it.
+    const classes = container.firstElementChild?.className ?? '';
+    expect(classes).toContain('[&_[data-streamdown=code-block]]:[direction:ltr]');
+    expect(classes).toContain('[&_[data-streamdown=code-block]]:[unicode-bidi:isolate]');
+    expect(classes).toContain('[&_:not(pre)>code]:[unicode-bidi:isolate]');
+  });
+
+  it('marks an item that reads the other way from its list, so its marker can sit inside its text', async () => {
+    // A `:dir()` selector would do it, but the CSS build compiles `:dir()` to `:lang()`.
+    await render('- English first\n- عنصر عربي\n- English again');
+    const marked = [...container.querySelectorAll('li')].map((item) =>
+      item.hasAttribute('data-opposite-direction'),
+    );
+    expect(marked).toEqual([false, true, false]);
+    expect(container.querySelector('ul')?.getAttribute('dir')).toBe('ltr');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await render('- عنصر عربي\n- English item\n- عنصر آخر');
+    expect(
+      [...container.querySelectorAll('li')].map((item) =>
+        item.hasAttribute('data-opposite-direction'),
+      ),
+    ).toEqual([false, true, false]);
   });
 
   it('applies to a person’s own message too (maths off) and to a share page’s (safe-link policy)', async () => {
@@ -136,7 +158,7 @@ describe('a conversation search result', () => {
     const spans = [...container.querySelectorAll('span[dir]')];
     const title = spans.find((span) => span.textContent === 'واجب الكتابة');
     expect(title?.getAttribute('dir')).toBe('auto');
-    const snippet = container.querySelector('span.line-clamp-2');
+    const snippet = container.querySelector('span.line-clamp-2.text-xs');
     expect(snippet?.getAttribute('dir')).toBe('auto');
     // "Reply: " is its own left-to-right run, skipped when the direction is chosen.
     expect(snippet?.querySelector('span[dir="ltr"]')?.textContent).toBe('Reply: ');

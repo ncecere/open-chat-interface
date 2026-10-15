@@ -48,6 +48,7 @@ scrape_configs:
 | `oci_chat_reply_duration_seconds` | histogram | `status` |
 | `oci_tool_calls_total` | counter | `tool` (the tool id, such as `web_search` or `mcp__docs__search`), `outcome`: `ok`, `error`, `denied`, `refused` |
 | `oci_tool_call_duration_seconds` | histogram | `tool` |
+| `oci_classification_decisions_total` | counter | `point`: `send`, `approval`, `tool`, `compaction`, `web_search`, `embedding`, `rerank`, `share`; `outcome`: `allowed`, `warned`, `blocked`. Counted only for a conversation that carries at least one [data class](data-classification.md); no class label, because names may be sensitive and the number of classes is not bounded for a series |
 | `oci_job_runs_total` | counter | `job`, `outcome`: `success`, `error` |
 | `oci_job_duration_seconds` | histogram | `job` |
 | `oci_job_last_success_timestamp_seconds` | gauge | `job`: when it last succeeded on this process |
@@ -56,6 +57,9 @@ scrape_configs:
 | `oci_webhook_deliveries_total` | counter | `outcome`: `succeeded`, `retrying`, `failed` |
 | `oci_webhook_deliveries_pending` | gauge | Deliveries waiting for a first attempt or a retry |
 | `oci_storage_deletions_pending` | gauge | Stored objects queued for deletion |
+| `oci_mfa_verifications_total` | counter | Second-step verifications: `method` (`totp`, `recovery_code`, `passkey`), `outcome` (`success`, `failure`) |
+| `oci_mfa_people` | gauge | Unbanned accounts by `role` and `state`: `enrolled`, `not_enrolled`, `exempt` (no password, so never required to) |
+| `oci_mfa_limited_people` | gauge | By `role`: people whose role requires two-step verification, who have not set it up and whose grace has passed |
 | `oci_backup_runs_total` | counter | `outcome`: `succeeded`, `failed` |
 | `oci_backup_duration_seconds` | histogram | |
 | `oci_backup_last_success_timestamp_seconds` | gauge | Absent until a backup succeeds. With [external database backup](external-database-backup.md) it means the attachment backup |
@@ -87,6 +91,19 @@ Labels never hold user ids, thread ids or raw paths, so the number of series
 stays bounded. The gauges read from the database at scrape time; if the
 database does not answer, they are left out of that scrape rather than failing
 it.
+
+Two-step verification: a burst of failures is a guessing attempt or a clock
+problem, and a limited person count that does not fall after the grace is people
+who need help setting up (or a reset):
+
+```yaml
+- alert: MfaVerificationFailuresHigh
+  expr: sum(rate(oci_mfa_verifications_total{outcome="failure"}[10m])) > 0.2
+  for: 15m
+- alert: MfaPeopleLimited
+  expr: sum(oci_mfa_limited_people) > 0
+  for: 1d
+```
 
 OCI cannot see that an external database backup's base backups stopped, only
 that WAL is archived. Alert on the backup tool's own metrics for that, for
@@ -177,6 +194,9 @@ Choose **Add endpoint** and enter:
   matches every action that starts with `user.`. The form warns about an entry
   that matches nothing the audit log has recorded so far (often a typing
   mistake), but saves it, since the action may simply not have happened yet.
+  Project sharing (v0.14) is `project.share.create`, `project.share.update`,
+  `project.share.delete`, `project.transfer` and `project.access.revoked`:
+  `project.*` follows all of them (they name the project's id, never its name).
   Or turn on **Send every audit event** (this includes `tool.call`, one per
   tool call, which can be a lot).
 - **Allow private network**: like [connectors](connectors.md#private-networks),
@@ -194,6 +214,11 @@ the endpoint answered; like any delivery, it updates the endpoint's "Last
 delivered" or "Last failure". **Show deliveries** lists the last 50 deliveries with
 their status, attempts and last error. Auditors can see endpoints and their
 deliveries but not change them, send tests or see secrets.
+
+Group changes are among the events you can send: `group.create`,
+`group.update`, `group.delete`, `group.member.add`, `group.member.remove`,
+`group.member.role` and `group.grants.update` (or `group.*`), described on
+[Groups](groups.md#what-is-recorded).
 
 Creating, changing, rotating and deleting endpoints are audited as
 `webhook.create`, `webhook.update`, `webhook.rotate` and `webhook.delete`, and

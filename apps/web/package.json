@@ -1,6 +1,6 @@
 {
   "name": "@oci/web",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "4.0.58",
+    "@better-auth/passkey": "1.6.26",
     "@better-auth/sso": "1.6.26",
     "@oci/shared": "workspace:*",
     "@radix-ui/react-dialog": "1.1.23",
@@ -36,6 +37,7 @@
     "katex": "0.18.2",
     "lucide-react": "1.29.0",
     "mermaid": "11.16.1",
+    "qrcode-generator": "2.0.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "sonner": "2.0.7",

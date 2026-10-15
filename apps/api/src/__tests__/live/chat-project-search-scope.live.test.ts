@@ -71,6 +71,8 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'embeddings') return {};
     // Reranking is off: the note carries no `reranked` field.
     if (key === 'reranking') return {};
+    // Data classification is off (v0.14): the default, nothing carried.
+    if (key === 'classification') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

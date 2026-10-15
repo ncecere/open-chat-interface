@@ -53,6 +53,8 @@ vi.mock('../../services/settings.js', () => ({
         branching: state.branching,
       };
     if (key === 'roleFeatures') return { roles: { user: { branching: state.branching } } };
+    // Data classification is off (v0.14): the default, nothing carried.
+    if (key === 'classification') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

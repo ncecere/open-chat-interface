@@ -9,8 +9,11 @@
  * take it, checked each frame for a short while.
  */
 
-/** The new chat's message box. */
-const COMPOSER = 'textarea[aria-label="Message input"]';
+import { translate } from '~/lib/i18n';
+
+/** The composer's textarea (the new chat's message box), found by its name in the language shown. */
+const composerSelector = () =>
+  `textarea[aria-label="${CSS.escape(translate('chat.composer.messageInput'))}"]`;
 
 /**
  * How long to keep trying, in milliseconds rather than frames, whose rate
@@ -68,7 +71,7 @@ export function touchOnly(): boolean {
  */
 export function focusComposerSoon() {
   if (touchOnly()) return;
-  focusWhenReady(() => document.querySelector<HTMLElement>(COMPOSER));
+  focusWhenReady(() => document.querySelector<HTMLElement>(composerSelector()));
 }
 
 /**
@@ -78,10 +81,10 @@ export function focusComposerSoon() {
  */
 export function focusComposerOnArrival() {
   if (touchOnly()) return;
-  focusWhenReady(() => document.querySelector<HTMLElement>(COMPOSER), {
+  focusWhenReady(() => document.querySelector<HTMLElement>(composerSelector()), {
     until: () => {
       const active = document.activeElement;
-      return Boolean(active && active !== document.body && !active.matches(COMPOSER));
+      return Boolean(active && active !== document.body && !active.matches(composerSelector()));
     },
   });
 }

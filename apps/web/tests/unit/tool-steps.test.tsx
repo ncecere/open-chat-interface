@@ -265,6 +265,16 @@ describe('tool steps', () => {
     expect(container.textContent).toContain('Searching the web…');
     expect(container.querySelector('[aria-label="Generating response"]')).toBeNull();
   });
+
+  it("stops the running step's pulse for a person who asked for reduced motion", async () => {
+    const running = { ...searched, state: 'input-available', output: undefined };
+    await show(reply(running), { streaming: true });
+    if (blockHeader().getAttribute('aria-expanded') === 'false') await expandBlock();
+    const pulsing = [...container.querySelectorAll('svg.animate-pulse')];
+    expect(pulsing.length).toBeGreaterThan(0);
+    for (const icon of pulsing)
+      expect(icon.getAttribute('class')).toContain('motion-reduce:animate-none');
+  });
 });
 
 describe('approval answers', () => {

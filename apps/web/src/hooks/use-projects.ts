@@ -1,12 +1,15 @@
 import type {
   CreateProjectInput,
   ProjectFile,
+  ProjectList,
   ProjectSummary,
   SidebarProject,
+  SidebarProjectList,
   ThreadSummary,
   UpdateProjectInput,
 } from '@oci/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { ApiError, api } from '~/lib/api-client';
 import {
@@ -14,7 +17,10 @@ import {
   SIDEBAR_PROJECTS_KEY,
   updateCachedConversation,
 } from '~/lib/conversation-cache';
+import { translate } from '~/lib/i18n';
+import { noteMfaRequiredResponse } from '~/lib/mfa-required';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
+import { isolate } from '~/lib/projects-text';
 import { useCurrentUser } from './use-current-user';
 
 /** Whether this person's role may use projects; false until /me has loaded. */
@@ -26,8 +32,31 @@ export function useProjectsAvailable(): boolean {
 export function useProjects(enabled = true) {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.get<{ projects: ProjectSummary[] }>('/projects'),
+    queryFn: () => api.get<ProjectList>('/projects'),
     select: (data) => data.projects,
+    enabled,
+  });
+}
+
+/** Both lists of `GET /api/projects` for the Projects page. */
+export function useProjectsOverview(enabled = true) {
+  return useQuery({
+    queryKey: ['projects'],
+    queryFn: () => api.get<ProjectList>('/projects'),
+    enabled,
+  });
+}
+
+/**
+ * Projects other people shared with the person (v0.14), by name. `projects`
+ * stays the person's own, so nothing that offers "my projects" can mistake one
+ * of these for it. An API from before sharing sends none.
+ */
+export function useSharedProjects(enabled = true) {
+  return useQuery({
+    queryKey: ['projects'],
+    queryFn: () => api.get<ProjectList>('/projects'),
+    select: (data) => data.shared ?? [],
     enabled,
   });
 }
@@ -40,8 +69,18 @@ export function useProjects(enabled = true) {
 export function useSidebarProjects(enabled = true) {
   return useQuery({
     queryKey: SIDEBAR_PROJECTS_KEY,
-    queryFn: () => api.get<{ projects: SidebarProject[] }>('/projects/sidebar'),
+    queryFn: () => api.get<SidebarProjectList>('/projects/sidebar'),
     select: (data) => data.projects,
+    enabled,
+  });
+}
+
+/** The sidebar's "Shared with me" tree: the same query as above, so no extra request. */
+export function useSidebarSharedProjects(enabled = true) {
+  return useQuery({
+    queryKey: SIDEBAR_PROJECTS_KEY,
+    queryFn: () => api.get<SidebarProjectList>('/projects/sidebar'),
+    select: (data): SidebarProject[] => data.shared ?? [],
     enabled,
   });
 }
@@ -54,6 +93,20 @@ export function useProject(projectId: string | undefined) {
     select: (data) => data.project,
     enabled: Boolean(projectId),
   });
+}
+
+/**
+ * A 404 from one of a project's own requests means the person's access ended
+ * (the owner stopped sharing, a group changed) or the project is gone. The
+ * project is read again, so the page says "You no longer have access" rather
+ * than leaving a list that cannot load.
+ */
+export function useRefreshOnAccessLoss(projectId: string, error: unknown) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (error instanceof ApiError && error.status === 404)
+      void queryClient.invalidateQueries({ queryKey: ['projects', projectId], exact: true });
+  }, [error, projectId, queryClient]);
 }
 
 export function useProjectFiles(projectId: string, enabled = true) {
@@ -84,21 +137,25 @@ export function useCreateProject() {
   });
 }
 
+function refreshIfAccessLost(queryClient: QueryClient, projectId: string, error: unknown) {
+  if (error instanceof ApiError && error.status === 404)
+    void queryClient.invalidateQueries({ queryKey: ['projects', projectId], exact: true });
+}
+
 export function useUpdateProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (patch: UpdateProjectInput) =>
       api.patch<{ project: ProjectSummary }>(`/projects/${encodeURIComponent(projectId)}`, patch),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+    onError: (error) => refreshIfAccessLost(queryClient, projectId, error),
   });
 }
 
 /** What a deleted project's notice adds: where its conversations went. */
 export function deletedProjectText(detachedThreads: number): string | undefined {
   if (detachedThreads === 0) return undefined;
-  return detachedThreads === 1
-    ? 'Its conversation is kept in your conversation list.'
-    : `Its ${detachedThreads} conversations are kept in your conversation list.`;
+  return translate('projects.delete.toastConversations', { count: detachedThreads });
 }
 
 /**
@@ -114,7 +171,7 @@ export function useDeleteProject() {
         `/projects/${encodeURIComponent(id)}`,
       ),
     onSuccess: (result, { id, name }) => {
-      toast.success(`Project “${name}” deleted.`, {
+      toast.success(translate('projects.delete.toast', { name: isolate(name) }), {
         id: `project-deleted-${id}`,
         description: deletedProjectText(result?.detachedThreads ?? 0),
       });
@@ -140,10 +197,14 @@ export function useUploadProjectFiles(projectId: string) {
         });
         if (!response.ok) {
           void notePolicyRequiredResponse(response);
+          void noteMfaRequiredResponse(response);
           const payload = (await response.json().catch(() => null)) as {
             error?: { message?: string };
           } | null;
-          failures.push(payload?.error?.message ?? `${file.name} could not be uploaded`);
+          failures.push(
+            payload?.error?.message ??
+              translate('projects.files.fileUploadFailed', { name: isolate(file.name) }),
+          );
         }
       }
       if (failures.length > 0) throw new ApiError(422, 'UPLOAD_FAILED', failures.join(' '));
@@ -158,6 +219,7 @@ export function useDeleteProjectFile(projectId: string) {
     mutationFn: (fileId: string) =>
       api.delete(`/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+    onError: (error) => refreshIfAccessLost(queryClient, projectId, error),
   });
 }
 
@@ -185,8 +247,12 @@ export function useMoveThread() {
     onSuccess: (result, { threadId, projectId, projectName, fromProjectName }) => {
       toast.success(
         projectId
-          ? `Conversation moved to ${projectName ? `“${projectName}”` : 'the project'}.`
-          : `Conversation moved out of ${fromProjectName ? `“${fromProjectName}”` : 'its project'}.`,
+          ? projectName
+            ? translate('projects.move.toastMovedTo', { name: isolate(projectName) })
+            : translate('projects.move.toastMovedToUnnamed')
+          : fromProjectName
+            ? translate('projects.move.toastMovedOut', { name: isolate(fromProjectName) })
+            : translate('projects.move.toastMovedOutUnnamed'),
         { id: `thread-moved-${threadId}` },
       );
       if (result?.thread) updateCachedConversation(queryClient, result.thread);

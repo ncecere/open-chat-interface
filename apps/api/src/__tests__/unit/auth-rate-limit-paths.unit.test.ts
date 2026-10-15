@@ -16,6 +16,11 @@ describe('authentication rate limit: which Better Auth endpoints count', () => {
     ['POST', '/change-password', true],
     ['POST', '/change-email', true],
     ['GET', '/sso/callback/campus', true],
+    // The second step (v0.14): wrong codes are counted, per challenge and address.
+    ['POST', '/two-factor/verify-totp', true],
+    ['POST', '/two-factor/verify-backup-code', true],
+    ['POST', '/passkey/verify-authentication', true],
+    ['GET', '/passkey/generate-authenticate-options', false],
     // SAML sign-in was removed (#53); the path is answered 404 before any limiter.
     ['POST', '/sso/saml2/sp/acs/campus', false],
     ['GET', '/get-session', false],
@@ -40,6 +45,14 @@ describe('authentication rate limit: which Better Auth endpoints count', () => {
     expect(authRequestKind('GET', '/sso/callback/campus%20idp')).toEqual({
       kind: 'sso-callback',
       provider: 'campus idp',
+    });
+    expect(authRequestKind('POST', '/two-factor/verify-totp')).toEqual({
+      kind: 'second-factor',
+      provider: null,
+    });
+    expect(authRequestKind('POST', '/passkey/verify-authentication')).toEqual({
+      kind: 'second-factor',
+      provider: null,
     });
     expect(authRequestKind('POST', '/sso/saml2/callback/staff')).toBeNull();
     expect(authRequestKind('GET', '/sso/callback')).toEqual({

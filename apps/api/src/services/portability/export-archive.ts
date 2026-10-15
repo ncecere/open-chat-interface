@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, schema } from '@oci/db';
+import { and, asc, desc, eq, isNull, ne, schema, sql } from '@oci/db';
 import { EXPORT_ARCHIVE_VERSION } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
@@ -12,6 +12,7 @@ import {
   renderMarkdown,
   safeTitleSlug,
 } from '../export.js';
+import { projectReadableBy } from '../project-sharing/access.js';
 import { getStorageDriver } from '../storage/index.js';
 import { type AttachmentRow, attachmentsForMessages } from './export-attachments.js';
 import { NameAllocator, safeEntrySegment, ZIP_MAX_ENTRIES, ZipStreamWriter } from './zip-writer.js';
@@ -141,20 +142,46 @@ const attachmentColumns = {
   createdAt: schema.attachment.createdAt,
 };
 
-/** A project's ready files, oldest first. */
-async function projectAttachments(userId: string, projectId: string): Promise<AttachmentRow[]> {
+/**
+ * A project's ready files, oldest first. `addedBy` limits it to the files that
+ * person added (a shared project in a member's export, v0.14); without it, every
+ * file of the project, whoever added it: the owner's export holds the project as
+ * it is, including the files editors added.
+ */
+async function projectAttachments(projectId: string, addedBy?: string): Promise<AttachmentRow[]> {
   return db
     .select(attachmentColumns)
     .from(schema.attachment)
     .where(
       and(
-        eq(schema.attachment.userId, userId),
         eq(schema.attachment.projectId, projectId),
+        addedBy ? eq(schema.attachment.userId, addedBy) : undefined,
         isNull(schema.attachment.deletedAt),
         eq(schema.attachment.uploadPending, false),
       ),
     )
     .orderBy(asc(schema.attachment.createdAt), asc(schema.attachment.id));
+}
+
+/**
+ * Projects other people own that the person can read and added files to, with
+ * only the files they added (v0.14). The owner's instructions and the other
+ * files are not the person's data; a viewer, who added nothing, has none.
+ */
+async function sharedProjectsWithOwnFiles(userId: string) {
+  return db
+    .select({ id: schema.project.id, name: schema.project.name })
+    .from(schema.project)
+    .where(
+      and(
+        ne(schema.project.userId, userId),
+        projectReadableBy(sql`"project"."id"`, userId),
+        sql`exists (select 1 from "attachment" as "own_file"
+          where "own_file"."project_id" = "project"."id" and "own_file"."user_id" = ${userId}
+            and "own_file"."upload_pending" = false and "own_file"."deleted_at" is null)`,
+      ),
+    )
+    .orderBy(asc(schema.project.createdAt), asc(schema.project.id));
 }
 
 /** Project folder names: readable. */
@@ -206,6 +233,8 @@ function readme(summary: ExportSummary, createdAt: Date): string {
     '                 Files uploaded but never sent are under attachments/unsent/.',
     "projects/        Each project's files, in a folder per project. Project names",
     '                 and instructions are in manifest.json.',
+    'shared-projects/ Files you added to projects other people own and shared with',
+    '                 you, in a folder per project. Only the files you added are here.',
     'memory.json      What OCI remembers about you (Settings > Memory), newest',
     '                 first, whether or not memory is switched on.',
     'manifest.json    Counts, versions, and an index of every conversation.',
@@ -455,7 +484,7 @@ export async function* exportArchive(
   const projectIndex: Array<Record<string, unknown>> = [];
   for (const project of projects) {
     const folder = `projects/${projectFolders.get(project.id) as string}`;
-    const files = yield* writeAttachments(folder, await projectAttachments(owner.id, project.id));
+    const files = yield* writeAttachments(folder, await projectAttachments(project.id));
     projectIndex.push({
       id: project.id,
       name: project.name,
@@ -469,6 +498,17 @@ export async function* exportArchive(
       updatedAt: project.updatedAt.toISOString(),
     });
     summary.projects += 1;
+  }
+
+  // Projects shared with the person that they added files to: only those files,
+  // in shared-projects/<name>/, never the owner's instructions or other files.
+  const shared = await sharedProjectsWithOwnFiles(owner.id);
+  const sharedFolders = projectFolderNames(shared);
+  const sharedIndex: Array<Record<string, unknown>> = [];
+  for (const project of shared) {
+    const folder = `shared-projects/${sharedFolders.get(project.id) as string}`;
+    const files = yield* writeAttachments(folder, await projectAttachments(project.id, owner.id));
+    sharedIndex.push({ id: project.id, name: project.name, folder, files });
   }
 
   // Memories (v0.9): every entry, newest first, whatever the switches say:
@@ -520,6 +560,7 @@ export async function* exportArchive(
         excluded: ['trashed conversations', 'temporary chats', 'deleted attachments'],
         conversations: index,
         projects: projectIndex,
+        sharedProjects: sharedIndex,
         unsentAttachments: unsent,
         omittedAttachments: omitted,
       },

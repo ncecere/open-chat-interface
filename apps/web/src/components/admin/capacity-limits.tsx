@@ -350,23 +350,23 @@ export function ProviderCapacitySection() {
               aria-label="Capacity by provider"
               className="overflow-x-auto"
             >
-              <table className="w-full min-w-[36rem] text-left text-sm">
+              <table className="w-full min-w-[36rem] text-start text-sm">
                 <caption className="sr-only">Capacity by provider</caption>
                 <thead className="text-xs text-[var(--text-muted)]">
                   <tr>
-                    <th scope="col" className="py-2 pr-4 font-medium">
+                    <th scope="col" className="py-2 pe-4 font-medium">
                       Provider
                     </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
+                    <th scope="col" className="py-2 pe-4 font-medium">
                       Limits
                     </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
+                    <th scope="col" className="py-2 pe-4 font-medium">
                       Waiting
                     </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
+                    <th scope="col" className="py-2 pe-4 font-medium">
                       Streaming
                     </th>
-                    <th scope="col" className="py-2 pr-4 font-medium">
+                    <th scope="col" className="py-2 pe-4 font-medium">
                       Waited (1 h)
                     </th>
                     <th scope="col" className="py-2 font-medium">
@@ -384,10 +384,10 @@ export function ProviderCapacitySection() {
                         key={provider.providerId ?? index}
                         className="border-t border-[var(--border-subtle)] align-top"
                       >
-                        <th scope="row" className="py-2 pr-4 font-medium">
+                        <th scope="row" className="py-2 pe-4 font-medium">
                           {provider.label}
                         </th>
-                        <td className="py-2 pr-4 text-[var(--text-secondary)]">
+                        <td className="py-2 pe-4 text-[var(--text-secondary)]">
                           {limitsSummary(provider.limits)}
                           {limitedModels.map((model) => (
                             <span
@@ -398,9 +398,9 @@ export function ProviderCapacitySection() {
                             </span>
                           ))}
                         </td>
-                        <td className="py-2 pr-4">{number(provider.queued)}</td>
-                        <td className="py-2 pr-4">{number(provider.activeStreams)}</td>
-                        <td className="py-2 pr-4">
+                        <td className="py-2 pe-4">{number(provider.queued)}</td>
+                        <td className="py-2 pe-4">{number(provider.activeStreams)}</td>
+                        <td className="py-2 pe-4">
                           {number(provider.waitsLastHour)}
                           {provider.longestWaitSeconds !== null &&
                             ` (longest ${number(provider.longestWaitSeconds)} s)`}

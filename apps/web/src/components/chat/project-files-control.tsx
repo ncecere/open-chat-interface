@@ -2,6 +2,7 @@ import { FolderOpen } from 'lucide-react';
 import { useId } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { useProjectFiles, useProjectsAvailable } from '~/hooks/use-projects';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 interface ProjectFilesControlProps {
@@ -24,16 +25,18 @@ export function ProjectFilesControl({
   onExcludedChange,
   disabled = false,
 }: ProjectFilesControlProps) {
+  const t = useT();
   const headingId = useId();
   // Without the projects feature the server ignores the project, so there is nothing to choose.
   const available = useProjectsAvailable();
   const { data: files = [] } = useProjectFiles(projectId, available);
   if (!available || !files.some((file) => file.index.status === 'indexed')) return null;
   const left = new Set(excluded.filter((id) => files.some((file) => file.id === id)));
+  const included = files.length - left.size;
   const label =
     left.size === 0
-      ? 'Project files'
-      : `Project files: ${files.length - left.size} of ${files.length}`;
+      ? t('chat.projectFiles.label')
+      : t('chat.projectFiles.labelPartial', { included, total: files.length });
 
   function toggle(id: string, included: boolean) {
     const next = new Set(left);
@@ -61,18 +64,17 @@ export function ProjectFilesControl({
         >
           <FolderOpen className="size-4" aria-hidden="true" />
           <span className="hidden sm:inline">
-            {left.size === 0 ? 'Files' : `Files ${files.length - left.size}/${files.length}`}
+            {left.size === 0
+              ? t('chat.projectFiles.short')
+              : t('chat.projectFiles.shortPartial', { included, total: files.length })}
           </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-72 p-3">
         <p id={headingId} className="text-sm font-medium">
-          Project files for the next message
+          {t('chat.projectFiles.heading')}
         </p>
-        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-          Untick a file to leave it out of the next message. The reply says which files were left
-          out.
-        </p>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t('chat.projectFiles.hint')}</p>
         <ul
           aria-labelledby={headingId}
           className="mt-2 flex max-h-64 flex-col gap-1 overflow-y-auto"
@@ -91,6 +93,7 @@ export function ProjectFilesControl({
                 <label
                   htmlFor={id}
                   className="min-w-0 flex-1 truncate text-sm"
+                  dir="auto"
                   title={file.filename}
                 >
                   {file.filename}
@@ -105,7 +108,7 @@ export function ProjectFilesControl({
             onClick={() => onExcludedChange([])}
             className="mt-2 text-xs text-[var(--text-secondary)] underline-offset-2 hover:underline"
           >
-            Use all files
+            {t('chat.projectFiles.useAll')}
           </button>
         )}
       </PopoverContent>

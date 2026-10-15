@@ -351,6 +351,48 @@
       "when": 1790539200029,
       "tag": "0049_project_file_chunk_search_folded",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790539200030,
+      "tag": "0050_two_factor",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790539200031,
+      "tag": "0051_session_auth_method_passkeys",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1790539200032,
+      "tag": "0052_data_classification",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1790539200033,
+      "tag": "0053_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1790539200034,
+      "tag": "0054_project_shares",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1790539200035,
+      "tag": "0055_user_locale",
+      "breakpoints": true
     }
   ]
 }

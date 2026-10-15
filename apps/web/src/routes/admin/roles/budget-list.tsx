@@ -39,7 +39,7 @@ export function BudgetList({ access }: { access: RoleAccess }) {
           className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
         >
           <table className="w-full min-w-[32rem] text-sm">
-            <thead className="bg-[var(--bg-control-alt)] text-left text-[var(--text-muted)] text-xs">
+            <thead className="bg-[var(--bg-control-alt)] text-start text-[var(--text-muted)] text-xs">
               <tr>
                 <th scope="col" className="px-4 py-2 font-medium">
                   Name

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
@@ -32,6 +33,11 @@ export default defineConfig({
         changeOrigin: false,
       },
     },
+  },
+  test: {
+    // English is a lazily loaded chunk in the app; here it is loaded up front
+    // so `useT()` returns English in every test without awaiting anything.
+    setupFiles: ['./tests/unit/setup.ts'],
   },
   build: {
     outDir: 'dist',

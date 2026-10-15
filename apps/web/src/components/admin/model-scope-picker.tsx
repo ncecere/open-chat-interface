@@ -91,7 +91,7 @@ export function ModelScopePicker({
 
       <div className="relative">
         <Search
-          className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 size-4 text-[var(--text-muted)]"
+          className="-translate-y-1/2 pointer-events-none absolute top-1/2 start-3 size-4 text-[var(--text-muted)]"
           aria-hidden="true"
         />
         <Input
@@ -99,7 +99,7 @@ export function ModelScopePicker({
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search models or labs"
           aria-label="Search models"
-          className="pl-9"
+          className="ps-9"
         />
       </div>
 
@@ -122,7 +122,7 @@ export function ModelScopePicker({
                   onClick={() => toggleGroup(group.models)}
                   // One per lab group; each names its group (#220).
                   aria-label={`${allSelected ? 'Deselect' : 'Select'} all ${group.label} models`}
-                  className="text-[var(--accent)] text-xs hover:underline"
+                  className="text-[var(--accent-bright)] text-xs hover:underline"
                 >
                   {allSelected ? 'Deselect all' : 'Select all'}
                 </button>
@@ -134,7 +134,7 @@ export function ModelScopePicker({
                   <label
                     key={model.slug}
                     className={cn(
-                      'flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors',
+                      'flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-start text-sm transition-colors',
                       'hover:bg-[var(--bg-control-alt)] focus-within:bg-[var(--bg-control-alt)]',
                       checked && 'bg-[var(--accent)]/10',
                     )}
@@ -146,7 +146,9 @@ export function ModelScopePicker({
                       className="size-4 shrink-0 accent-[var(--accent)]"
                     />
                     <LabLogo labId={model.labId} />
-                    <span className="min-w-0 flex-1 truncate">{model.displayName}</span>
+                    <span className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+                      {model.displayName}
+                    </span>
                     {!model.enabled && (
                       <span className="shrink-0 text-[10px] text-[var(--text-muted)] uppercase">
                         Disabled

@@ -64,6 +64,17 @@ export default defineConfig({
         'src/services/storage/usage.ts': { statements: 90, branches: 60, functions: 100 },
         'src/services/jobs/lock.ts': { statements: 100, branches: 100, functions: 100 },
         'src/services/quota/policy.ts': { statements: 90, branches: 78, functions: 100 },
+        // v0.14 groups: membership and manager checks (who may change who belongs), the
+        // limits, the grants and the budget rule that adds groups to roles.
+        'src/services/groups/membership.ts': { statements: 100, branches: 95, functions: 100 },
+        'src/services/groups/groups.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/groups/name-clash.ts': { statements: 100, branches: 100, functions: 100 },
+        'src/services/groups/grants.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/groups/usage.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/groups/upgrade-guard.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/quota/applicability.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/routes/groups.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/routes/admin/groups.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/chat/attachment-context.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/chat/context-budget.ts': { statements: 100, branches: 90, functions: 100 },
         'src/services/chat/generation-settings.ts': {
@@ -214,6 +225,18 @@ export default defineConfig({
         'src/services/reranking/usage.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/project-search/rerank.ts': { statements: 95, branches: 95, functions: 100 },
         'src/routes/admin/reranking.ts': { statements: 95, branches: 95, functions: 100 },
+        // v0.14 data classification (#395): the decision that keeps labelled content from
+        // models and services not approved for it, the guard every enforcement point asks,
+        // the store that holds the labels, and the routes that set them.
+        'src/services/classification/resolve.ts': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+        },
+        'src/services/classification/guard.ts': { statements: 100, branches: 100, functions: 100 },
+        'src/services/classification/store.ts': { statements: 92, branches: 85, functions: 100 },
+        'src/routes/classification.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/routes/admin/classification.ts': { statements: 95, branches: 90, functions: 100 },
         // v0.11 three-phase migrations: the batch/cursor transaction and its lease,
         // throttles, administrator controls and the upgrade preflight.
         'src/services/migrations/background-runner.ts': {
@@ -232,6 +255,23 @@ export default defineConfig({
         // v0.11 read-only maintenance mode (what is refused, and what pauses) and
         // cross-replica cache invalidation.
         'src/middleware/read-only.ts': { statements: 98, branches: 90, functions: 100 },
+        // v0.14 two-step verification (#399): the gate that enforces the per-role
+        // requirement, the rules it and /api/me share, and the hooks, replay guard,
+        // enrolment, lockout, reset and requirement services around the plugin.
+        'src/middleware/mfa-gate.ts': { statements: 98, branches: 90, functions: 100 },
+        'src/auth/mfa.ts': { statements: 95, branches: 85, functions: 100 },
+        'src/auth/mfa-hooks.ts': { statements: 88, branches: 78, functions: 60 },
+        'src/auth/recovery-codes.ts': { statements: 95, branches: 85, functions: 100 },
+        'src/services/limits/code-replay.ts': { statements: 88, branches: 70, functions: 100 },
+        'src/services/mfa/credential.ts': { statements: 100, branches: 100, functions: 100 },
+        'src/services/mfa/enrolment.ts': { statements: 85, branches: 70, functions: 100 },
+        'src/services/mfa/lockout.ts': { statements: 88, branches: 70, functions: 100 },
+        'src/services/mfa/notify.ts': { statements: 95, branches: 70, functions: 100 },
+        'src/services/mfa/requirement.ts': { statements: 95, branches: 72, functions: 100 },
+        'src/services/mfa/reset.ts': { statements: 88, branches: 60, functions: 85 },
+        'src/services/mfa/state.ts': { statements: 95, branches: 78, functions: 100 },
+        'src/services/admin-users/mfa.ts': { statements: 95, branches: 55, functions: 100 },
+        'src/routes/me-mfa.ts': { statements: 95, branches: 45, functions: 100 },
         'src/services/maintenance/read-only.ts': { statements: 95, branches: 90, functions: 85 },
         'src/services/cache-bus/index.ts': { statements: 95, branches: 80, functions: 90 },
       },

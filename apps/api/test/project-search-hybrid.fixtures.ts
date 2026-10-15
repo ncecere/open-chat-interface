@@ -193,7 +193,11 @@ export function hybridHelpers(state: HybridState, context: () => HybridContext) 
     return { project: target, notes, stock };
   }
 
-  async function select(target: { id: string; userId: string; name: string }, text: string) {
+  async function select(
+    target: { id: string; userId: string; name: string },
+    text: string,
+    classification?: Parameters<typeof selectProjectFiles>[5],
+  ) {
     return selectProjectFiles(
       {
         id: target.id,
@@ -206,6 +210,7 @@ export function hybridHelpers(state: HybridState, context: () => HybridContext) 
       budget,
       false,
       text,
+      classification,
     );
   }
 

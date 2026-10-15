@@ -48,13 +48,13 @@ export function AdminAuditPage() {
             Search audit events
           </label>
           <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--text-muted)]"
+            className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-[var(--text-muted)]"
             aria-hidden="true"
           />
           <Input
             id="audit-search"
             type="search"
-            className="pl-9"
+            className="ps-9"
             placeholder="Search actor, action, target, or metadata…"
             value={search}
             onChange={(event) => {
@@ -104,7 +104,7 @@ export function AdminAuditPage() {
 
       {subject && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-control)] py-1 pr-1 pl-3">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-control)] py-1 pe-1 ps-3">
             Events by or about{' '}
             <span className="font-medium text-[var(--text-primary)]">
               {subject.email ?? subject.id}

@@ -1,6 +1,6 @@
 import type { SidebarProject, ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
-import { ChevronRight, Folder, Plus } from 'lucide-react';
+import { ChevronRight, Folder, LayoutList, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { ThreadRow } from '~/components/layout/thread-list';
 import { CreateProjectDialog } from '~/components/projects/project-dialogs';
@@ -8,7 +8,13 @@ import { Button } from '~/components/ui/button';
 import { useAutoRetry } from '~/hooks/use-auto-retry';
 import { useExpandedProjects } from '~/hooks/use-expanded-projects';
 import { type OpenConversation, useOpenConversation } from '~/hooks/use-open-conversation';
-import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
+import {
+  useProjectsAvailable,
+  useSidebarProjects,
+  useSidebarSharedProjects,
+} from '~/hooks/use-projects';
+import { useT } from '~/lib/i18n';
+import { accessLabel } from '~/lib/project-access';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
@@ -32,13 +38,16 @@ export function SidebarProjects() {
  * keeps it closed for that visit.
  */
 function ProjectsSection() {
+  const t = useT();
   const { data: projects, isLoading, isError, refetch } = useSidebarProjects();
   // Loads again by itself after an outage, rather than saying "could not be
   // loaded" until the page is reloaded (#233).
   useAutoRetry(isError, () => void refetch());
   const params = useParams({ strict: false }) as { projectId?: string; threadId?: string };
   const open = useOpenConversation(params.threadId);
-  const { expanded, toggle } = useExpandedProjects(projects);
+  // Projects shared with the person (v0.14) open and close like their own, in the same remembered set.
+  const { data: shared } = useSidebarSharedProjects();
+  const { expanded, toggle } = useExpandedProjects(projects && [...projects, ...(shared ?? [])]);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   // Off while read-only, as the conversations' Pin, Rename and Archive are (#331).
@@ -62,13 +71,21 @@ function ProjectsSection() {
           id="sidebar-projects-heading"
           className="min-w-0 flex-1 px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]"
         >
-          Projects
+          {t('shell.sidebarProjects.heading')}
         </h2>
+        <Link
+          to="/projects"
+          aria-label={t('shell.sidebarProjects.all')}
+          title={t('shell.sidebarProjects.all')}
+          className="flex size-6 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] [&_svg]:size-3.5"
+        >
+          <LayoutList aria-hidden="true" />
+        </Link>
         <Button
           type="button"
           variant="ghost"
-          aria-label="New project"
-          title="New project"
+          aria-label={t('shell.sidebarProjects.new')}
+          title={t('shell.sidebarProjects.new')}
           locked={lock.title}
           onClick={() => setCreating(true)}
           className="size-6 rounded px-0 text-[var(--text-muted)] [&_svg]:size-3.5"
@@ -79,7 +96,7 @@ function ProjectsSection() {
 
       {isLoading ? null : isError ? (
         <p className="px-2.5 py-1 text-xs text-[var(--text-muted)]">
-          Projects could not be loaded.
+          {t('shell.sidebarProjects.loadFailed')}
         </p>
       ) : (projects?.length ?? 0) === 0 ? (
         <Button
@@ -87,12 +104,12 @@ function ProjectsSection() {
           variant="ghost"
           locked={lock.title}
           onClick={() => setCreating(true)}
-          className="h-auto w-full justify-start whitespace-normal rounded-lg px-2.5 py-2 text-left text-xs text-[var(--text-muted)]"
+          className="h-auto w-full justify-start whitespace-normal rounded-lg px-2.5 py-2 text-start text-xs text-[var(--text-muted)]"
         >
-          Create a project to group conversations with shared instructions and files.
+          {t('shell.sidebarProjects.empty')}
         </Button>
       ) : (
-        <ul className="flex flex-col gap-0.5" aria-label="Projects">
+        <ul className="flex flex-col gap-0.5" aria-label={t('shell.sidebarProjects.heading')}>
           {projects?.map((project) => (
             <ProjectItem
               key={project.id}
@@ -105,6 +122,30 @@ function ProjectsSection() {
             />
           ))}
         </ul>
+      )}
+
+      {(shared?.length ?? 0) > 0 && (
+        <div className="mt-3">
+          <h3
+            id="sidebar-shared-heading"
+            className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]"
+          >
+            {t('shell.sidebarProjects.shared')}
+          </h3>
+          <ul className="flex flex-col gap-0.5" aria-label={t('shell.sidebarProjects.shared')}>
+            {shared?.map((project) => (
+              <ProjectItem
+                key={project.id}
+                project={project}
+                active={params.projectId === project.id}
+                expanded={isExpanded(project.id)}
+                onToggle={() => handleToggle(project.id)}
+                openThreadId={params.threadId}
+                open={open}
+              />
+            ))}
+          </ul>
+        </div>
       )}
 
       <CreateProjectDialog open={creating} onOpenChange={setCreating} />
@@ -166,7 +207,13 @@ function ProjectItem({
   openThreadId: string | undefined;
   open: OpenConversation | undefined;
 }) {
+  const t = useT();
   const listId = `sidebar-project-${project.id}`;
+  // Who owns a project shared with the person, and what they may do in it.
+  const sharedNote =
+    project.access && project.access !== 'owner'
+      ? `${project.ownerName ? `${project.ownerName} · ` : ''}${accessLabel(project.access)}`
+      : null;
   const rows = expanded ? projectRows(project, open) : [];
   // Pinned conversations are counted but listed in Pinned, so a project can
   // have more conversations than rows even with five or fewer.
@@ -184,16 +231,23 @@ function ProjectItem({
           type="button"
           aria-expanded={expanded}
           aria-controls={listId}
-          aria-label={`Conversations in ${project.name}`}
-          title={expanded ? 'Hide conversations' : 'Show conversations'}
+          aria-label={t('shell.sidebarProjects.conversationsIn', { name: project.name })}
+          title={t(
+            expanded
+              ? 'shell.sidebarProjects.hideConversations'
+              : 'shell.sidebarProjects.showConversations',
+          )}
           onClick={onToggle}
           // 24px is the WCAG 2.2 minimum target; the row's link fills the rest.
-          className="ml-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className="ms-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <ChevronRight
             className={cn(
               'size-3.5 transition-transform motion-reduce:transition-none',
-              expanded && 'rotate-90',
+              // Collapsed it points to where the text goes on (the other way in
+              // Arabic); open it points down in both. `rotate`, not a flip: a
+              // flipped chevron turned 90 degrees would point up.
+              expanded ? 'rotate-90' : 'rtl:rotate-180',
             )}
             aria-hidden="true"
           />
@@ -202,19 +256,37 @@ function ProjectItem({
           to="/projects/$projectId"
           params={{ projectId: project.id }}
           aria-current={active ? 'page' : undefined}
-          title={project.name}
-          className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2.5 pl-1 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          title={sharedNote ? `${project.name} · ${sharedNote}` : project.name}
+          className="flex min-w-0 flex-1 items-center gap-2 py-2 pe-2.5 ps-1 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         >
           <Folder className="size-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-          <span className="min-w-0 truncate">{project.name}</span>
+          <span className="min-w-0">
+            <span dir="auto" className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+              {project.name}
+            </span>
+            {sharedNote && (
+              <span
+                className={cn(
+                  'line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-[0.6875rem]',
+                  // The current project's row is tinted; muted text on the tint is under 4.5:1.
+                  active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-muted)]',
+                )}
+              >
+                {sharedNote}
+              </span>
+            )}
+          </span>
         </Link>
       </div>
 
       <div id={listId} hidden={!expanded}>
         {expanded && (
-          <div className="ml-4 border-l border-[var(--border-subtle)] pl-1.5">
+          <div className="ms-4 border-s border-[var(--border-subtle)] ps-1.5">
             {rows.length > 0 && (
-              <ul aria-label={`Conversations in ${project.name}`} className="flex flex-col gap-0.5">
+              <ul
+                aria-label={t('shell.sidebarProjects.conversationsIn', { name: project.name })}
+                className="flex flex-col gap-0.5"
+              >
                 {rows.map((thread) => (
                   <li key={thread.id}>
                     <ThreadRow thread={thread} active={thread.id === openThreadId} />
@@ -229,12 +301,17 @@ function ProjectItem({
                 search={{ tab: 'conversations' }}
                 className="block rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
               >
-                Show all ({project.threadCount})
-                <span className="sr-only"> conversations in {project.name}</span>
+                {t('shell.sidebarProjects.showAll', { count: project.threadCount })}
+                <span className="sr-only">
+                  {' '}
+                  {t('shell.sidebarProjects.showAllHidden', { name: project.name })}
+                </span>
               </Link>
             ) : (
               rows.length === 0 && (
-                <p className="px-2.5 py-1.5 text-xs text-[var(--text-muted)]">No conversations</p>
+                <p className="px-2.5 py-1.5 text-xs text-[var(--text-muted)]">
+                  {t('shell.sidebarProjects.noConversations')}
+                </p>
               )
             )}
           </div>

@@ -457,7 +457,10 @@ export function AdminBroadcastsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Full values on hover when a narrow screen cuts them short (#130). */}
-                  <p className="truncate font-medium" title={broadcast.title}>
+                  <p
+                    className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium"
+                    title={broadcast.title}
+                  >
                     {broadcast.title}
                   </p>
                   <Badge variant={LEVEL_VARIANTS[broadcast.level]}>
@@ -471,7 +474,7 @@ export function AdminBroadcastsPage() {
                   <p className="text-[var(--text-muted)] text-xs">{broadcastWindow(broadcast)}</p>
                 )}
                 <p
-                  className="truncate text-[var(--text-muted)] text-xs"
+                  className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-[var(--text-muted)] text-xs"
                   title={audienceOf(broadcast)}
                 >
                   {audienceOf(broadcast)}

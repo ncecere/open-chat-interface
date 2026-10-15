@@ -3,12 +3,15 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
-import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { SettingsConfirmDialog } from '~/components/settings/confirm-dialog';
+import { tWithUserText } from '~/components/settings/user-text';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { formatDate as formatDateStyle, type MessageKey, translate, useT } from '~/lib/i18n';
+import { toDate } from '~/lib/i18n/format';
 import { useReadOnlyLock } from '~/lib/read-only';
 
 const MY_SHARE_LINKS_KEY = ['me', 'share-links'] as const;
@@ -21,18 +24,14 @@ function statusOf(link: MyShareLink, now = Date.now()): Status {
   return 'active';
 }
 
-const STATUS_LABELS: Record<Status, string> = {
-  active: 'Active',
-  expired: 'Expired',
-  revoked: 'Revoked',
+const STATUS_LABELS: Record<Status, MessageKey> = {
+  active: 'settings.sharing.statusActive',
+  expired: 'settings.sharing.statusExpired',
+  revoked: 'settings.sharing.statusRevoked',
 };
 
 function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Unknown';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    date,
-  );
+  return toDate(value) ? formatDateStyle(value, 'dateTime') : translate('settings.sharing.unknown');
 }
 
 function shareUrl(slug: string): string | null {
@@ -51,8 +50,9 @@ function ShareLinkRow({
   onCopy: () => void;
   onRevoke: () => void;
 }) {
+  const t = useT();
   const status = statusOf(link);
-  const title = link.threadTitle || 'Untitled conversation';
+  const title = link.threadTitle || t('settings.sharing.untitled');
   // A change, refused while read-only: off, with the reason (#331).
   const lock = useReadOnlyLock();
   return (
@@ -62,14 +62,17 @@ function ShareLinkRow({
     >
       <div className="min-w-0 flex-1">
         {link.threadUnavailable ? (
-          <p className="truncate font-medium text-[var(--text-primary)]" title={title}>
+          <p
+            className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium text-[var(--text-primary)]"
+            title={title}
+          >
             {title}
           </p>
         ) : (
           <Link
             to="/chat/$threadId"
             params={{ threadId: link.threadId }}
-            className="block truncate font-medium text-[var(--text-primary)] underline-offset-2 hover:underline"
+            className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium text-[var(--text-primary)] underline-offset-2 hover:underline"
             // The full title on hover when a narrow screen cuts it short (#130).
             title={title}
           >
@@ -78,22 +81,33 @@ function ShareLinkRow({
         )}
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <Badge variant={status === 'active' ? 'success' : 'neutral'}>
-            {STATUS_LABELS[status]}
+            {t(STATUS_LABELS[status])}
           </Badge>
-          <Badge variant="neutral">{link.upToMessageId ? 'Snapshot' : 'Live'}</Badge>
+          <Badge variant="neutral">
+            {link.upToMessageId ? t('settings.sharing.snapshot') : t('settings.sharing.live')}
+          </Badge>
           {link.threadUnavailable && (
             <span className="text-xs text-[var(--text-muted)]">
-              Conversation in the trash or expired
+              {t('settings.sharing.unavailable')}
             </span>
           )}
         </div>
         <p className="mt-1.5 text-xs text-[var(--text-muted)]">
-          Created {formatDate(link.createdAt)} ·{' '}
-          {link.expiresAt
-            ? `${status === 'expired' ? 'Expired' : 'Expires'} ${formatDate(link.expiresAt)}`
-            : 'No expiration'}{' '}
-          · {link.viewCount} {link.viewCount === 1 ? 'view' : 'views'}
-          {link.revokedAt ? ` · Revoked ${formatDate(link.revokedAt)}` : ''}
+          {[
+            t('settings.sharing.created', { date: formatDate(link.createdAt) }),
+            link.expiresAt
+              ? t(
+                  status === 'expired'
+                    ? 'settings.sharing.expiredOn'
+                    : 'settings.sharing.expiresOn',
+                  { date: formatDate(link.expiresAt) },
+                )
+              : t('settings.sharing.noExpiration'),
+            t('settings.sharing.views', { count: link.viewCount }),
+            ...(link.revokedAt
+              ? [t('settings.sharing.revokedOn', { date: formatDate(link.revokedAt) })]
+              : []),
+          ].join(' · ')}
         </p>
       </div>
       {status !== 'revoked' && (
@@ -103,22 +117,22 @@ function ShareLinkRow({
               type="button"
               size="sm"
               variant="ghost"
-              aria-label={`Copy the link to ${title}`}
+              aria-label={t('settings.sharing.copyLabel', { title })}
               onClick={onCopy}
             >
               {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? t('settings.sharing.copied') : t('settings.sharing.copy')}
             </Button>
           )}
           <Button
             type="button"
             size="sm"
             variant="secondary"
-            aria-label={`Revoke the link to ${title}`}
+            aria-label={t('settings.sharing.revokeLabel', { title })}
             locked={lock.title}
             onClick={onRevoke}
           >
-            Revoke
+            {t('settings.sharing.revoke')}
           </Button>
         </div>
       )}
@@ -132,6 +146,7 @@ function ShareLinkRow({
  * made earlier can still be taken down.
  */
 export function SettingsSharingPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const { data: me } = useCurrentUser();
   const [revoking, setRevoking] = useState<MyShareLink | null>(null);
@@ -171,54 +186,48 @@ export function SettingsSharingPage() {
       setCopiedId(link.id);
       window.setTimeout(() => setCopiedId((id) => (id === link.id ? null : id)), 1500);
     } catch {
-      setNotice('The link could not be copied. Open the conversation to copy it from there.');
+      setNotice(t('settings.sharing.copyFailed'));
     }
   }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Sharing</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Every public link you have made to a conversation. Anybody with a link can read what it
-        shows, without an account. Revoking a link makes it stop working at once.
-      </p>
+      <h1 className="text-2xl font-bold">{t('settings.sharing.title')}</h1>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">{t('settings.sharing.subtitle')}</p>
 
       {sharingOff && (
         <p
           role="note"
           className="mt-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-inset)] p-3 text-sm text-[var(--text-secondary)]"
         >
-          Making new share links is turned off for your account. You can still revoke the links you
-          made before.
+          {t('settings.sharing.off')}
         </p>
       )}
 
       {links.isLoading ? (
-        <div className="py-16" role="status" aria-label="Loading share links">
+        <div className="py-16" role="status" aria-label={t('settings.sharing.loading')}>
           <Spinner className="mx-auto size-6" />
         </div>
       ) : links.isError ? (
         <p role="alert" className="mt-8 text-sm text-[var(--danger)]">
-          {apiErrorMessage(links.error, 'Your share links could not be loaded. Try again.')}
+          {apiErrorMessage(links.error, t('settings.sharing.loadFailed'))}
         </p>
       ) : list.length === 0 ? (
         <p className="mt-10 text-sm text-[var(--text-muted)]">
           {/* No instructions for something this account cannot do (#99). */}
-          {sharingOff
-            ? 'You have no share links.'
-            : 'You have not shared any conversations. To share one, open it and choose Share conversation.'}
+          {sharingOff ? t('settings.sharing.noneOff') : t('settings.sharing.none')}
         </p>
       ) : (
         <section className="mt-8" aria-labelledby="share-links-heading">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 id="share-links-heading" className="text-xl font-bold">
-              Your shared links
+              {t('settings.sharing.listTitle')}
             </h2>
             <div className="flex items-center gap-3">
               {/* Counts without a double negative; "0 of 1 not revoked" (#254).
                   `active` is every link not revoked, expired ones included. */}
               <span className="text-sm text-[var(--text-muted)]">
-                {total} {total === 1 ? 'link' : 'links'} · {total - active} revoked
+                {t('settings.sharing.counts', { total, revoked: total - active })}
               </span>
               <Button
                 type="button"
@@ -228,14 +237,14 @@ export function SettingsSharingPage() {
                 disabled={active === 0}
                 onClick={() => setRevokingAll(true)}
               >
-                Revoke all
+                {t('settings.sharing.revokeAll')}
               </Button>
             </div>
           </div>
           <p role="status" aria-live="polite" className="mt-2 text-xs text-[var(--text-muted)]">
             {notice}
           </p>
-          <ul aria-label="Your shared links" className="mt-2 flex flex-col">
+          <ul aria-label={t('settings.sharing.listTitle')} className="mt-2 flex flex-col">
             {list.map((link) => (
               <ShareLinkRow
                 key={link.id}
@@ -256,59 +265,52 @@ export function SettingsSharingPage() {
                 onClick={() => void links.fetchNextPage()}
               >
                 {links.isFetchingNextPage && <Spinner />}
-                Show more
+                {t('settings.sharing.showMore')}
               </Button>
             </div>
           )}
         </section>
       )}
 
-      <ConfirmDialog
+      <SettingsConfirmDialog
         open={revoking !== null}
         onOpenChange={(open) => {
           if (!open) setRevoking(null);
         }}
-        title="Revoke this link?"
+        title={t('settings.sharing.revokeTitle')}
         description={
-          <>
-            {/* The title quoted, so it does not run into the sentence (#254). */}
-            The link to {revoking?.threadTitle ? `“${revoking.threadTitle}”` : 'this conversation'}{' '}
-            stops working at once. Anyone who opened it before keeps what they saved or copied. A
-            revoked link cannot be turned back on; you can make a new one from the conversation.
-          </>
+          // The title quoted, so it does not run into the sentence (#254).
+          revoking?.threadTitle
+            ? tWithUserText(
+                t,
+                'settings.sharing.revokeDescriptionNamed',
+                { title: revoking.threadTitle },
+                ['title'],
+              )
+            : t('settings.sharing.revokeDescription')
         }
-        confirmLabel="Revoke link"
-        pendingLabel="Revoking…"
-        errorMessage="The link could not be revoked."
+        confirmLabel={t('settings.sharing.revokeConfirm')}
+        pendingLabel={t('settings.sharing.revoking')}
+        errorMessage={t('settings.sharing.revokeFailed')}
         onConfirm={async () => {
           if (!revoking) return;
           await api.delete(`/share-links/links/${encodeURIComponent(revoking.id)}`);
-          setNotice('The link has been revoked.');
+          setNotice(t('settings.sharing.revoked'));
           await refresh();
         }}
       />
 
-      <ConfirmDialog
+      <SettingsConfirmDialog
         open={revokingAll}
         onOpenChange={setRevokingAll}
-        title={active === 1 ? 'Revoke your share link?' : `Revoke all ${active} share links?`}
-        description={
-          <>
-            Every link you have made stops working at once, including links that have expired, so
-            none can work again. Anyone who opened them before keeps what they saved or copied. This
-            cannot be undone.
-          </>
-        }
-        confirmLabel="Revoke all"
-        pendingLabel="Revoking…"
-        errorMessage="Your links could not be revoked."
+        title={t('settings.sharing.revokeAllTitle', { count: active })}
+        description={t('settings.sharing.revokeAllDescription')}
+        confirmLabel={t('settings.sharing.revokeAll')}
+        pendingLabel={t('settings.sharing.revoking')}
+        errorMessage={t('settings.sharing.revokeAllFailed')}
         onConfirm={async () => {
           const result = await api.post<{ revoked: number }>('/me/share-links/revoke-all');
-          setNotice(
-            result.revoked === 1
-              ? '1 link has been revoked.'
-              : `${result.revoked} links have been revoked.`,
-          );
+          setNotice(t('settings.sharing.revokedMany', { count: result.revoked }));
           await refresh();
         }}
       />

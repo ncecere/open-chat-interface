@@ -2,6 +2,7 @@ import { type ArtifactKind, artifactFileType, safeFileStem } from '@oci/shared';
 import type { ArtifactDraft } from '~/components/artifacts/artifact-drafts';
 import type { ArtifactRef } from '~/components/artifacts/artifacts-context';
 import { saveBlob } from '~/lib/api-client';
+import { formatDate as formatDateTime } from '~/lib/i18n';
 
 export type View = 'preview' | 'source' | 'versions';
 
@@ -46,10 +47,7 @@ export function download(
 }
 
 export function formatDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  return formatDateTime(value, 'dateTime');
 }
 
 export const viewKey = (view: PanelView) =>

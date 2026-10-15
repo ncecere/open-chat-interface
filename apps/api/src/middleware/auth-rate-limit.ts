@@ -3,6 +3,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { clientIp } from '../lib/client-ip.js';
 import { hashToken } from '../lib/crypto.js';
+import { rateLimited } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { recordAudit } from '../services/audit.js';
 import {
@@ -26,6 +27,8 @@ import {
  *   (`RATE_LIMIT_AUTH_ADDRESS_PER_MINUTE`); a successful sign-in is refunded;
  * - sign-up, password reset and verification requests per account and per
  *   address, every request counted;
+ * - wrong second-step codes (authenticator, recovery code, passkey) per
+   challenge and per address, refunded when the code works (v0.14);
  * - password and email changes per session;
  * - single sign-on callbacks per identity provider
  *   (`RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE`), with failed ones also per
@@ -45,6 +48,10 @@ const POST_KINDS = new Map<string, AuthRequestKind>([
   ['/send-verification-email', 'request'],
   ['/change-password', 'session'],
   ['/change-email', 'session'],
+  // The second step (v0.14, #399): wrong codes count, per challenge and address.
+  ['/two-factor/verify-totp', 'second-factor'],
+  ['/two-factor/verify-backup-code', 'second-factor'],
+  ['/passkey/verify-authentication', 'second-factor'],
 ]);
 const GET_KINDS = new Map<string, AuthRequestKind>([['/verify-email', 'request']]);
 const GET_PREFIXES: Array<[string, AuthRequestKind]> = [['/reset-password/', 'request']];
@@ -111,6 +118,21 @@ async function submittedEmail(c: Context): Promise<string | null> {
   }
 }
 
+/**
+ * A hash of the second step's challenge: the signed `two_factor` cookie while
+ * signing in, else the session cookie (confirming or managing while signed in),
+ * so attempts are counted without storing either.
+ */
+function challengeKey(c: Context): string | null {
+  const challenge =
+    getCookie(c, 'oci.two_factor') ??
+    getCookie(c, '__Secure-oci.two_factor') ??
+    // A passkey sign-in's challenge (the plugin's cookie name, under OCI's prefix).
+    getCookie(c, 'oci.better-auth-passkey') ??
+    getCookie(c, '__Secure-oci.better-auth-passkey');
+  return challenge ? hashToken(challenge).slice(0, 32) : sessionKey(c);
+}
+
 /** A hash of the session cookie, so a session's attempts are counted without storing it. */
 function sessionKey(c: Context): string | null {
   const token =
@@ -136,7 +158,8 @@ function limitAddress(c: Context): string | null {
  * carrying `error=` when it failed.
  */
 function succeeded(kind: AuthRequestKind, response: Response): boolean {
-  if (kind === 'credential') return response.status >= 200 && response.status < 300;
+  if (kind === 'credential' || kind === 'second-factor')
+    return response.status >= 200 && response.status < 300;
   if (kind === 'sso-callback') {
     if (response.status < 300 || response.status >= 400) return false;
     const location = response.headers.get('location') ?? '';
@@ -158,6 +181,7 @@ export const authRateLimitMiddleware: MiddlewareHandler = async (c, next) => {
     ipAddress,
     identifier: email,
     session: match.kind === 'session' ? sessionKey(c) : null,
+    challenge: match.kind === 'second-factor' ? challengeKey(c) : null,
     provider: match.provider,
   });
   if (result.allowed) {
@@ -205,3 +229,43 @@ export const authRateLimitMiddleware: MiddlewareHandler = async (c, next) => {
     { 'retry-after': String(result.retryAfterSeconds) },
   );
 };
+
+/**
+ * The second-step limit for OCI's own MFA routes (`/api/me/mfa/*`), which are
+ * not under /api/auth: wrong passwords and codes count per session and per
+ * address, as at sign-in, and are refunded when the request works. Returns the
+ * refund to call on success; throws a 429 (with Retry-After) when over the
+ * limit, auditing the first refusal in a window once.
+ */
+export async function enforceSecondFactorLimit(c: Context): Promise<() => Promise<void>> {
+  const result = await authRateLimit({
+    kind: 'second-factor',
+    ipAddress: limitAddress(c),
+    challenge: sessionKey(c),
+  });
+  if (!result.allowed) {
+    if (result.firstRefusal) {
+      logger.warn({ path: c.req.path, scope: result.scope }, 'Authentication rate limit reached');
+      await recordAudit({
+        actorUserId: c.get('user')?.id ?? null,
+        actorEmail: c.get('user')?.email ?? null,
+        action: 'auth.rate_limited',
+        targetType: 'session',
+        targetId: null,
+        ipAddress: clientIp(c),
+        metadata: {
+          path: c.req.path,
+          scope: result.scope,
+          limit: result.limit,
+          retryAfterSeconds: result.retryAfterSeconds,
+        },
+      });
+    }
+    throw rateLimited(AUTH_RATE_LIMIT_MESSAGE, result.retryAfterSeconds);
+  }
+  return async () => {
+    await Promise.all(result.refundOnSuccess.map((key) => refundRateLimit(key))).catch((error) =>
+      logger.warn({ error }, 'Could not refund an authentication attempt'),
+    );
+  };
+}

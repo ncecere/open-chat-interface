@@ -7,11 +7,13 @@ import { CompactionDivider } from '~/components/chat/compaction-divider';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
 import type { EditMessage } from '~/components/chat/message-editor';
 import { MessageRow, messageExcerptOf } from '~/components/chat/message-row';
+import { replyOutcomeOf, useReplyAnnouncement } from '~/components/chat/reply-announcement';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
 import { replySearchOf, SearchLoading } from '~/components/chat/search-grounding';
 import { type AnswerApproval, toolLimitOf, toolStepsOf } from '~/components/chat/tool-steps';
 import type { HistoryControls } from '~/hooks/use-history-pages';
 import { useWindowedRows } from '~/hooks/use-windowed-rows';
+import { useT } from '~/lib/i18n';
 import { repeatedOpeningPositions } from '~/lib/message-excerpt';
 
 interface MessageListProps {
@@ -19,6 +21,11 @@ interface MessageListProps {
   /** The saved conversation, for exporting replies as files. */
   threadId?: string;
   streaming: boolean;
+  /**
+   * The conversation shows an error of its own as an alert: a reply that ended
+   * with it is not announced as complete (the alert says so).
+   */
+  replyFailed?: boolean;
   onRetry: () => void;
   searching?: boolean;
   onEdit?: EditMessage;
@@ -74,6 +81,7 @@ export const MessageList = memo(function MessageList({
   messages,
   threadId,
   streaming,
+  replyFailed = false,
   onRetry,
   onEdit,
   onFork,
@@ -86,10 +94,13 @@ export const MessageList = memo(function MessageList({
   history,
   anchorId,
 }: MessageListProps) {
+  const t = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const last = messages.at(-1);
   const lastIsAssistant = last?.role === 'assistant';
   const switchable = Boolean(replySwitch) && lastIsAssistant;
+  // Told once when a reply starts and once when it ends, never its words (4.1.3).
+  const replyStatus = useReplyAnnouncement(streaming, replyOutcomeOf(last, replyFailed));
   const lastText = lastIsAssistant ? textOf(last) : '';
   const lastReasoning = lastIsAssistant ? reasoningOf(last) : '';
   // A tool step is visible progress too, for example "Searching the web…".
@@ -103,7 +114,9 @@ export const MessageList = memo(function MessageList({
           toolLimitOf(last) ||
           capacityWaitOf(last)?.state === 'waiting')),
   );
-  const waitingLabel = lastReasoning ? 'Thinking' : 'Generating response';
+  const waitingLabel = lastReasoning
+    ? t('chat.messageList.thinking')
+    : t('chat.messageList.generating');
   // Once the search's step is in the reply's block, the wait is for the model.
   const searched = lastIsAssistant && replySearchOf(last).presearch !== null;
 
@@ -246,7 +259,7 @@ export const MessageList = memo(function MessageList({
               {[0, 1, 2].map((dot) => (
                 <span
                   key={dot}
-                  className="size-1.5 animate-bounce rounded-full bg-[var(--text-muted)]"
+                  className="size-1.5 animate-bounce rounded-full motion-reduce:animate-none bg-[var(--text-muted)]"
                   style={{ animationDelay: `${dot * 0.15}s` }}
                 />
               ))}
@@ -254,6 +267,19 @@ export const MessageList = memo(function MessageList({
           )}
         </div>
       )}
+
+      {/* Always there, so the text that arrives in it is announced. Apart from the
+          history status above, so neither repeats the other. A failure is the
+          page's alert, not this. */}
+      <span
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-reply-status=""
+        className="sr-only"
+      >
+        {replyStatus}
+      </span>
     </div>
   );
 });
@@ -294,6 +320,7 @@ function EarlierMessages({
   history: HistoryControls;
   scrollRef?: RefObject<HTMLElement | null>;
 }) {
+  const t = useT();
   const { hasOlder, loading, error, loadOlder, announcement } = history;
   const button = useRef<HTMLButtonElement>(null);
   const start = useRef<HTMLParagraphElement>(null);
@@ -327,11 +354,13 @@ function EarlierMessages({
           aria-disabled={loading === 'older' ? true : undefined}
           className="rounded-full border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         >
-          {loading === 'older' ? 'Loading earlier messages…' : 'Load earlier messages'}
+          {loading === 'older'
+            ? t('chat.messageList.loadingEarlier')
+            : t('chat.messageList.loadEarlier')}
         </button>
       ) : (
         <p ref={start} tabIndex={-1} className="outline-none">
-          This is the start of the conversation.
+          {t('chat.messageList.startOfConversation')}
         </p>
       )}
       {error && <p role="alert">{error}</p>}
@@ -354,6 +383,7 @@ function HistoryGap({
   history: HistoryControls;
   scrollRef?: RefObject<HTMLElement | null>;
 }) {
+  const t = useT();
   const { loading, loadGap } = history;
   const element = useRef<HTMLDivElement>(null);
   useNearView(
@@ -374,7 +404,7 @@ function HistoryGap({
       data-history-gap=""
       className="flex items-center gap-3 py-2 text-sm text-[var(--text-muted)]"
     >
-      <span className="sr-only">Some messages here are not loaded yet.</span>
+      <span className="sr-only">{t('chat.messageList.gapNotLoaded')}</span>
       <span aria-hidden="true" className="h-px flex-1 bg-[var(--border-subtle)]" />
       <button
         type="button"
@@ -382,7 +412,7 @@ function HistoryGap({
         aria-disabled={loading === 'gap' ? true : undefined}
         className="rounded-full border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
       >
-        {loading === 'gap' ? 'Loading messages…' : 'Load more messages'}
+        {loading === 'gap' ? t('chat.messageList.loadingMore') : t('chat.messageList.loadMore')}
       </button>
       <span aria-hidden="true" className="h-px flex-1 bg-[var(--border-subtle)]" />
     </div>

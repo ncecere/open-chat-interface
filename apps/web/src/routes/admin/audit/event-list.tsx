@@ -30,7 +30,7 @@ export function DesktopEventTable({
       aria-label="Audit events"
       className="relative hidden overflow-x-auto xl:block"
     >
-      <table className="w-full min-w-[48rem] table-fixed text-left text-sm">
+      <table className="w-full min-w-[48rem] table-fixed text-start text-sm">
         <caption className="sr-only">Administrative and security audit events</caption>
         <thead>
           <tr className="border-b border-[var(--border-subtle)] text-xs uppercase tracking-wider text-[var(--text-muted)]">
@@ -46,7 +46,7 @@ export function DesktopEventTable({
             <th scope="col" className="w-[28%] px-4 py-3 font-medium">
               Target
             </th>
-            <th scope="col" className="w-[14%] px-4 py-3 text-right font-medium">
+            <th scope="col" className="w-[14%] px-4 py-3 text-end font-medium">
               Details
             </th>
           </tr>
@@ -66,14 +66,14 @@ export function DesktopEventTable({
                   </td>
                   <td className="px-4 py-3 align-top">
                     <p
-                      className="truncate font-medium text-[var(--text-primary)]"
+                      className="[overflow-wrap:anywhere] font-medium text-[var(--text-primary)]"
                       title={actorLabel(entry)}
                     >
                       {actorLabel(entry)}
                     </p>
                     {entry.actorEmail && entry.actorUserId && (
                       <p
-                        className="mt-0.5 truncate font-mono text-xs text-[var(--text-muted)]"
+                        className="mt-0.5 [overflow-wrap:anywhere] font-mono text-xs text-[var(--text-muted)]"
                         title={entry.actorUserId}
                       >
                         {entry.actorUserId}
@@ -82,20 +82,20 @@ export function DesktopEventTable({
                   </td>
                   <td className="px-4 py-3 align-top">
                     <Badge variant="soft" className="max-w-full font-mono font-medium">
-                      <span className="truncate" title={entry.action}>
+                      <span className="[overflow-wrap:anywhere]" title={entry.action}>
                         {entry.action}
                       </span>
                     </Badge>
                   </td>
                   <td className="px-4 py-3 align-top">
                     <p
-                      className="truncate font-mono text-xs text-[var(--text-secondary)]"
+                      className="[overflow-wrap:anywhere] font-mono text-xs text-[var(--text-secondary)]"
                       title={targetLabel(entry)}
                     >
                       <TargetCell entry={entry} />
                     </p>
                   </td>
-                  <td className="px-4 py-2 text-right align-top">
+                  <td className="px-4 py-2 text-end align-top">
                     <DetailsButton
                       entry={entry}
                       expanded={expanded}
@@ -140,11 +140,14 @@ export function MobileEventList({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <Badge variant="soft" className="max-w-full font-mono font-medium">
-                  <span className="truncate" title={entry.action}>
+                  <span className="[overflow-wrap:anywhere]" title={entry.action}>
                     {entry.action}
                   </span>
                 </Badge>
-                <p className="mt-2 truncate text-sm font-medium" title={actorLabel(entry)}>
+                <p
+                  className="mt-2 [overflow-wrap:anywhere] text-sm font-medium"
+                  title={actorLabel(entry)}
+                >
                   {actorLabel(entry)}
                 </p>
               </div>
@@ -168,7 +171,7 @@ export function MobileEventList({
               <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-2">
                 <dt className="text-[var(--text-muted)]">Target</dt>
                 <dd
-                  className="truncate font-mono text-[var(--text-secondary)]"
+                  className="[overflow-wrap:anywhere] font-mono text-[var(--text-secondary)]"
                   title={targetLabel(entry)}
                 >
                   {targetLabel(entry)}

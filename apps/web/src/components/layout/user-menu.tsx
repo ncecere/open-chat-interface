@@ -10,9 +10,19 @@ import {
 } from '~/components/ui/dropdown-menu';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
+import { type MessageKey, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
+/** The role as a person reads it; one that has no entry is shown as the server names it. */
+const ROLE_LABELS: Record<string, MessageKey> = {
+  admin: 'shell.userMenu.roleAdmin',
+  auditor: 'shell.userMenu.roleAuditor',
+  user: 'shell.userMenu.roleUser',
+  restricted: 'shell.userMenu.roleRestricted',
+};
+
 export function UserMenu({ compact = false }: { compact?: boolean }) {
+  const t = useT();
   const { data } = useCurrentUser();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -36,9 +46,9 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label={compact ? 'Open user menu' : undefined}
+        aria-label={compact ? t('shell.userMenu.open') : undefined}
         className={cn(
-          'flex items-center gap-3 rounded-lg text-left transition-colors hover:bg-[var(--bg-control)]',
+          'flex items-center gap-3 rounded-lg text-start transition-colors hover:bg-[var(--bg-control)]',
           compact ? 'rounded-full p-1' : 'w-full px-2 py-2',
         )}
       >
@@ -59,11 +69,11 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           </span>
         )}
         <span className={cn('min-w-0 flex-1', compact && 'hidden')}>
-          <span className="block truncate text-sm font-medium text-[var(--text-primary)]">
+          <span className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm font-medium text-[var(--text-primary)]">
             {user.name}
           </span>
-          <span className="block truncate text-xs capitalize text-[var(--text-muted)]">
-            {user.role}
+          <span className="block [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]">
+            {ROLE_LABELS[user.role] ? t(ROLE_LABELS[user.role] as MessageKey) : user.role}
           </span>
         </span>
       </DropdownMenuTrigger>
@@ -74,7 +84,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
             <DropdownMenuItem asChild>
               <Link to="/admin">
                 <Shield />
-                Admin dashboard
+                {t('shell.userMenu.adminDashboard')}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -84,15 +94,15 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         <DropdownMenuItem asChild>
           <Link to="/settings">
             <Settings />
-            Settings
+            {t('shell.userMenu.settings')}
           </Link>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
         <DropdownMenuItem onSelect={handleSignOut}>
-          <LogOut />
-          Sign out
+          <LogOut className="rtl:-scale-x-100" />
+          {t('shell.userMenu.signOut')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

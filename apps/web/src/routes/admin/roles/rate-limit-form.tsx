@@ -99,7 +99,7 @@ export function RateLimitForm({ access }: { access: RoleAccess }) {
           <MutationError
             error={save.error}
             message={`Rate limits for the ${role} role could not be saved.`}
-            className="mr-auto"
+            className="me-auto"
           />
           <SavedNote show={saved} />
           <Button

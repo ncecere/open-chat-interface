@@ -291,6 +291,39 @@ export async function runSmoke({
       await step('project files', () =>
         call(user, 'GET', `/api/projects/${projectId}/files`).then(() => 'ok'),
       );
+      // Data classification (0.14, #395): the new tables and triggers under the
+      // new release. Absent from the previous release, where it is skipped.
+      if (adminIn)
+        await step('data classification: labels, a move and a deletion', async () => {
+          const made = await call(admin, 'POST', '/api/admin/data-classes', {
+            body: { name: `Smoke ${label} ${randomUUID().slice(0, 8)}` },
+            expect: [201],
+          });
+          const classId = made.json?.id;
+          if (!classId) throw new Error('no class id');
+          await call(admin, 'GET', '/api/admin/classification', { check: has('mode') });
+          await call(user, 'GET', '/api/data-classes', { check: has('classes') });
+          await call(user, 'PUT', `/api/projects/${projectId}/data-classes`, {
+            body: { classIds: [classId] },
+            check: (j) => (j?.classes?.length === 1 ? null : 'the project was not labelled'),
+          });
+          const made2 = await call(user, 'POST', '/api/threads', {
+            body: { title: 'Smoke labelled chat', projectId },
+            expect: [201],
+          });
+          const threadId = made2.json.thread.id;
+          await call(user, 'POST', `/api/threads/${threadId}/data-classes`, {
+            body: { classId },
+            expect: [200, 201],
+          });
+          // Out of its project: the trigger keeps the project's label on it.
+          await call(user, 'PATCH', `/api/threads/${threadId}`, { body: { projectId: null } });
+          await call(user, 'DELETE', `/api/threads/${threadId}`);
+          await call(user, 'PUT', `/api/projects/${projectId}/data-classes`, {
+            body: { classIds: [] },
+          });
+          return 'ok';
+        });
       await step('project delete', () =>
         call(user, 'DELETE', `/api/projects/${projectId}`).then(() => 'ok'),
       );

@@ -2,6 +2,7 @@ import {
   MAX_FILES_PER_PROJECT,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
+  type ProjectAccessLevel,
   type ProjectFile,
   type ProjectSummary,
 } from '@oci/shared';
@@ -16,6 +17,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import { ShareProjectButton } from '~/components/projects/share-dialog';
+import { TransferProjectSection } from '~/components/projects/transfer-dialog';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
@@ -28,6 +31,7 @@ import {
   useProject,
   useProjectFiles,
   useProjectThreads,
+  useRefreshOnAccessLoss,
   useUpdateProject,
   useUploadProjectFiles,
 } from '~/hooks/use-projects';
@@ -38,45 +42,41 @@ import {
   validateProjectSearch,
 } from '~/lib/chat-search-params';
 import { usePageTitle } from '~/lib/document-title';
+import { formatDate, formatFileSize, type Translate, useT } from '~/lib/i18n';
+import { accessLabel, accessOf, projectControls } from '~/lib/project-access';
+import { isolate } from '~/lib/projects-text';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
+import { ProjectAccessSections } from './project-access-section';
+import { ProjectLabelsSection } from './project-labels';
 import { DeleteProjectSection, Section } from './project-sections';
 
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} bytes`;
+/** The tabs, named in the person's language; the ids are what the address carries. */
+function projectTabs(t: Translate): readonly PillTab<ProjectTab>[] {
+  return [
+    { id: 'conversations', label: t('projects.page.tabConversations') },
+    { id: 'instructions', label: t('projects.page.tabInstructions') },
+    { id: 'files', label: t('projects.page.tabFiles') },
+    { id: 'settings', label: t('projects.page.tabSettings') },
+  ];
 }
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
-}
-
-const TABS: readonly PillTab<ProjectTab>[] = [
-  { id: 'conversations', label: 'Conversations' },
-  { id: 'instructions', label: 'Instructions' },
-  { id: 'files', label: 'Files' },
-  { id: 'settings', label: 'Settings' },
-];
 
 /** A list row, divided by a rule as on the settings pages. */
 const ROW = 'flex items-center gap-3 border-b border-[var(--border-subtle)] py-3 last:border-0';
 
 /** Whether a file can be searched when the project is too large to send whole. */
-function indexStatusLabel(index: ProjectFile['index'] | undefined): string {
+function indexStatusLabel(index: ProjectFile['index'] | undefined, t: Translate): string {
   switch (index?.status) {
     case 'indexed':
       // Said in the row itself, not a tooltip: a long file whose end cannot be
       // searched otherwise looks fully searchable and answers come up empty.
       return index.truncated
-        ? `Partly searchable · first ${index.passages.toLocaleString()} passages; the rest of the file is too long to search`
-        : `Searchable · ${index.passages} ${index.passages === 1 ? 'passage' : 'passages'}`;
+        ? t('projects.files.indexPartial', { passages: index.passages })
+        : t('projects.files.indexed', { passages: index.passages });
     case 'no-text':
-      return 'No text to search';
+      return t('projects.files.indexNoText');
     default:
-      return 'Waiting to be indexed';
+      return t('projects.files.indexWaiting');
   }
 }
 
@@ -85,8 +85,12 @@ function indexStatusLabel(index: ProjectFile['index'] | undefined): string {
  * its own tab, and the way to start a new conversation inside it.
  */
 export function ProjectPage({ projectId }: { projectId: string }) {
+  const t = useT();
   const { data: me } = useCurrentUser();
   const project = useProject(me?.features.projects ? projectId : undefined);
+  // A project that was on screen and now answers 404 lost its access mid-session (v0.14).
+  const opened = useRef<string | null>(null);
+  if (project.data) opened.current = projectId;
   // Nothing started from a project is temporary; do not leave the top bar's
   // temporary-chat control highlighted here.
   const { temporary, setTemporary } = useTemporaryChat();
@@ -98,19 +102,19 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   const unavailable =
     Boolean(me) &&
     (!me?.features.projects || (!project.isLoading && (Boolean(project.error) || !project.data)));
-  usePageTitle(unavailable ? null : (project.data?.name ?? 'Project'));
+  usePageTitle(unavailable ? null : (project.data?.name ?? t('projects.page.documentTitle')));
 
   if (me && !me.features.projects) {
     return (
       <UnavailableState
-        title="Projects unavailable"
+        title={t('projects.common.unavailableTitle')}
         actions={
           <Button asChild>
-            <Link to="/">New chat</Link>
+            <Link to="/">{t('projects.common.newChat')}</Link>
           </Button>
         }
       >
-        Projects are not available for your role.
+        {t('projects.common.unavailableBody')}
       </UnavailableState>
     );
   }
@@ -119,7 +123,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
     return (
       <PageFrame>
         <div className="flex items-center gap-2 py-12 text-sm text-[var(--text-muted)]">
-          <Spinner /> Loading project…
+          <Spinner /> {t('projects.page.loading')}
         </div>
       </PageFrame>
     );
@@ -127,30 +131,41 @@ export function ProjectPage({ projectId }: { projectId: string }) {
 
   if (project.error || !project.data) {
     const missing = project.error instanceof ApiError && project.error.status === 404;
+    // 404 is also what a project the person never had answers, so only a project
+    // that was open a moment ago can be called "no longer yours".
+    const lost = missing && opened.current === projectId;
     return (
       <UnavailableState
         alert
-        title={missing ? 'Project not found' : 'Could not load project'}
+        title={
+          lost
+            ? t('projects.page.lostTitle')
+            : missing
+              ? t('projects.page.missingTitle')
+              : t('projects.page.loadErrorTitle')
+        }
         actions={
           missing ? (
             <Button asChild>
-              <Link to="/">New chat</Link>
+              <Link to="/">{t('projects.common.newChat')}</Link>
             </Button>
           ) : (
             <>
               <Button type="button" onClick={() => void project.refetch()}>
-                Retry
+                {t('projects.page.retry')}
               </Button>
               <Link to="/" className="text-sm underline">
-                New chat
+                {t('projects.common.newChat')}
               </Link>
             </>
           )
         }
       >
-        {missing
-          ? 'This project does not exist or was deleted.'
-          : apiErrorMessage(project.error, 'The project could not be loaded.')}
+        {lost
+          ? t('projects.page.lostBody')
+          : missing
+            ? t('projects.page.missingBody')
+            : apiErrorMessage(project.error, t('projects.page.loadFailed'))}
       </UnavailableState>
     );
   }
@@ -169,7 +184,11 @@ function ProjectView({
   project: ProjectSummary;
   attachmentsAvailable: boolean;
 }) {
+  const t = useT();
   const navigate = useNavigate();
+  const tabs = projectTabs(t);
+  const access = accessOf(project);
+  const controls = projectControls(access);
   // The open tab lives in the URL, so a reload or shared link opens the same one.
   const tab = validateProjectSearch(useSearch({ strict: false })).tab ?? DEFAULT_PROJECT_TAB;
   const setTab = (next: ProjectTab) =>
@@ -184,23 +203,38 @@ function ProjectView({
     <PageFrame>
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-[var(--text-muted)]">Project</p>
-          <h1 className="mt-1 break-words text-2xl font-bold leading-tight">{project.name}</h1>
+          <p className="text-sm text-[var(--text-muted)]">{t('projects.page.eyebrow')}</p>
+          <h1 dir="auto" className="mt-1 break-words text-2xl font-bold leading-tight">
+            {project.name}
+          </h1>
+          {access !== 'owner' && (
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              {project.ownerName
+                ? t('projects.page.sharedBy', {
+                    owner: isolate(project.ownerName),
+                    access: accessLabel(access),
+                  })
+                : t('projects.page.sharedWithYou', { access: accessLabel(access) })}
+            </p>
+          )}
         </div>
-        <Button variant="primary" asChild className="shrink-0">
-          <Link to="/" search={{ project: project.id }}>
-            <MessageSquarePlus aria-hidden="true" />
-            New chat in project
-          </Link>
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {controls.share && <ShareProjectButton project={project} />}
+          <Button variant="primary" asChild>
+            <Link to="/" search={{ project: project.id }}>
+              <MessageSquarePlus aria-hidden="true" />
+              {t('projects.page.newChatInProject')}
+            </Link>
+          </Button>
+        </div>
       </header>
 
       <div className="mt-8">
         <PillTabs
-          tabs={TABS}
+          tabs={tabs}
           active={tab}
           onChange={setTab}
-          label="Project"
+          label={t('projects.page.tabsLabel')}
           controls="project-panel"
         />
       </div>
@@ -210,20 +244,33 @@ function ProjectView({
         key={project.id}
         id="project-panel"
         role="tabpanel"
-        aria-label={TABS.find((candidate) => candidate.id === tab)?.label}
+        aria-label={tabs.find((candidate) => candidate.id === tab)?.label}
         className="mt-10"
       >
-        {tab === 'conversations' && <ProjectConversations projectId={project.id} />}
-        {tab === 'instructions' && <ProjectInstructionsForm project={project} />}
+        {tab === 'conversations' && (
+          <ProjectConversations projectId={project.id} shared={access !== 'owner'} />
+        )}
+        {tab === 'instructions' && (
+          <ProjectInstructionsForm project={project} canEdit={controls.editInstructions} />
+        )}
         {tab === 'files' && (
-          <ProjectFiles projectId={project.id} attachmentsAvailable={attachmentsAvailable} />
+          <ProjectFiles
+            projectId={project.id}
+            attachmentsAvailable={attachmentsAvailable}
+            access={access}
+          />
         )}
-        {tab === 'settings' && (
-          <>
-            <ProjectNameForm project={project} />
-            <DeleteProjectSection project={project} />
-          </>
-        )}
+        {tab === 'settings' &&
+          (access === 'owner' ? (
+            <>
+              <ProjectNameForm project={project} />
+              <ProjectLabelsSection projectId={project.id} />
+              <TransferProjectSection project={project} />
+              <DeleteProjectSection project={project} />
+            </>
+          ) : (
+            <ProjectAccessSections project={project} />
+          ))}
       </div>
     </PageFrame>
   );
@@ -254,16 +301,17 @@ function SaveRow({
   disabled: boolean;
 }) {
   // The project's changes are refused while read-only: off, with the reason (#331).
+  const t = useT();
   const lock = useReadOnlyLock();
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {state.update.error && (
-        <p role="alert" className="mr-auto text-xs text-[var(--danger-on-tint)]">
-          {apiErrorMessage(state.update.error, 'The project could not be saved.')}
+        <p role="alert" className="me-auto text-xs text-[var(--danger-on-tint)]">
+          {apiErrorMessage(state.update.error, t('projects.page.saveFailed'))}
         </p>
       )}
       <p role="status" className="text-sm text-[var(--success)]">
-        {state.saved && !dirty ? 'Saved' : ''}
+        {state.saved && !dirty ? t('projects.page.saved') : ''}
       </p>
       <Button
         type="submit"
@@ -272,13 +320,20 @@ function SaveRow({
         disabled={disabled || state.update.isPending}
       >
         {state.update.isPending && <Spinner />}
-        Save changes
+        {t('projects.page.saveChanges')}
       </Button>
     </div>
   );
 }
 
-function ProjectInstructionsForm({ project }: { project: ProjectSummary }) {
+function ProjectInstructionsForm({
+  project,
+  canEdit,
+}: {
+  project: ProjectSummary;
+  canEdit: boolean;
+}) {
+  const t = useT();
   const [instructions, setInstructions] = useState(project.instructions);
   const state = useProjectSave(project.id);
   const instructionsId = useId();
@@ -292,36 +347,45 @@ function ProjectInstructionsForm({ project }: { project: ProjectSummary }) {
 
   return (
     <Section
-      title="Instructions"
-      description="Added to every conversation in this project, after the instance’s and your own instructions."
+      title={t('projects.page.tabInstructions')}
+      description={
+        canEdit
+          ? t('projects.instructions.descriptionEditable')
+          : t('projects.instructions.descriptionReadOnly')
+      }
     >
       <form onSubmit={submit} className="flex flex-col gap-1.5" noValidate>
         <label htmlFor={instructionsId} className="sr-only">
-          Instructions
+          {t('projects.page.tabInstructions')}
         </label>
         <Textarea
           id={instructionsId}
           value={instructions}
           rows={10}
+          readOnly={!canEdit}
           maxLength={PROJECT_INSTRUCTIONS_MAX_LENGTH}
           aria-describedby={counterId}
           className="resize-y"
-          placeholder="For example: Answer as a patient tutor. Use British spelling."
+          placeholder={canEdit ? t('projects.instructions.placeholder') : undefined}
           onChange={(event) => {
             state.edited();
             setInstructions(event.target.value);
           }}
         />
-        <p id={counterId} className="text-right text-xs text-[var(--text-muted)]">
-          {instructions.length} / {PROJECT_INSTRUCTIONS_MAX_LENGTH} characters
+        <p id={counterId} className="text-end text-xs text-[var(--text-muted)]">
+          {t('projects.instructions.counter', {
+            count: instructions.length,
+            max: PROJECT_INSTRUCTIONS_MAX_LENGTH,
+          })}
         </p>
-        <SaveRow state={state} dirty={dirty} disabled={!dirty} />
+        {canEdit && <SaveRow state={state} dirty={dirty} disabled={!dirty} />}
       </form>
     </Section>
   );
 }
 
 function ProjectNameForm({ project }: { project: ProjectSummary }) {
+  const t = useT();
   const [name, setName] = useState(project.name);
   const state = useProjectSave(project.id);
   const nameId = useId();
@@ -333,9 +397,9 @@ function ProjectNameForm({ project }: { project: ProjectSummary }) {
   }
 
   return (
-    <Section title="Name">
+    <Section title={t('projects.name.title')}>
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        <Field label="Project name" htmlFor={nameId}>
+        <Field label={t('projects.name.label')} htmlFor={nameId}>
           <Input
             id={nameId}
             value={name}
@@ -357,11 +421,16 @@ function ProjectNameForm({ project }: { project: ProjectSummary }) {
 function ProjectFiles({
   projectId,
   attachmentsAvailable,
+  access,
 }: {
   projectId: string;
   attachmentsAvailable: boolean;
+  access: ProjectAccessLevel;
 }) {
+  const t = useT();
+  const canManage = projectControls(access).manageFiles;
   const files = useProjectFiles(projectId);
+  useRefreshOnAccessLoss(projectId, files.error);
   const upload = useUploadProjectFiles(projectId);
   const remove = useDeleteProjectFile(projectId);
   const lock = useReadOnlyLock();
@@ -377,16 +446,17 @@ function ProjectFiles({
 
   return (
     <Section
-      title="Files"
-      description={
-        <>
-          Their text is given to the model in every conversation in this project. When the files are
-          too large to give in full, they are searched with each message and the passages that match
-          best are used instead. {count} of {MAX_FILES_PER_PROJECT} files. Files count toward your
-          storage.
-        </>
-      }
+      title={t('projects.page.tabFiles')}
+      description={t(
+        access === 'owner'
+          ? 'projects.files.descriptionOwner'
+          : access === 'editor'
+            ? 'projects.files.descriptionEditor'
+            : 'projects.files.descriptionViewer',
+        { count, max: MAX_FILES_PER_PROJECT },
+      )}
       action={
+        canManage &&
         attachmentsAvailable && (
           <>
             <input
@@ -406,67 +476,75 @@ function ProjectFiles({
               onClick={() => inputRef.current?.click()}
             >
               {upload.isPending ? <Spinner /> : <Upload aria-hidden="true" />}
-              Upload files
+              {t('projects.files.upload')}
             </Button>
           </>
         )
       }
     >
-      {!attachmentsAvailable && (
+      {canManage && !attachmentsAvailable && (
         <p className="mb-3 text-sm text-[var(--text-muted)]">
-          File uploads are not available to you, so project files are not used in conversations.
+          {t('projects.files.uploadsUnavailable')}
         </p>
       )}
       {upload.error && (
         <p role="alert" className="mb-3 text-xs text-[var(--danger-on-tint)]">
-          {apiErrorMessage(upload.error, 'A file could not be uploaded.')}
+          {apiErrorMessage(upload.error, t('projects.files.uploadFailed'))}
         </p>
       )}
       {remove.error && (
         <p role="alert" className="mb-3 text-xs text-[var(--danger-on-tint)]">
-          {apiErrorMessage(remove.error, 'The file could not be removed.')}
+          {apiErrorMessage(remove.error, t('projects.files.removeFailed'))}
         </p>
       )}
       {files.isLoading ? (
         <p className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <Spinner /> Loading files…
+          <Spinner /> {t('projects.files.loading')}
         </p>
       ) : count === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">No files yet.</p>
+        <p className="text-sm text-[var(--text-muted)]">{t('projects.files.empty')}</p>
       ) : (
-        <ul className="flex flex-col" aria-label="Project files">
+        <ul className="flex flex-col" aria-label={t('projects.files.listLabel')}>
           {files.data?.map((file) => (
             <li key={file.id} className={ROW}>
               <FileText className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-              <a
-                href={file.url}
-                target="_blank"
-                rel="noreferrer"
-                // Wrapped, not cut: a tooltip is no use on touch (#244).
-                className="min-w-0 flex-1 text-sm wrap-anywhere hover:underline"
-              >
-                {file.filename}
-              </a>
+              <div className="min-w-0 flex-1">
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  // Wrapped, not cut: a tooltip is no use on touch (#244).
+                  dir="auto"
+                  className="text-sm wrap-anywhere hover:underline"
+                >
+                  {file.filename}
+                </a>
+                {addedByText(file, t) && (
+                  <p className="text-xs text-[var(--text-muted)]">{addedByText(file, t)}</p>
+                )}
+              </div>
               <span
                 className="shrink-0 text-xs text-[var(--text-muted)]"
                 data-index-status={file.index?.status ?? 'pending'}
               >
-                {indexStatusLabel(file.index)}
+                {indexStatusLabel(file.index, t)}
               </span>
               <span className="hidden shrink-0 text-xs text-[var(--text-muted)] sm:inline">
-                {formatBytes(file.sizeBytes)}
+                {formatFileSize(file.sizeBytes)}
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove ${file.filename}`}
-                locked={lock.title}
-                disabled={remove.isPending}
-                onClick={() => remove.mutate(file.id)}
-              >
-                <Trash2 />
-              </Button>
+              {canManage && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('projects.files.remove', { name: isolate(file.filename) })}
+                  locked={lock.title}
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(file.id)}
+                >
+                  <Trash2 />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
@@ -475,26 +553,37 @@ function ProjectFiles({
   );
 }
 
-function ProjectConversations({ projectId }: { projectId: string }) {
+/** Who added a file, as the API says (a display name, never an email); nothing from an older API. */
+function addedByText(file: ProjectFile, t: Translate): string | null {
+  if (file.addedByMe) return t('projects.files.addedByYou');
+  if (file.addedBy === undefined) return null;
+  return file.addedBy === null
+    ? t('projects.files.addedByDeleted')
+    : t('projects.files.addedBy', { name: isolate(file.addedBy) });
+}
+
+function ProjectConversations({ projectId, shared }: { projectId: string; shared: boolean }) {
+  const t = useT();
   const threads = useProjectThreads(projectId);
+  useRefreshOnAccessLoss(projectId, threads.error);
 
   return (
-    <Section title="Conversations">
+    <Section
+      title={t('projects.page.tabConversations')}
+      description={shared ? t('projects.conversations.sharedNote') : undefined}
+    >
       {threads.isLoading ? (
         <p className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <Spinner /> Loading conversations…
+          <Spinner /> {t('projects.conversations.loading')}
         </p>
       ) : threads.error ? (
         <p role="alert" className="text-sm text-[var(--danger-on-tint)]">
-          {apiErrorMessage(threads.error, 'Conversations could not be loaded.')}
+          {apiErrorMessage(threads.error, t('projects.conversations.loadFailed'))}
         </p>
       ) : (threads.data?.length ?? 0) === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">
-          No conversations yet. Start one with New chat in project, or move an existing one here
-          from its conversation.
-        </p>
+        <p className="text-sm text-[var(--text-muted)]">{t('projects.conversations.empty')}</p>
       ) : (
-        <ul className="flex flex-col" aria-label="Project conversations">
+        <ul className="flex flex-col" aria-label={t('projects.conversations.listLabel')}>
           {threads.data?.map((thread) => (
             <li key={thread.id} className="border-b border-[var(--border-subtle)] last:border-0">
               <Link
@@ -503,7 +592,10 @@ function ProjectConversations({ projectId }: { projectId: string }) {
                 title={thread.title}
                 className="flex items-center gap-3 py-3 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                <span dir="auto" className="min-w-0 flex-1 truncate">
+                <span
+                  dir="auto"
+                  className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]"
+                >
                   {thread.title}
                 </span>
                 <span className="shrink-0 text-xs text-[var(--text-muted)]">

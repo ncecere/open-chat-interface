@@ -39,26 +39,33 @@ export function SettingsSection({
   return (
     <section
       className={cn(
-        'border-t border-[var(--border-subtle)] pt-8 first:border-t-0 first:pt-0',
-        !stacked && 'xl:grid xl:grid-cols-[18rem_minmax(0,1fr)] xl:gap-10',
+        '@container border-t border-[var(--border-subtle)] pt-8 first:border-t-0 first:pt-0',
         className,
       )}
     >
-      <div className="min-w-0">
-        <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
-        {description && (
-          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
-            {description}
-          </p>
+      {/* Two columns by the room the section has, not the window: 18rem of title beside a form
+          overlapped it at larger text (1.4.4). */}
+      <div
+        className={cn(
+          !stacked && '@[56rem]:grid @[56rem]:grid-cols-[18rem_minmax(0,1fr)] @[56rem]:gap-10',
+        )}
+      >
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">{title}</h2>
+          {description && (
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--text-muted)]">
+              {description}
+            </p>
+          )}
+        </div>
+        {editable ? (
+          <EditableFieldset className={cn('mt-5', !stacked && '@[56rem]:mt-0')}>
+            {children}
+          </EditableFieldset>
+        ) : (
+          <div className={cn('mt-5 min-w-0', !stacked && '@[56rem]:mt-0')}>{children}</div>
         )}
       </div>
-      {editable ? (
-        <EditableFieldset className={cn('mt-5', !stacked && 'xl:mt-0')}>
-          {children}
-        </EditableFieldset>
-      ) : (
-        <div className={cn('mt-5 min-w-0', !stacked && 'xl:mt-0')}>{children}</div>
-      )}
     </section>
   );
 }
@@ -243,7 +250,7 @@ export function MutationError({
         {detail && ` ${detail}`}
       </p>
       {issues.length > 0 && (
-        <ul className="mt-1 list-disc pl-5">
+        <ul className="mt-1 list-disc ps-5">
           {issues.map((issue) => (
             <li key={issue}>{issue}</li>
           ))}
@@ -322,7 +329,7 @@ export function SaveRow({
 
   return (
     <div className="flex min-h-9 flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-      <div className="sm:mr-auto" aria-live="polite">
+      <div className="sm:me-auto" aria-live="polite">
         {errorMessage && (
           <p role="alert" className="text-sm text-[var(--danger)]">
             {errorMessage}

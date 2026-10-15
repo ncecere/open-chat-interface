@@ -63,7 +63,9 @@ export interface PendingPassage extends PassageRef {
 
 /**
  * The filter every search carries. `personId` and `projectId` are required
- * and enforced by the store; `fileIds`, when given, narrows the search to
+ * and enforced by the store. `personId` is the person asking (the actor): the
+ * store admits only vectors of a project that person can read, which since
+ * v0.14 includes projects shared with them; `fileIds`, when given, narrows the search to
  * those files and can never widen it beyond the person's project.
  */
 export interface VectorScope {
@@ -171,7 +173,18 @@ export interface VectorStore {
    */
   pendingPassages(
     generation: Generation,
-    options: { limit: number; attachmentId?: string; after?: PassageRef },
+    options: {
+      limit: number;
+      attachmentId?: string;
+      after?: PassageRef;
+      /**
+       * Data classification (v0.14): leave out the passages of files in a
+       * project that carries a class not in this list. Absent means no filter.
+       * Applied here, not afterwards, so skipped files cannot fill a page and
+       * starve the others.
+       */
+      approvedClassIds?: readonly string[];
+    },
   ): Promise<PendingPassage[]>;
   /** Writes vectors; a passage's earlier vector in this generation is replaced. */
   upsert(generation: Generation, passages: PassageVector[]): Promise<void>;

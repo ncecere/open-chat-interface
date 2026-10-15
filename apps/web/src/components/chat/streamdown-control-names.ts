@@ -1,3 +1,5 @@
+import { streamdownTitle } from '~/components/chat/streamdown-translations';
+import { formatNumber, type MessageKey, translate } from '~/lib/i18n';
 import { quotedMessage } from '~/lib/message-excerpt';
 
 /**
@@ -80,19 +82,48 @@ function label(element: Element | null | undefined, name: string) {
 }
 
 /**
- * Which message the scope is: ` in “Quick example…”`, from its opening words,
- * and ` in “Again.” (reply 3)` when another message shares them.
+ * A control's name. Each name is a whole message, with a second one that also
+ * says which message it is in, so a language can order the words as it needs
+ * (`key` and `keyInMessage` in the catalog).
  */
-function inMessage(scope: ParentNode): string {
-  if (!(scope instanceof Element)) return '';
-  const excerpt = scope.getAttribute('data-excerpt');
-  return excerpt ? ` in ${quotedMessage(excerpt, scope.getAttribute('data-position'))}` : '';
+function named(key: NamedKey, params: Record<string, string>, message: string | null): string {
+  return message
+    ? translate(`${key}InMessage` as MessageKey, { ...params, message })
+    : translate(key as MessageKey, params);
 }
 
-/** A block's buttons, told apart by the tooltip Streamdown gives each. */
-function buttonTitled(block: Element, ...titles: string[]): Element | undefined {
+type NamedKey =
+  | 'chat.controls.codeBlock'
+  | 'chat.controls.codeCopy'
+  | 'chat.controls.codeDownload'
+  | 'chat.controls.diagramCopy'
+  | 'chat.controls.diagramDownload'
+  | 'chat.controls.diagramView'
+  | 'chat.controls.tableRegion'
+  | 'chat.controls.tableCopy'
+  | 'chat.controls.tableDownload'
+  | 'chat.controls.tableView'
+  | 'chat.controls.tableFullScreen';
+
+/**
+ * Which message the scope is, from its opening words (“Quick example…”), and
+ * its place when another message shares them (“Again.” (reply 3)). Null when
+ * the scope is not a message.
+ */
+function inMessage(scope: ParentNode): string | null {
+  if (!(scope instanceof Element)) return null;
+  const excerpt = scope.getAttribute('data-excerpt');
+  return excerpt ? quotedMessage(excerpt, scope.getAttribute('data-position')) : null;
+}
+
+/** A block's buttons, told apart by the tooltip Streamdown gives each (in the language shown). */
+function buttonTitled(
+  block: Element,
+  ...titles: Parameters<typeof streamdownTitle>[0][]
+): Element | undefined {
+  const wanted = titles.map(streamdownTitle);
   return [...block.querySelectorAll('button[title]')].find((button) =>
-    titles.includes(button.getAttribute('title') ?? ''),
+    wanted.includes(button.getAttribute('title') ?? ''),
   );
 }
 
@@ -106,13 +137,22 @@ function nameCodeBlocks(scope: ParentNode) {
   const where = inMessage(scope);
   blocksOf(scope, 'code-block').forEach((block, index) => {
     const language = languageName(block.getAttribute('data-language') ?? '');
-    const which = `${index + 1}${language ? ` (${language})` : ''}${where}`;
-    const name = `code block ${which}`;
-    label(block.querySelector('[data-streamdown="code-block-body"]'), `Code block ${which}`);
-    label(block.querySelector('[data-streamdown="code-block-copy-button"]'), `Copy ${name}`);
+    const number = formatNumber(index + 1);
+    const which = language
+      ? translate('chat.controls.numberLanguage', { n: number, language })
+      : number;
+    const params = { which };
+    label(
+      block.querySelector('[data-streamdown="code-block-body"]'),
+      named('chat.controls.codeBlock', params, where),
+    );
+    label(
+      block.querySelector('[data-streamdown="code-block-copy-button"]'),
+      named('chat.controls.codeCopy', params, where),
+    );
     label(
       block.querySelector('[data-streamdown="code-block-download-button"]'),
-      `Download ${name}`,
+      named('chat.controls.codeDownload', params, where),
     );
   });
 }
@@ -120,25 +160,66 @@ function nameCodeBlocks(scope: ParentNode) {
 function nameDiagrams(scope: ParentNode) {
   const where = inMessage(scope);
   blocksOf(scope, 'mermaid-block').forEach((diagram, index) => {
-    const name = `diagram ${index + 1}`;
+    const params = { n: formatNumber(index + 1) };
     label(
       diagram.querySelector('[data-streamdown="code-block-copy-button"]'),
-      `Copy ${name} code${where}`,
+      named('chat.controls.diagramCopy', params, where),
     );
-    label(buttonTitled(diagram, 'Download diagram'), `Download ${name}${where}`);
-    label(buttonTitled(diagram, 'View fullscreen'), `View ${name} full screen${where}`);
+    label(
+      buttonTitled(diagram, 'downloadDiagram'),
+      named('chat.controls.diagramDownload', params, where),
+    );
+    label(
+      buttonTitled(diagram, 'viewFullscreen'),
+      named('chat.controls.diagramView', params, where),
+    );
   });
 }
 
 function nameTables(scope: ParentNode) {
   const where = inMessage(scope);
   blocksOf(scope, 'table-wrapper').forEach((table, index) => {
-    const name = `table ${index + 1}`;
-    label(table.querySelector(':scope > .overflow-x-auto'), `Table ${index + 1}${where}`);
-    label(buttonTitled(table, 'Copy table'), `Copy ${name}${where}`);
-    label(buttonTitled(table, 'Download table'), `Download ${name}${where}`);
-    label(buttonTitled(table, 'View fullscreen'), `View ${name} full screen${where}`);
+    const params = { n: formatNumber(index + 1) };
+    label(
+      table.querySelector(':scope > .overflow-x-auto'),
+      named('chat.controls.tableRegion', params, where),
+    );
+    label(buttonTitled(table, 'copyTable'), named('chat.controls.tableCopy', params, where));
+    label(
+      buttonTitled(table, 'downloadTable'),
+      named('chat.controls.tableDownload', params, where),
+    );
+    label(buttonTitled(table, 'viewFullscreen'), named('chat.controls.tableView', params, where));
   });
+}
+
+/**
+ * Reads a name made by `named` back into its parts: the message is turned
+ * into a pattern with a capture where each placeholder goes, so it works in
+ * any language.
+ */
+// Marks where a placeholder went when a name is read back; not a character a message contains.
+const MARK = '\u0001';
+const SLOT = new RegExp(`${MARK}(\\w+)${MARK}`);
+
+function parseName(
+  text: string,
+  key: MessageKey,
+  names: readonly string[],
+): Record<string, string> | null {
+  const marks = Object.fromEntries(names.map((name) => [name, `${MARK}${name}${MARK}`]));
+  const parts = translate(key, marks).split(SLOT);
+  const order: string[] = [];
+  const pattern = parts
+    .map((part, index) => {
+      if (index % 2 === 0) return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      order.push(part);
+      return part === 'n' ? '(\\S+?)' : '(.+)';
+    })
+    .join('');
+  const match = new RegExp(`^${pattern}$`).exec(text);
+  if (!match) return null;
+  return Object.fromEntries(order.map((name, index) => [name, match[index + 1] ?? '']));
 }
 
 /**
@@ -150,13 +231,25 @@ function nameTables(scope: ParentNode) {
  */
 export function nameTableFullscreen(overlay: Element, opener: Element | null): void {
   // "View table 2 full screen", and the message it is in (#271, #293).
-  const [, which, where = ''] =
-    opener?.getAttribute('aria-label')?.match(/^View table (\d+) full screen( in “.*)?$/) ?? [];
-  const name = which ? `table ${which}` : 'table';
-  label(overlay, `${which ? `Table ${which}` : 'Table'}${where}, full screen`);
-  label(buttonTitled(overlay, 'Copy table'), `Copy ${name}${where}`);
-  label(buttonTitled(overlay, 'Download table'), `Download ${name}${where}`);
-  label(buttonTitled(overlay, 'Exit fullscreen'), 'Exit full screen');
+  const text = opener?.getAttribute('aria-label') ?? '';
+  const found =
+    parseName(text, 'chat.controls.tableViewInMessage', ['n', 'message']) ??
+    parseName(text, 'chat.controls.tableView', ['n']);
+  if (found) {
+    const params = { n: found.n ?? '' };
+    const where = found.message ?? null;
+    label(overlay, named('chat.controls.tableFullScreen', params, where));
+    label(buttonTitled(overlay, 'copyTable'), named('chat.controls.tableCopy', params, where));
+    label(
+      buttonTitled(overlay, 'downloadTable'),
+      named('chat.controls.tableDownload', params, where),
+    );
+  } else {
+    label(overlay, translate('chat.controls.tablePlainFullScreen'));
+    label(buttonTitled(overlay, 'copyTable'), translate('chat.controls.tablePlainCopy'));
+    label(buttonTitled(overlay, 'downloadTable'), translate('chat.controls.tablePlainDownload'));
+  }
+  label(buttonTitled(overlay, 'exitFullscreen'), translate('chat.controls.exitFullScreen'));
 }
 
 /** Names every Streamdown block control under `root`, numbered within its message. */

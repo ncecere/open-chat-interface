@@ -60,6 +60,9 @@ filtered to their address.
 Conversation **titles only**. An administrator managing an account has no reason
 to read its contents, and this page does not make that easy.
 
+The groups they are in, and their role in each, are listed here too
+([Groups](groups.md)).
+
 A person on [legal hold](compliance.md#legal-hold) is marked **Legal hold** here
 and in the list, with the reason on this page. Their account cannot be deleted
 until the hold is lifted.
@@ -90,6 +93,14 @@ until the hold is lifted.
   one to end. This is the right response to a suspected compromise; changing the
   password alone leaves existing sessions working. They can sign in again
   straight away.
+- **Two-step verification** shows what the person has set up (an authenticator,
+  how many recovery codes are left, how many passkeys, whether the second step is
+  locked) and whether their role requires it; never a key or a code. Auditors see
+  it read-only. **Reset two-step verification** (administrators only, not on your
+  own account) removes their authenticator, recovery codes and passkeys, ends
+  their sessions and emails them: use it when somebody lost their phone and
+  their recovery codes. It is recorded as `user.mfa.reset`. See
+  [Identity and access](identity.md#two-step-verification).
 - **Delete user**, at the bottom of the page, removes the account for good.
   See [Deleting an account](#deleting-an-account).
 
@@ -100,7 +111,7 @@ will do anything, so the wrong account cannot be deleted with a stray click.
 
 Deleting is permanent. It removes the account and everything it owns: its
 conversations and their messages, uploaded files (the stored files are removed
-shortly after by the storage cleanup job), projects, artifacts, memory, share
+shortly after by the storage cleanup job), projects (shared ones too: files other people added go with them, their conversations are kept but leave the project; the dialog says how many; an editor's own account deletion hands the files they added to the owners), artifacts, memory, share
 links, connected accounts, saved views, limit overrides and preferences. The
 person is signed out at once.
 
@@ -137,8 +148,9 @@ What this person is held to right now, computed by the same code that enforces
 it:
 
 - **Budgets** — each usage budget that applies, with what has been used, what
-  remains, a progress bar, and when it resets. If no budget applies to their
-  role, their usage over the last 24 hours is shown instead.
+  remains, a progress bar, and when it resets, and where it comes from: their
+  role, or a [group](groups.md) they are in. If no budget applies to them,
+  their usage over the last 24 hours is shown instead.
 - **Storage** — bytes and files held against their role's allowance, and the
   largest upload allowed. Files in the trash are listed separately and do not
   count.

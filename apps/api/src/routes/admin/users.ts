@@ -9,12 +9,15 @@ import { parseBody, parseChanges, parseQuery } from '../../middleware/validate.j
 import { applyBulkUserAction, bulkActionSchema } from '../../services/admin-users/bulk-actions.js';
 import { getUserDetail } from '../../services/admin-users/detail.js';
 import { listQuerySchema, listUsers } from '../../services/admin-users/listing.js';
+import { adminResetMfa } from '../../services/admin-users/mfa.js';
 import {
   createUser,
   deleteUser,
   revokeUserSessions,
   updateUser,
 } from '../../services/admin-users/mutations.js';
+import { accountSharingImpact } from '../../services/project-sharing/impact.js';
+import { budgetSources as budgetSourcesFor } from '../../services/quota/applicability.js';
 import { getUsageSummary } from '../../services/quota/index.js';
 import { getStorageUsage } from '../../services/storage/quota.js';
 
@@ -37,6 +40,21 @@ userRoutes.post('/bulk', async (c) => {
   return c.json(await applyBulkUserAction({ id, email }, input, clientIp(c)));
 });
 
+/**
+ * What deleting this account would do through project sharing (v0.14): counts for
+ * the delete dialog. Titles and names are not part of it.
+ */
+userRoutes.get('/:id/sharing-impact', async (c) => {
+  const id = c.req.param('id');
+  const [target] = await db
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.id, id))
+    .limit(1);
+  if (!target) throw notFound('User not found');
+  return c.json(await accountSharingImpact(id));
+});
+
 userRoutes.get('/:id', async (c) => {
   return c.json(await getUserDetail(c.req.param('id')));
 });
@@ -55,11 +73,13 @@ userRoutes.get('/:id/limits', async (c) => {
   if (!target) throw notFound('User not found');
   // The column is plain text; role values are validated on every write.
   const role = target.role as UserRole;
-  const [usage, storage] = await Promise.all([
+  const [usage, storage, budgetSources] = await Promise.all([
     getUsageSummary(target.id, role),
     getStorageUsage(target.id, role),
+    // Where each budget comes from: the role, or which group (v0.14).
+    budgetSourcesFor(target.id, role),
   ]);
-  return c.json({ usage, storage });
+  return c.json({ usage, storage, budgetSources });
 });
 
 userRoutes.patch('/:id', async (c) => {
@@ -67,6 +87,17 @@ userRoutes.patch('/:id', async (c) => {
   const targetId = c.req.param('id');
   const patch = await parseChanges(c, updateUserSchema);
   return c.json(await updateUser({ id, email }, targetId, patch));
+});
+
+/**
+ * Resets a person's two-step verification (#399): authenticator, recovery codes
+ * and passkeys removed, sessions ended, the person emailed, audited
+ * `user.mfa.reset`. Administrators only (an auditor gets 403 from the guard on
+ * every write); 422 on oneself, 404 for an unknown account.
+ */
+userRoutes.post('/:id/mfa/reset', async (c) => {
+  const { id, email } = currentUser(c);
+  return c.json(await adminResetMfa({ id, email }, c.req.param('id')));
 });
 
 userRoutes.post('/:id/revoke-sessions', async (c) => {

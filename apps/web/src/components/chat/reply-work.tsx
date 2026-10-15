@@ -15,8 +15,16 @@ import {
 } from '~/components/chat/message-reasoning';
 import { SearchStep, SourcesStep } from '~/components/chat/search-grounding';
 import { isArtifactStep, type ToolPart, ToolStepRow } from '~/components/chat/tool-steps';
-import { type WorkStep, workActivity, workSummary } from '~/components/chat/work-summary';
+import { toolStepLabel } from '~/components/chat/tool-summary';
+import { translatedNodes } from '~/components/chat/translated-nodes';
+import {
+  titledActivity,
+  type WorkStep,
+  workActivity,
+  workSummary,
+} from '~/components/chat/work-summary';
 import { useMediaQuery } from '~/hooks/use-media-query';
+import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -35,7 +43,7 @@ export function WorkDisclosure({
   headerRef,
   children,
 }: {
-  label: string;
+  label: ReactNode;
   icon: LucideIcon;
   /** The model is working now: the icon pulses (unless motion is reduced). */
   active: boolean;
@@ -64,7 +72,7 @@ export function WorkDisclosure({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setChoice(!open)}
-        className="flex w-fit max-w-full items-center gap-2 text-left text-[0.8125rem] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
+        className="flex w-fit max-w-full items-center gap-2 text-start text-[0.8125rem] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Icon
           aria-hidden="true"
@@ -92,7 +100,7 @@ type Entry = WorkEntry<ToolPart>;
 
 const workStepOf = (step: ToolStepSummary, part: ToolPart): WorkStep => ({
   toolId: step.toolId,
-  label: step.label,
+  label: toolStepLabel(step),
   state: step.state,
   target:
     typeof (part.input as { artifactId?: unknown } | undefined)?.artifactId === 'string'
@@ -129,6 +137,7 @@ export function WorkBlock({
   /** Steps whose approval was answered in this view: focus follows them here. */
   answeredHere: Set<string>;
 }) {
+  const t = useT();
   const artifacts = useArtifacts();
   const header = useRef<HTMLButtonElement>(null);
   const { work } = layout;
@@ -142,7 +151,7 @@ export function WorkBlock({
       return [
         {
           toolId: 'web_search',
-          label: 'Web search',
+          label: translate('chat.toolLabel.webSearch'),
           state: entry.grounding.error ? 'error' : 'done',
           presearch: true,
         },
@@ -159,23 +168,29 @@ export function WorkBlock({
   // What the model is doing now; nothing once the answer has started or the reply ended.
   const thinking = streaming && layout.last === 'reasoning';
   let activity: ReturnType<typeof workActivity> | null = null;
+  let titled: ReturnType<typeof titledActivity> = null;
   if (thinking) activity = workActivity({ type: 'reasoning' });
   else if (streaming && layout.last === 'tools' && layout.lastTool) {
     const step = summarizeToolPart(layout.lastTool);
-    activity = workActivity({
-      type: 'tool',
+    const current = {
+      type: 'tool' as const,
       step: workStepOf(step, layout.lastTool),
       title: isArtifactStep(step.toolId)
         ? artifactStepTitle(artifacts, messageId, layout.lastTool)
         : null,
-    });
+    };
+    activity = workActivity(current);
+    titled = titledActivity(current);
   }
 
-  const label = reasoningOnly
+  const label: ReactNode = reasoningOnly
     ? thinking
-      ? 'Thinking…'
-      : 'Reasoning'
-    : (activity?.label ?? workSummary({ reasoning: hasReasoning, steps }));
+      ? t('chat.work.thinking')
+      : t('chat.work.reasoning')
+    : titled
+      ? // The title is the person's or the model's text: isolated in the sentence.
+        translatedNodes(t, titled.key, { [titled.name]: <bdi>{titled.value}</bdi> })
+      : (activity?.label ?? workSummary({ reasoning: hasReasoning, steps }));
   const icon =
     hasReasoning || thinking
       ? Brain
@@ -189,8 +204,8 @@ export function WorkBlock({
   const [announcement, setAnnouncement] = useState('');
   const brief = !reasoningOnly && activity ? activity.brief : '';
   useEffect(() => {
-    if (brief) setAnnouncement(`${brief}…`);
-  }, [brief]);
+    if (brief) setAnnouncement(t('chat.work.announce', { activity: brief }));
+  }, [brief, t]);
 
   // An approval answered here has moved into the block: keep focus nearby.
   const answered = tools
@@ -250,18 +265,19 @@ function WorkTimeline({
   streaming: boolean;
   answeredHere: Set<string>;
 }) {
+  const t = useT();
   return (
     <ol
-      aria-label="Steps"
+      aria-label={t('chat.work.steps')}
       data-work-timeline=""
-      className="mt-3 ml-2 space-y-3 border-l border-[var(--border-subtle)] pl-4"
+      className="mt-3 ms-2 space-y-3 border-s border-[var(--border-subtle)] ps-4"
     >
       {entries.map((entry) => {
         if (entry.type === 'reasoning')
           return (
             <li key={entry.key} className="relative min-w-0" data-work-entry="reasoning">
               <TimelineDot />
-              <span className="sr-only">Reasoning: </span>
+              <span className="sr-only">{t('chat.work.reasoningPrefix')}</span>
               <ReasoningText text={entry.text} />
             </li>
           );
@@ -309,7 +325,7 @@ function TimelineDot() {
   return (
     <span
       aria-hidden="true"
-      className="absolute top-2 -left-[1.3rem] size-2 rounded-full border border-[var(--border-strong)] bg-[var(--bg-app)]"
+      className="absolute top-2 -start-[1.3rem] size-2 rounded-full border border-[var(--border-strong)] bg-[var(--bg-app)]"
     />
   );
 }

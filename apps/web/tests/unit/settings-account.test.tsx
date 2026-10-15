@@ -15,6 +15,7 @@ import {
   renderAdmin,
   settle,
 } from './admin-test-utils';
+import { mfaStatus } from './mfa-fixtures';
 
 /**
  * Settings → Account (v0.9.1): the password control follows how the person
@@ -60,6 +61,8 @@ beforeEach(() => {
         features,
         signIn,
       };
+    // Two-step verification (v0.14) has its own tests (mfa-two-step.test.tsx).
+    if (path === '/me/mfa') return mfaStatus();
     if (path === '/me/sessions')
       return {
         sessions: [
@@ -126,6 +129,18 @@ async function submitPassword(current: string, next: string, confirm = next) {
 }
 
 describe('Settings → Account', () => {
+  it('offers two-step verification under Security & Access, between Password and Devices', async () => {
+    await render();
+    const section = [...document.querySelectorAll('section')].find(
+      (candidate) => candidate.querySelector('h2')?.textContent === 'Security & Access',
+    );
+    const labels = [...(section?.querySelectorAll('p.font-medium') ?? [])].map(
+      (node) => node.textContent,
+    );
+    expect(labels).toEqual(['Password', 'Two-step verification', 'Devices']);
+    expect(section?.textContent).toMatch(/Status:\s*Off/);
+  });
+
   it('has no email change or account deletion, and says who deletes accounts', async () => {
     await render();
     const text = document.body.textContent ?? '';

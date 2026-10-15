@@ -37,7 +37,10 @@ export function LimitsTab({ days }: { days: number }) {
               className="flex items-center justify-between gap-4 border-[var(--border-subtle)] border-b px-4 py-3 last:border-0"
             >
               <div className="min-w-0">
-                <p className="truncate font-medium text-sm" title={denial.policyName}>
+                <p
+                  className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium text-sm"
+                  title={denial.policyName}
+                >
                   {denial.policyName}
                 </p>
                 <p className="text-[var(--text-muted)] text-xs">

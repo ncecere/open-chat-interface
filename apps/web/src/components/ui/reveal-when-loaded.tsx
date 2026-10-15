@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Spinner } from '~/components/ui/spinner';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /** However slow a request, the page is shown after this long. */
@@ -56,9 +57,14 @@ export function useFirstLoadSettled(resetKey: string): boolean {
 }
 
 /** The spinner shown over a page laid out hidden while it loads. */
-export function LoadingOverlay({ label = 'Loading' }: { label?: string }) {
+export function LoadingOverlay({ label }: { label?: string }) {
+  const t = useT();
   return (
-    <div role="status" aria-label={label} className="absolute inset-x-0 top-16 z-10">
+    <div
+      role="status"
+      aria-label={label ?? t('ui.loading')}
+      className="absolute inset-x-0 top-16 z-10"
+    >
       <Spinner className="mx-auto size-6" />
     </div>
   );

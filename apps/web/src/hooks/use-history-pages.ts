@@ -7,6 +7,7 @@ import {
   type InitialChatHistory,
   joinIsland,
 } from '~/lib/chat-history';
+import { translate } from '~/lib/i18n';
 
 interface PagesState {
   /** Older messages joined to the live part, oldest first. */
@@ -37,8 +38,6 @@ export interface HistoryControls {
   /** Polite announcement of the last load, for screen readers. */
   announcement: string;
 }
-
-const plural = (count: number) => `${count} ${count === 1 ? 'message' : 'messages'}`;
 
 /**
  * The older part of a conversation, a page at a time (v0.11, item 21).
@@ -91,8 +90,8 @@ export function useHistoryPages(options: {
         if (controller.signal.aborted) return;
         setError(
           failure instanceof ApiError && failure.status === 422
-            ? 'These messages changed. Reload the conversation to see them.'
-            : 'Could not load more messages. Try again.',
+            ? translate('chat.history.changed')
+            : translate('chat.history.loadFailed'),
         );
       } finally {
         busy.current = false;
@@ -129,7 +128,7 @@ export function useHistoryPages(options: {
       if (signal.aborted) return null;
       if (!page.paged) {
         const count = fromWholeConversation(page.messages);
-        return `Loaded ${plural(count)}. This is the start of the conversation.`;
+        return translate('chat.history.loadedStart', { count });
       }
       setState((current) =>
         current.island
@@ -147,9 +146,10 @@ export function useHistoryPages(options: {
               olderCursor: page.page.olderCursor,
             },
       );
-      return `Loaded ${plural(page.messages.length)} earlier in the conversation.${
-        page.page.olderCursor ? '' : ' This is the start of the conversation.'
-      }`;
+      return translate(
+        page.page.olderCursor ? 'chat.history.loadedEarlier' : 'chat.history.loadedEarlierStart',
+        { count: page.messages.length },
+      );
     });
   }, [run, threadId, fromWholeConversation]);
 
@@ -162,7 +162,10 @@ export function useHistoryPages(options: {
         if (direction === 'down' && island.newerCursor) {
           const page = await getChatHistory(threadId, signal, { after: island.newerCursor });
           if (signal.aborted) return null;
-          if (!page.paged) return `Loaded ${plural(fromWholeConversation(page.messages))}.`;
+          if (!page.paged)
+            return translate('chat.history.loaded', {
+              count: fromWholeConversation(page.messages),
+            });
           const joined = joinIsland(
             [...island.messages, ...page.messages],
             { olderCursor: island.olderCursor, newerCursor: page.page.newerCursor },
@@ -175,12 +178,13 @@ export function useHistoryPages(options: {
                 : { ...current, island: null, before: [...joined.before, ...current.before] }
               : current,
           );
-          return `Loaded ${plural(page.messages.length)}.`;
+          return translate('chat.history.loaded', { count: page.messages.length });
         }
         if (!start) return null;
         const page = await getChatHistory(threadId, signal, { before: start.id });
         if (signal.aborted) return null;
-        if (!page.paged) return `Loaded ${plural(fromWholeConversation(page.messages))}.`;
+        if (!page.paged)
+          return translate('chat.history.loaded', { count: fromWholeConversation(page.messages) });
         const last = island.messages.at(-1)?.id;
         const meet = page.messages.findIndex((message) => message.id === last);
         setState((current) => {
@@ -200,7 +204,7 @@ export function useHistoryPages(options: {
             };
           return { ...current, before: [...page.messages, ...current.before] };
         });
-        return `Loaded ${plural(page.messages.length)}.`;
+        return translate('chat.history.loaded', { count: page.messages.length });
       });
     },
     [run, threadId, fromWholeConversation, segmentStart],

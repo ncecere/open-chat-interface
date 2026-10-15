@@ -9,7 +9,8 @@ A section with nothing in it for you is left out: **Memory** when your
 administrator has not made memory available to you and you have no saved
 notes, **Sharing** when you may not share and have no link left to revoke, and
 **Connectors** when there is nothing for your role to connect. Their addresses
-still open if you follow a link to one.
+still open if you follow a link to one. **Groups** appears only if you manage
+at least one [group](groups.md).
 
 ## Account
 
@@ -28,6 +29,11 @@ Your name, email address, role, and how you sign in.
   organisation, your password is managed there instead. If your administrator
   has turned off email and password sign-in, the page says so and the password
   cannot be changed.
+- **Two-step verification.** Add an authenticator app, recovery codes and
+  passkeys to an account that signs in with a password, or see that your
+  administrator requires it. See [Two-step verification](two-step-verification.md).
+  If you sign in through your organisation, it says **Managed by your
+  organisation**.
 - **Devices.** **View Devices** lists where your account is signed in: the
   browser and system, a shortened network address, when each signed in, and
   when it was last active (to within five minutes). Your current device is
@@ -84,6 +90,29 @@ changed something, and *Not saved yet* shows beside it until you press it. If
 you leave the page (or switch to another settings section) with a change not
 saved, you are asked first; this holds for every settings section with a Save
 button, including a memory typed but not yet added.
+
+### Language
+
+**Language** sets the language of menus, buttons and messages. It is saved
+with your account, so it follows you to every browser and device, and it
+changes as soon as you choose it. Each language is written in its own
+language, so you can find yours even when the page is in another one.
+
+- **Automatic** uses the default your administrator chose, or else the
+  language of your browser when the instance offers it, or else English.
+- A language marked **(beta)** is a machine-made draft that a native reader has
+  not reviewed yet. It can contain mistakes; the page says so when you choose
+  one. If you read the language and want to help, see
+  [Translations](../dev/translations.md#reviewing-a-beta-catalog).
+- Arabic shows the whole page from right to left.
+- The list shows only the languages your administrator turned on. With only
+  English on, there is no Language setting. If a language you chose is turned
+  off later, you see the default one instead, without any error, and your
+  choice comes back if it is turned on again.
+
+What you and the assistant write is never translated, and neither are model
+names. The administration console is in English whatever you choose, and so are
+emails and exported files.
 
 Further down are choices about the interface itself, all kept in this browser:
 

@@ -13,6 +13,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../src/components/layout/app-shell', () => ({
   AppShell: ({ children }: { children: ReactNode }) => <div data-shell>{children}</div>,
 }));
+vi.mock('../../src/components/mfa/mfa-gate', () => ({
+  MfaGate: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
 vi.mock('../../src/components/onboarding/onboarding-gate', () => ({
   OnboardingGate: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));

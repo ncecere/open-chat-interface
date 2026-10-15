@@ -4,6 +4,7 @@ import { type AttachmentCard, isRemovedFile } from '~/components/chat/message-at
 import { Button } from '~/components/ui/button';
 import { focusComposerSoon } from '~/lib/focus-after-navigation';
 import { focusAtEnd, keepFocusWhenRemoved, rememberPlace } from '~/lib/focus-return';
+import { translate, useT } from '~/lib/i18n';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { isSendKey } from '~/lib/send-keys';
 
@@ -32,6 +33,7 @@ export function MessageEditor({
   onEdit: EditMessage;
   onClose: () => void;
 }) {
+  const t = useT();
   const [text, setText] = useState(initialText);
   const [error, setError] = useState<string | null>(null);
   // A read-only refusal goes once changes are accepted again (#308).
@@ -85,7 +87,9 @@ export function MessageEditor({
       focusComposerSoon();
       onClose();
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Could not branch this message.');
+      setError(
+        error instanceof Error ? error.message : translate('chat.messageEditor.branchFailed'),
+      );
     } finally {
       setSaving(false);
     }
@@ -98,7 +102,7 @@ export function MessageEditor({
     >
       <textarea
         ref={textBox}
-        aria-label="Edit message text"
+        aria-label={t('chat.messageEditor.textLabel')}
         dir="auto"
         value={text}
         // Read-only, not disabled, while saving: a disabled box would take focus
@@ -120,7 +124,10 @@ export function MessageEditor({
       {/* The files go with the edited question, as with a fork or Retry; one
         removed here is left out of it (#296). */}
       {kept.length > 0 && (
-        <ul aria-label="Attached files" className="mb-2 flex flex-wrap gap-2 px-1">
+        <ul
+          aria-label={t('chat.messageEditor.filesLabel')}
+          className="mb-2 flex flex-wrap gap-2 px-1"
+        >
           {kept.map((file) => (
             <li
               key={file.id}
@@ -129,16 +136,18 @@ export function MessageEditor({
               className="flex items-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-control-alt)] px-2 py-1.5"
             >
               <FileText className="size-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-              <span className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
+              <span dir="auto" className="max-w-40 truncate text-xs text-[var(--text-secondary)]">
                 {file.filename}
               </span>
               {isRemovedFile(file) && (
-                <span className="text-xs text-[var(--text-muted)]">(no longer available)</span>
+                <span className="text-xs text-[var(--text-muted)]">
+                  {t('chat.messageEditor.fileRemoved')}
+                </span>
               )}
               <button
                 type="button"
                 disabled={saving}
-                aria-label={`Remove ${file.filename}`}
+                aria-label={t('chat.attachmentChips.remove', { name: file.filename })}
                 onClick={(event) => {
                   // The chip goes with its ×: focus moves to the next chip's
                   // ×, else the one before, else the text box (#250).
@@ -161,17 +170,17 @@ export function MessageEditor({
       )}
       {kept.length < attachments.length && (
         <p className="px-1 pb-2 text-xs text-[var(--text-muted)]">
-          Removed files are left out of the edited message. Cancel to keep them.
+          {t('chat.messageEditor.removedNote')}
         </p>
       )}
       {error && <p className="px-1 pb-2 text-xs text-[var(--danger-on-tint)]">{error}</p>}
       <div className="flex items-center justify-end gap-2">
         <Button variant="ghost" size="sm" disabled={saving} onClick={cancel}>
           <X />
-          Cancel
+          {t('chat.messageEditor.cancel')}
         </Button>
         <Button size="sm" disabled={saving || !text.trim()} onClick={() => void save()}>
-          {saving ? 'Branching...' : 'Save & submit'}
+          {saving ? t('chat.messageEditor.saving') : t('chat.messageEditor.save')}
         </Button>
       </div>
     </div>

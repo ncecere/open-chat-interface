@@ -18,6 +18,20 @@ vi.mock('../../auth/policy.js', () => ({
   isEmailVerificationEnforced: mocks.isEmailVerificationEnforced,
 }));
 vi.mock('../audit.js', () => ({ recordAudit: mocks.recordAudit }));
+// The person's two-step status is read through the settings and the database; these tests are
+// about the listing and the other collections, so it is a fixed answer here (its own live tests
+// cover it).
+vi.mock('./mfa.js', () => ({
+  adminMfaStatus: async () => ({
+    eligible: true,
+    totp: false,
+    passkeys: 0,
+    recoveryCodesLeft: null,
+    required: false,
+    deadline: null,
+    limited: false,
+  }),
+}));
 
 import { applyBulkUserAction, bulkActionSchema } from './bulk-actions.js';
 import { getUserDetail } from './detail.js';

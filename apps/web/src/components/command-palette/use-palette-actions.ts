@@ -16,6 +16,7 @@ import { useMemo } from 'react';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { NAV_SECTIONS } from '~/lib/admin-navigation';
 import { focusComposerSoon, touchOnly } from '~/lib/focus-after-navigation';
+import { useT } from '~/lib/i18n';
 import { shortcutKeys } from '~/lib/keyboard-shortcuts';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 import { useTheme } from '~/providers/theme-provider';
@@ -26,6 +27,7 @@ export function usePaletteActions({
   sidebarOpen,
   onSidebarOpenChange,
 }: Pick<CommandPaletteProps, 'sidebarOpen' | 'onSidebarOpenChange'>) {
+  const t = useT();
   const navigate = useNavigate();
   const { data: currentUser } = useCurrentUser();
   const { resolvedTheme, setTheme } = useTheme();
@@ -34,12 +36,12 @@ export function usePaletteActions({
     const groups: PaletteGroup[] = [
       {
         id: 'chat',
-        label: 'Chat',
+        label: t('palette.group.chat'),
         items: [
           {
             id: 'new-chat',
-            label: 'New chat',
-            keywords: 'start conversation home',
+            label: t('palette.action.newChat'),
+            keywords: t('palette.keywords.newChat'),
             icon: Plus,
             shortcut: shortcutKeys('new-chat'),
             // The cursor goes to the new chat's message box once the palette
@@ -54,22 +56,22 @@ export function usePaletteActions({
           },
           {
             id: 'history',
-            label: 'Manage chat history',
-            keywords: 'threads archive conversations',
+            label: t('palette.action.history'),
+            keywords: t('palette.keywords.history'),
             icon: History,
             onSelect: () => navigate({ to: '/settings/history' }),
           },
           {
             id: 'models',
-            label: 'View all available models',
-            keywords: 'ai providers',
+            label: t('palette.action.models'),
+            keywords: t('palette.keywords.models'),
             icon: Sparkles,
             onSelect: () => navigate({ to: '/settings/models' }),
           },
           {
             id: 'attachments',
-            label: 'View all uploaded attachments',
-            keywords: 'files uploads',
+            label: t('palette.action.attachments'),
+            keywords: t('palette.keywords.attachments'),
             icon: Paperclip,
             onSelect: () => navigate({ to: '/settings/attachments' }),
           },
@@ -77,41 +79,43 @@ export function usePaletteActions({
       },
       {
         id: 'settings',
-        label: 'Settings',
+        label: t('palette.group.settings'),
         items: [
           {
             id: 'account',
-            label: 'Account settings',
-            keywords: 'profile preferences',
+            label: t('palette.action.account'),
+            keywords: t('palette.keywords.account'),
             icon: Settings,
             onSelect: () => navigate({ to: '/settings' }),
           },
           {
             id: 'customize',
-            label: 'Customize appearance',
-            keywords: 'fonts density theme code wrap',
+            label: t('palette.action.customize'),
+            keywords: t('palette.keywords.customize'),
             icon: SlidersHorizontal,
             onSelect: () => navigate({ to: '/settings/customization' }),
           },
           {
             id: 'shortcuts',
-            label: 'Show keyboard shortcuts',
-            keywords: 'hotkeys commands',
+            label: t('palette.action.shortcuts'),
+            keywords: t('palette.keywords.shortcuts'),
             icon: Keyboard,
             // Listed in the Keyboard Shortcuts card beside every settings page.
             onSelect: () => navigate({ to: '/settings' }),
           },
           {
             id: 'toggle-theme',
-            label: `Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} theme`,
-            keywords: 'toggle appearance color mode',
+            label: t(
+              resolvedTheme === 'dark' ? 'palette.action.themeLight' : 'palette.action.themeDark',
+            ),
+            keywords: t('palette.keywords.theme'),
             icon: resolvedTheme === 'dark' ? Palette : MoonStar,
             onSelect: () => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'),
           },
           {
             id: 'toggle-sidebar',
-            label: `${sidebarOpen ? 'Close' : 'Open'} sidebar`,
-            keywords: 'toggle collapse navigation',
+            label: t(sidebarOpen ? 'palette.action.sidebarClose' : 'palette.action.sidebarOpen'),
+            keywords: t('palette.keywords.sidebar'),
             icon: ChevronsLeftRight,
             shortcut: shortcutKeys('toggle-sidebar'),
             onSelect: () => onSidebarOpenChange(!sidebarOpen),
@@ -124,12 +128,12 @@ export function usePaletteActions({
     if (currentUser?.user.role === 'admin' || currentUser?.user.role === 'auditor') {
       groups.push({
         id: 'admin',
-        label: 'Admin',
+        label: t('palette.group.admin'),
         items: [
           {
             id: 'admin-dashboard',
-            label: 'Open admin dashboard',
-            keywords: 'administration users providers quotas',
+            label: t('palette.action.adminDashboard'),
+            keywords: t('palette.keywords.adminDashboard'),
             icon: Shield,
             onSelect: () => navigate({ to: '/admin' }),
           },
@@ -157,5 +161,6 @@ export function usePaletteActions({
     setTemporary,
     setTheme,
     sidebarOpen,
+    t,
   ]);
 }

@@ -12,7 +12,7 @@ credentials in your secret manager; never commit them or put them in
 `.env.example`.
 
 ```bash
-export OCI_VERSION=v0.13.1
+export OCI_VERSION=v0.14.0
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"
@@ -507,7 +507,10 @@ Back up all durable state before an upgrade:
 - The configured local or S3-compatible storage contains attachment objects.
 - Your secret manager contains `AUTH_SECRET`, `ENCRYPTION_KEY`, database
   credentials, and deployment configuration. Losing `ENCRYPTION_KEY` makes
-  encrypted provider and integration credentials unrecoverable.
+  encrypted provider and integration credentials unrecoverable. From v0.14
+  `AUTH_SECRET` also opens the authenticators of people who use two-step
+  verification (see [Two-step verification and `AUTH_SECRET`](#two-step-verification-and-auth_secret)):
+  a database backup carries them encrypted, and only that secret reads them.
 
 Example PostgreSQL backup for the bundled Compose stack:
 
@@ -1443,6 +1446,220 @@ table only. It holds nothing worth keeping: rows saying a file's passages
 could not be embedded for a model, which v0.11 records elsewhere. Rolling
 back to v0.12.0 or v0.11.x is unaffected; only v0.10 and earlier used it.
 
+### Upgrading to v0.14
+
+From v0.13.x, with no downtime: back up and run `pnpm upgrade:check` (the verdict
+for a v0.13 database is ROLLING), `migrate` (migrations `0050` to `0055`, all
+additive: new tables and nullable columns, nothing rewritten), replace the
+replicas one at a time, then `migrate --post`, which schedules the background
+migration `0.14.thread-connector-use` (there is no new post-deploy step). A single
+instance with `RUN_MIGRATIONS=true` and the Helm chart do all of it on their own.
+
+**Three features are not enforced by a v0.13 replica, so switch them on only once
+every replica runs v0.14** (the checklist for the window, then each feature's
+section below):
+
+1. Do not enrol in two-step verification, and do not require it for a role.
+2. Do not set data classification to **Warn** or **Block** (the setting is
+   refused until `migrate --post` has scheduled its background migration).
+3. Do not create groups, group grants or project shares (these answer 409 while an
+   older replica sends a heartbeat), and delete no accounts: a v0.13 replica
+   deleting an editor's account would delete the files they added to other
+   people's projects.
+
+Everything else (interface languages, the installable app, the accessibility
+report) needs nothing from you: languages default to English only (an
+administrator enables Spanish or Arabic under Branding), and the app manifest is
+served from the first v0.14 replica. Rolling back to v0.13 is safe: it ignores
+the new tables and columns (see each section for what you lose).
+
+#### Two-step verification (migrations 0050 and 0051, #399)
+
+Two pre-deploy migrations add the `two_factor` and `passkey` tables, the
+`user.two_factor_enabled` flag and `session.auth_method`. They are additive and
+fast (new empty tables, a nullable column and a column with a constant default,
+which PostgreSQL adds without rewriting the table); `pnpm lint:migrations` is
+clean and a v0.13 replica ignores all of it, so a rolling upgrade works as
+before. Nothing changes for anybody until they set two-step verification up or
+an administrator requires it.
+
+- **Do not enrol, and do not require it, until every replica runs v0.14.** A
+  v0.13 replica has no second step: a person who enrolled on a v0.14 replica
+  signs in with the password alone on a v0.13 one (during the roll, or after a
+  rollback), and a requirement is not applied there. Enrolling after the roll
+  is complete is safe, and rolling back afterwards keeps the enrolments for when
+  you upgrade again.
+- **`AUTH_SECRET` now matters more.** Before, changing it only signed people
+  out. Now it also encrypts every authenticator and set of recovery codes.
+  Changing it makes them unreadable: people with an authenticator cannot sign in
+  with it. Recover with `admin:reset-mfa --all --yes`
+  ([below](#two-step-verification-and-auth_secret)). Keep it with the other
+  deployment secrets, and in the backups' secret list.
+- **`APP_URL` is now bound to passkeys.** A passkey belongs to the host of
+  `APP_URL`. Moving the instance to another address orphans its passkeys (the
+  authenticator and password still work). Use the final address before people
+  register them.
+- **The server clock must be right.** Authenticator codes depend on the time;
+  run NTP (or your platform's time sync) on every replica. Codes are accepted
+  from one 30-second step before to one after the current one, so a server
+  clock more than about 30 seconds out refuses correct codes.
+
+#### Requiring it for a role
+
+Under **Admin → Sign-in & security → Authentication** an administrator can
+require two-step verification for chosen roles, with a grace period (14 days by
+default; 0 limits people at their next request). The requirement is enforced on
+the server, on every request, and it never removes the way in: a person who is
+limited can always reach setup and sign out. See
+[Identity and access](admin/identity.md#two-step-verification).
+
+## Two-step verification and `AUTH_SECRET`
+
+Better Auth's `twoFactor` plugin encrypts each authenticator's key and each set
+of recovery codes with `AUTH_SECRET` (XChaCha20-Poly1305, keyed from it). This
+is deliberately **not** `ENCRYPTION_KEY`: no option moves the plugin to another
+key, and wrapping the columns in OCI's own envelope would break the plugin's
+one-use check on recovery codes. So:
+
+- `two_factor` is not one of the places [`ENCRYPTION_KEY` rotation](#rotating-encryption_key)
+  re-encrypts, on purpose, and a test keeps it that way.
+- Changing `AUTH_SECRET` makes every authenticator and recovery code unreadable.
+  People who have one cannot pass the second step; passkeys are not affected
+  (they do not depend on the secret). After a deliberate or accidental change,
+  run once, from any replica:
+
+  ```bash
+  docker compose exec api node dist/scripts/reset-mfa.js --all --yes
+  ```
+
+  It removes every authenticator and every set of recovery codes, turns the
+  second step off and ends every session; people sign in with their password
+  and set it up again. A role that requires two-step verification limits them
+  until they do.
+- A database backup carries the encrypted values, which only the matching
+  `AUTH_SECRET` opens: back the secret up with the database.
+
+#### Data classification (migration 0052, #395)
+
+Migration 0052 adds the tables for data classes, approvals and labels
+(`data_class`, `model_data_class`, `connector_data_class`, `project_data_class`,
+`thread_data_class`, `thread_connector_use`), one nullable column
+(`connector.data_classes_reviewed_at`) and four triggers: a conversation that
+leaves a project, a project that is deleted and a connector that is deleted keep
+the labels they gave (as `kept` labels), and a fork or an edit copies its
+parent's labels and connector uses. It is additive, takes only a brief lock on
+`thread`, `project` and `connector` (within the migrator's lock timeout and
+retries) and rewrites nothing. The feature is **off** by default and nothing
+changes until an administrator sets a mode
+([Data classification](admin/data-classification.md)).
+
+How the upgrade gets there, in the three phases of an [upgrade](#upgrade):
+
+1. **`migrate`:** migration 0052, as above. The previous release (v0.13) keeps
+   working: it does not know the tables, and the triggers keep labels consistent
+   for what it forks, moves and deletes.
+2. **`migrate --post` (after every replica runs 0.14):** schedules the
+   background migration `0.14.thread-connector-use`.
+3. **Background:** `0.14.thread-connector-use` reads stored messages in batches
+   of 2,000, with a short pause between them, and records which connectors each
+   conversation used before 0.14 (including tool runs by a v0.13 replica during
+   the upgrade). It respects the usual throttle and can be paused or resumed on
+   **System health → Background migrations**. Until it has finished, a decision
+   also reads the conversation's own messages (one conversation at a time), so
+   nothing waits for it.
+
+**During a rolling upgrade, and after a rollback to v0.13, classification is not
+enforced.** A v0.13 replica does not check labels, does not record connector use
+and ignores the `classification` setting. For that reason **Warn and Block
+cannot be turned on until `migrate --post` has scheduled the backfill** (the
+setting is refused with a 409 and an explanation). If you turn the mode on and
+then roll back to v0.13, the mode is ignored by v0.13 and applies again when you
+return to v0.14; labels set meanwhile are kept.
+
+Rolling back to v0.13 leaves the new tables and triggers in place and harmless.
+#### Groups (migration 0053)
+
+Migration `0053_groups` adds four tables (`group`, `group_member`,
+`quota_policy_group`, `model_group_access`) and changes nothing that exists: no
+column added, no rows rewritten, no post-deploy step or background migration. It
+is a pre-deploy migration, fast, and every foreign key is `ON DELETE CASCADE`
+(never `RESTRICT`), so a v0.13 replica still serving while the upgrade runs can
+delete a user, a model or a budget without being blocked by rows it cannot see.
+Rolling back to v0.13 leaves the tables inert.
+
+**While a v0.13 replica still serves** (the rolling window of step 6), a v0.13
+replica does not know groups: a budget attached to a group is **not enforced**
+on it (a budget fails open), and a model granted only through a group is not
+offered there. So v0.14 refuses to change a group's grants while any live
+replica reports an earlier release (409, "An upgrade is still in progress";
+this needs the replica heartbeats, so with more than one replica Redis, as
+[above](#upgrade)). **Create no groups you rely on until the upgrade has
+finished**: set grants afterwards. Members and managers can be edited at any
+time; they have no effect on v0.13.
+
+Groups only add budgets and models. Rolling back to v0.13 therefore removes
+what groups added, never anything a role gave.
+
+**Project sharing (migration 0054) and groups (0053).** Two pre-deploy
+migrations that only add tables (`group`, `group_member`, `quota_policy_group`,
+`model_group_access`, `project_share`): no existing table changes, nothing is
+backfilled, no post-deploy step or background migration follows, and v0.13
+replicas keep serving on the new schema. Every new foreign key cascades, so a
+v0.13 replica deleting a user, project, model or budget is never blocked by rows
+it cannot see.
+
+**While a v0.13 replica still serves, do the following.** A v0.13 replica
+knows nothing of shares and groups. Its project queries only ever look at the
+owner's own rows, so it can never show more than the owner's data, but:
+
+| What | Effect on v0.13 |
+| --- | --- |
+| A person a project is shared with | gets 404 for it, flapping behind the balancer if replicas are mixed: safe |
+| Their message in a conversation they have in that project | the project is silently not applied: safe, but the reply ignores it |
+| Their conversation in a shared project | hidden from their sidebar's project tree (it is not their project), still in History and search |
+| An administrator deletes an **editor's** account | **the files the editor added to other people's projects are deleted with the account** (v0.13 does not know to hand them over): data loss, only while a v0.13 replica serves |
+| A group budget or a group-granted model | not applied: a group budget is not enforced (it fails open), an extra model is not offered (it fails closed) |
+| A v0.13 owner deletes a project | works; its shares go with it |
+
+To keep that window harmless:
+
+1. **Create no groups and no shares, and delete no accounts, until every replica
+   runs v0.14.** The application helps: while a live replica reports an older
+   version, creating a share or transferring a project answers `409` "An
+   upgrade is still in progress" (the same guard covers a group's grants). The
+   guard reads the replicas' heartbeats, so it needs Redis, which more than one
+   replica already requires. With one replica and no Redis there is nothing to
+   compare and the guard lets requests through: it is the only replica.
+   **It cannot see an account deletion**: do not delete accounts during the window.
+2. After the last v0.13 replica is gone the guard clears on its own (a replica
+   that stops is removed from the list at once; one that vanished is forgotten
+   after a minute).
+3. A job, `projects.reconcile-access`, runs every minute on the replicas that run
+   jobs: it moves files whose uploader is no longer an editor to the owner and
+   takes conversations of people who cannot read a project out of it. It is a
+   safety net: access is always checked when a request arrives.
+
+**Rolling back to v0.13 after v0.14 has run.** Migrations are forward only, and
+nothing here needs the backup: v0.13 runs on the schema with the new tables
+unused. Shares and groups stay in the database and work again if you upgrade
+again. Before or just after the rollback, run this once to take **other people's
+conversations out of projects v0.13 would not let them open** (they stay
+conversations, nothing is deleted; v0.13 would otherwise keep them but hide
+them from the sidebar's project tree):
+
+```sql
+UPDATE thread SET project_id = NULL
+WHERE project_id IS NOT NULL
+  AND user_id <> (SELECT p.user_id FROM project p WHERE p.id = thread.project_id);
+```
+
+Files that editors added to other people's projects stay in those projects under
+their uploaders' names (counted against them). v0.13 shows an owner only the
+files they uploaded themselves, so those files are not listed to the owner while
+v0.13 serves, and they are deleted if the uploader's account is deleted: hand
+them to the owner first with the same hand-over v0.14 uses when an editor leaves
+a project (remove the share in v0.14 before rolling back).
+
 ## Shutting down and draining
 
 From v0.11 an API replica drains when it is stopped, so replacing replicas
@@ -2133,6 +2350,36 @@ docker compose exec api node dist/scripts/promote-admin.js user@example.com
 
 Outside a container, from a checkout: `pnpm --filter @oci/api admin:promote
 user@example.com`.
+
+### When two-step verification stands in the way
+
+A person who lost their authenticator and their recovery codes, or an
+administrator who cannot pass the second step, is helped in two ways.
+
+- **Another administrator** opens **People → Users →** the person and chooses
+  **Reset two-step verification**. Their authenticator, recovery codes and
+  passkeys are removed and their sessions end; they are emailed (when email is
+  set up) and the reset is audited as `user.mfa.reset`. It is not offered for
+  your own account.
+- **The recovery CLI**, when no administrator can get in:
+
+  ```bash
+  docker compose exec api node dist/scripts/reset-mfa.js user@example.com
+  ```
+
+  This does the same for one person and records `user.mfa_reset_cli`. It prints
+  no secret and decrypts nothing, so it works whatever `AUTH_SECRET` is.
+  `--unlock` only clears the lock after too many wrong codes (ten consecutive
+  failures lock the second step for 15 minutes, and somebody who knows the
+  password can otherwise keep it locked): `reset-mfa.js user@example.com
+  --unlock`. `--all --yes` is for a changed `AUTH_SECRET`
+  ([above](#two-step-verification-and-auth_secret)). Outside a container, from a
+  checkout: `pnpm --filter @oci/api admin:reset-mfa user@example.com`.
+
+The break-glass administrator is never locked out by the requirement itself: a
+limited person can always set it up or sign out, and saving a requirement is
+refused unless the administrator saving it has passed the second step and, for
+the administrator role, another local administrator has set it up.
 
 ## Single sign-on roles
 

@@ -1,3 +1,5 @@
+import { useT } from '~/lib/i18n';
+
 /**
  * What deleting an account removes and keeps, worded once for both places an
  * account is deleted: an administrator under People (v0.10) and the person
@@ -23,6 +25,7 @@ export function AccountDeletionText({
   /** An administrator deleting someone (by name), or the person deleting their own account. */
   subject: { kind: 'admin'; name: string } | { kind: 'self' };
 }) {
+  const t = useT();
   if (subject.kind === 'admin') {
     return (
       <>
@@ -36,15 +39,13 @@ export function AccountDeletionText({
       </>
     );
   }
+  // The person's own deletion is in their language; the administrator's, above, is English.
   return (
     <>
-      This permanently deletes your account and everything it owns: {DELETED}. You are signed out
-      straight away. This cannot be undone.
+      {t('settings.deleteAccount.text')}
       <br />
       <br />
-      The audit log keeps every entry, including this deletion, with your email address. Invites and
-      announcements you created stay. {USAGE_KEPT} you, so your organisation’s usage totals stay
-      accurate.
+      {t('settings.deleteAccount.textAudit')}
     </>
   );
 }

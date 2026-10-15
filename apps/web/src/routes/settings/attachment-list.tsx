@@ -12,10 +12,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
+import { tWithNodes } from '~/components/settings/user-text';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+import { formatDate, formatFileSize, translate, useT } from '~/lib/i18n';
+import { toDate } from '~/lib/i18n/format';
 import { useReadOnlyLock } from '~/lib/read-only';
-import { cn, formatBytes } from '~/lib/utils';
+import { cn } from '~/lib/utils';
 
 interface SelectionCheckboxProps {
   checked: boolean;
@@ -48,6 +51,7 @@ function SelectionCheckbox({
 }
 
 function AttachmentPreview({ attachment }: { attachment: StoredFile }) {
+  const t = useT();
   const [imageFailed, setImageFailed] = useState(false);
   const isImage = attachment.mimeType.startsWith('image/');
   const isPdf = attachment.mimeType === 'application/pdf';
@@ -65,7 +69,9 @@ function AttachmentPreview({ attachment }: { attachment: StoredFile }) {
       ) : isPdf ? (
         <span className="relative flex size-full items-center justify-center">
           <FileText className="size-5" />
-          <span className="absolute bottom-0.5 text-[0.4rem] font-bold leading-none">PDF</span>
+          <span className="absolute bottom-0.5 text-[0.4rem] font-bold leading-none">
+            {t('settings.attachments.pdfBadge')}
+          </span>
         </span>
       ) : attachment.mimeType.startsWith('text/') || attachment.mimeType === 'application/json' ? (
         <FileText className="size-5" />
@@ -79,14 +85,9 @@ function AttachmentPreview({ attachment }: { attachment: StoredFile }) {
 }
 
 function formatCreatedAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Unknown date';
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date);
+  return toDate(value)
+    ? formatDate(value, 'medium')
+    : translate('settings.attachments.unknownDate');
 }
 
 interface AttachmentListProps {
@@ -102,7 +103,7 @@ interface AttachmentListProps {
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onDelete: (ids: string[]) => void;
-  /** Under "No attachments yet": where uploads come from, for what this role can upload. */
+  /** Under "No attachments yet": where uploads come from, for what this role can upload (default: both). */
   emptyHint?: string;
 }
 
@@ -119,8 +120,9 @@ export function AttachmentList({
   onToggle,
   onToggleAll,
   onDelete,
-  emptyHint = 'Files uploaded in chats and to projects will appear here.',
+  emptyHint,
 }: AttachmentListProps) {
+  const t = useT();
   // Deleting a file is refused while read-only (#353).
   const lock = useReadOnlyLock();
   // Project files are managed (and deleted) from their project, not here.
@@ -138,10 +140,12 @@ export function AttachmentList({
         </span>
         <div>
           <p className="text-sm font-medium text-[var(--text-secondary)]">
-            {totalCount === 0 ? 'No attachments yet' : 'No files match this filter'}
+            {totalCount === 0 ? t('settings.attachments.none') : t('settings.attachments.noMatch')}
           </p>
           <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-            {totalCount === 0 ? emptyHint : 'Choose another file type to see your uploads.'}
+            {totalCount === 0
+              ? (emptyHint ?? t('settings.attachments.hintBoth'))
+              : t('settings.attachments.noMatchHint')}
           </p>
         </div>
       </div>
@@ -157,33 +161,37 @@ export function AttachmentList({
           disabled={selectable.length === 0}
           label={
             allVisibleSelected
-              ? 'Deselect all visible attachments'
-              : 'Select all visible attachments'
+              ? t('settings.attachments.deselectAllVisible')
+              : t('settings.attachments.selectAllVisible')
           }
           onChange={onToggleAll}
         />
-        <span>Name</span>
+        <span>{t('settings.attachments.columnName')}</span>
         <button
           type="button"
-          className="hidden items-center justify-end gap-1 text-right transition-colors hover:text-[var(--text-primary)] sm:flex"
-          aria-label={`Sort by date ${sortDirection === 'asc' ? 'newest first' : 'oldest first'}`}
+          className="hidden items-center justify-end gap-1 text-end transition-colors hover:text-[var(--text-primary)] sm:flex"
+          aria-label={t(
+            sortDirection === 'asc'
+              ? 'settings.attachments.sortNewest'
+              : 'settings.attachments.sortOldest',
+          )}
           onClick={onSort}
         >
-          Created
+          {t('settings.attachments.columnCreated')}
           {sortDirection === 'asc' ? (
             <ArrowUp className="size-3.5" />
           ) : (
             <ArrowDown className="size-3.5" />
           )}
         </button>
-        <span className="sr-only">Actions</span>
+        <span className="sr-only">{t('settings.attachments.actions')}</span>
       </div>
 
       {isLoading ? (
         <div
           className="flex min-h-32 items-center justify-center"
           role="status"
-          aria-label="Loading attachments"
+          aria-label={t('settings.attachments.loading')}
         >
           <Spinner className="size-6" />
         </div>
@@ -191,10 +199,10 @@ export function AttachmentList({
         <div className="flex min-h-32 flex-col items-center justify-center gap-3 px-6 text-center">
           {/* Announced, as every list's load error is (#245). */}
           <p role="alert" className="text-sm text-[var(--text-secondary)]">
-            Attachments could not be loaded.
+            {t('settings.attachments.loadError')}
           </p>
           <Button variant="secondary" size="sm" onClick={onRetry}>
-            Try again
+            {t('settings.attachments.retry')}
           </Button>
         </div>
       ) : (
@@ -221,7 +229,7 @@ export function AttachmentList({
                   <SelectionCheckbox
                     checked={isSelected}
                     disabled={isDeleting}
-                    label={`Select ${attachment.filename}`}
+                    label={t('settings.attachments.selectLabel', { name: attachment.filename })}
                     onChange={() => onToggle(attachment.id)}
                   />
                 )}
@@ -239,23 +247,34 @@ export function AttachmentList({
                       {/* Wraps, as the details line does (#195): cut short, the
                           name could be read only in a tooltip, which touch
                           cannot reach (#244). The icon stays by the first line. */}
-                      <span className="min-w-0 wrap-anywhere">{attachment.filename}</span>
-                      <ExternalLink className="mt-1 size-3 shrink-0 text-[var(--text-secondary)]" />
+                      <span dir="auto" className="min-w-0 wrap-anywhere">
+                        {attachment.filename}
+                      </span>
+                      <ExternalLink className="mt-1 size-3 shrink-0 text-[var(--text-secondary)] rtl:-scale-x-100" />
                     </a>
                     {/* Wraps: cut short on a phone, it hid the size and date,
                         with no tooltip to read them (#195). */}
                     <p className="text-xs leading-4 wrap-anywhere text-[var(--text-muted)]">
                       {project && (
                         <>
-                          Project{' '}
-                          <Link
-                            to="/projects/$projectId"
-                            params={{ projectId: project.id }}
-                            search={{ tab: 'files' }}
-                            className="font-medium text-[var(--text-secondary)] hover:underline"
-                          >
-                            {project.name}
-                          </Link>{' '}
+                          {tWithNodes(
+                            t,
+                            'settings.attachments.project',
+                            {},
+                            {
+                              project: (
+                                <Link
+                                  to="/projects/$projectId"
+                                  params={{ projectId: project.id }}
+                                  search={{ tab: 'files' }}
+                                  dir="auto"
+                                  className="font-medium text-[var(--text-secondary)] hover:underline"
+                                >
+                                  {project.name}
+                                </Link>
+                              ),
+                            },
+                          )}{' '}
                           ·{' '}
                         </>
                       )}
@@ -263,20 +282,29 @@ export function AttachmentList({
                           own conversation (#358). */}
                       {attachment.conversation && (
                         <>
-                          In{' '}
-                          <Link
-                            to="/chat/$threadId"
-                            params={{ threadId: attachment.conversation.id }}
-                            className="font-medium text-[var(--text-secondary)] hover:underline"
-                          >
-                            {attachment.conversation.title}
-                          </Link>{' '}
+                          {tWithNodes(
+                            t,
+                            'settings.attachments.inConversation',
+                            {},
+                            {
+                              conversation: (
+                                <Link
+                                  to="/chat/$threadId"
+                                  params={{ threadId: attachment.conversation.id }}
+                                  dir="auto"
+                                  className="font-medium text-[var(--text-secondary)] hover:underline"
+                                >
+                                  {attachment.conversation.title}
+                                </Link>
+                              ),
+                            },
+                          )}{' '}
                           ·{' '}
                         </>
                       )}
                       {/* In a composer and not sent (yet), unlike the rest (#297). */}
-                      {attachment.unsent && 'Not sent · '}
-                      {attachment.mimeType} · {formatBytes(attachment.sizeBytes)}
+                      {attachment.unsent && `${t('settings.attachments.notSent')} · `}
+                      {attachment.mimeType} · {formatFileSize(attachment.sizeBytes)}
                       <span className="sm:hidden"> · {formatCreatedAt(attachment.createdAt)}</span>
                     </p>
                   </div>
@@ -284,7 +312,7 @@ export function AttachmentList({
 
                 <time
                   dateTime={attachment.createdAt}
-                  className="hidden text-right text-xs text-[var(--text-secondary)] sm:block"
+                  className="hidden text-end text-xs text-[var(--text-secondary)] sm:block"
                 >
                   {formatCreatedAt(attachment.createdAt)}
                 </time>
@@ -295,8 +323,11 @@ export function AttachmentList({
                       to="/projects/$projectId"
                       params={{ projectId: project.id }}
                       search={{ tab: 'files' }}
-                      aria-label={`Manage ${attachment.filename} in ${project.name}`}
-                      title={`Manage in ${project.name}`}
+                      aria-label={t('settings.attachments.manageLabel', {
+                        file: attachment.filename,
+                        project: project.name,
+                      })}
+                      title={t('settings.attachments.manageTitle', { project: project.name })}
                     >
                       <FolderOpen />
                     </Link>
@@ -306,8 +337,10 @@ export function AttachmentList({
                     variant="ghost"
                     size="icon-sm"
                     disabled={isDeleting}
-                    aria-label={`Delete ${attachment.filename}`}
-                    title={`Delete ${attachment.filename}`}
+                    aria-label={t('settings.attachments.deleteLabel', {
+                      name: attachment.filename,
+                    })}
+                    title={t('settings.attachments.deleteLabel', { name: attachment.filename })}
                     locked={lock.title}
                     className="border border-[var(--danger)]/45 bg-[var(--danger)]/15 text-[var(--danger-on-tint)] hover:bg-[var(--danger)]/30"
                     onClick={() => onDelete([attachment.id])}

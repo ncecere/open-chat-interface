@@ -1,3 +1,4 @@
+import { db } from '../../db/index.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { runsBackgroundJobs } from '../../lib/role.js';
@@ -27,6 +28,7 @@ import { migrationJobs, POST_MIGRATIONS_JOB } from '../migrations/jobs.js';
 import { processPendingImports } from '../portability/imports.js';
 import { embedPendingProjectPassages } from '../project-search/embedding.js';
 import { indexPendingProjectFiles } from '../project-search/indexing.js';
+import { reconcileAccessLeftovers } from '../project-sharing/reconcile.js';
 import { sweepAbandonedReservations } from '../quota/index.js';
 import { runDueReports } from '../reports.js';
 import { recomputeStorageUsage } from '../storage/quota.js';
@@ -109,6 +111,19 @@ export function lifecycleJobs(): JobDefinition[] {
       name: 'projects.embed-passages',
       intervalMs: 5 * MINUTE,
       run: () => embedPendingProjectPassages(),
+    },
+    {
+      // Project sharing (v0.14): puts a project back in line with who may use it
+      // when something ended access without reconciling it (an upload that
+      // finished after its uploader lost access, a group membership removed by
+      // code that did not reconcile): conversations of people with no access
+      // leave the project, and files of anyone no longer an editor go to the
+      // owner. Idempotent, a bounded batch of projects a tick, each under its own
+      // lock. Reads re-check access, so this only keeps the sidebar, counts and
+      // storage honest; it never decides who may see anything.
+      name: 'projects.reconcile-access',
+      intervalMs: MINUTE,
+      run: () => reconcileAccessLeftovers(db),
     },
     {
       // Replies whose producer stopped heartbeating (killed, crashed, cut off

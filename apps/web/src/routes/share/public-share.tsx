@@ -16,6 +16,8 @@ import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { ApiError, api } from '~/lib/api-client';
 import { usePageTitle } from '~/lib/document-title';
+import { useT } from '~/lib/i18n';
+import { formatDate } from '~/lib/i18n/format';
 import { messageExcerpt, repeatedOpeningPositions } from '~/lib/message-excerpt';
 
 interface PublicTextPart {
@@ -81,12 +83,9 @@ function publicMarkdownUrl(value: string, key: string): string | null {
   return url.toString();
 }
 
-function formatDate(value: string): string | null {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-    date,
-  );
+/** A date and time in the language showing, or null for a value that is not one. */
+function dateLabel(value: string): string | null {
+  return Number.isNaN(new Date(value).getTime()) ? null : formatDate(value, 'dateTime');
 }
 
 function unavailableReason(error: unknown): 'expired' | 'revoked' | null {
@@ -112,9 +111,10 @@ function PublicShareState({
   retry?: () => void;
   appName?: string;
 }) {
+  const t = useT();
   const home = (
     <Link to="/" className={retry ? 'text-sm underline' : undefined}>
-      Go to {appName || 'Open Chat Interface'}
+      {t('share.goTo', { appName: appName || 'Open Chat Interface' })}
     </Link>
   );
   return (
@@ -127,7 +127,7 @@ function PublicShareState({
           retry ? (
             <>
               <Button type="button" onClick={retry}>
-                Try again
+                {t('share.tryAgain')}
               </Button>
               {home}
             </>
@@ -143,6 +143,7 @@ function PublicShareState({
 }
 
 function Sources({ parts }: { parts: PublicPart[] }) {
+  const t = useT();
   const sources = parts.flatMap((part) => {
     if (part.type !== 'source-url') return [];
     const url = safeExternalUrl(part.url);
@@ -151,7 +152,7 @@ function Sources({ parts }: { parts: PublicPart[] }) {
   if (sources.length === 0) return null;
 
   return (
-    <section className="mb-4 flex flex-wrap gap-2" aria-label="Sources">
+    <section className="mb-4 flex flex-wrap gap-2" aria-label={t('share.sources')}>
       {sources.map((source) => {
         let hostname = source.url;
         try {
@@ -166,8 +167,10 @@ function Sources({ parts }: { parts: PublicPart[] }) {
             href={source.url}
             className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-control-hover)]"
           >
-            <span className="truncate">{source.title || hostname}</span>
-            <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+            <span className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+              {source.title || hostname}
+            </span>
+            <ExternalLink className="size-3 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
           </SafeExternalLink>
         );
       })}
@@ -194,6 +197,7 @@ function workStepOf(step: PublicToolStepPart): WorkStep {
  * conversation ("Searched the web twice"); expanded, each step's line.
  */
 function SharedWork({ steps }: { steps: PublicToolStepPart[] }) {
+  const t = useT();
   if (steps.length === 0) return null;
   const work = steps.map(workStepOf);
   return (
@@ -204,9 +208,9 @@ function SharedWork({ steps }: { steps: PublicToolStepPart[] }) {
       kind="work"
     >
       <ol
-        aria-label="Steps"
+        aria-label={t('share.steps')}
         data-work-timeline=""
-        className="mt-3 ml-2 space-y-2 border-l border-[var(--border-subtle)] pl-4 text-xs text-[var(--text-muted)]"
+        className="mt-3 ms-2 space-y-2 border-s border-[var(--border-subtle)] ps-4 text-xs text-[var(--text-muted)]"
       >
         {steps.map((step, index) => (
           // Summaries carry no stable id; the list is static once loaded.
@@ -241,6 +245,7 @@ function SharedMessage({
   /** Its place, when another message opens with the same words (#293). */
   position: string | null;
 }) {
+  const t = useT();
   const text = sharedTextOf(message);
   const excerpt = messageExcerpt(text) ?? undefined;
   const place = (excerpt && position) || undefined;
@@ -249,7 +254,7 @@ function SharedMessage({
     return (
       <article
         className="flex flex-col items-end"
-        aria-label="User message"
+        aria-label={t('share.userMessage')}
         data-excerpt={excerpt}
         data-position={place}
       >
@@ -264,7 +269,7 @@ function SharedMessage({
 
   return (
     // Its opening words name its code blocks and tables (#271).
-    <article aria-label="Assistant message" data-excerpt={excerpt} data-position={place}>
+    <article aria-label={t('share.assistantMessage')} data-excerpt={excerpt} data-position={place}>
       <Sources parts={message.parts} />
       {/* The work, then what it made, then the text in the order it was written. */}
       <SharedWork
@@ -299,6 +304,7 @@ function SharedMessage({
 
 /** Standalone anonymous route component; router wiring is intentionally kept elsewhere. */
 export function PublicSharePage({ slug }: { slug: string }) {
+  const t = useT();
   const query = useQuery({
     queryKey: ['public-share', slug],
     queryFn: () => api.get<PublicShareResponse>(`/share-links/${encodeURIComponent(slug)}`),
@@ -315,7 +321,7 @@ export function PublicSharePage({ slug }: { slug: string }) {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-3" aria-busy="true">
         <Spinner className="size-6" />
-        <p className="text-sm text-[var(--text-muted)]">Loading shared conversation…</p>
+        <p className="text-sm text-[var(--text-muted)]">{t('share.loading')}</p>
       </main>
     );
   }
@@ -326,8 +332,8 @@ export function PublicSharePage({ slug }: { slug: string }) {
       return (
         <PublicShareState
           appName={branding?.appName}
-          title="This share link has expired"
-          description="The owner set an expiration time for this shared conversation."
+          title={t('share.expired.title')}
+          description={t('share.expired.description')}
         />
       );
     }
@@ -335,8 +341,8 @@ export function PublicSharePage({ slug }: { slug: string }) {
       return (
         <PublicShareState
           appName={branding?.appName}
-          title="This share link was revoked"
-          description="The owner has stopped sharing this conversation."
+          title={t('share.revoked.title')}
+          description={t('share.revoked.description')}
         />
       );
     }
@@ -344,16 +350,16 @@ export function PublicSharePage({ slug }: { slug: string }) {
       return (
         <PublicShareState
           appName={branding?.appName}
-          title="Shared conversation not found"
-          description="Check the link, or ask its owner to create a new one."
+          title={t('share.notFound.title')}
+          description={t('share.notFound.description')}
         />
       );
     }
     return (
       <PublicShareState
         appName={branding?.appName}
-        title="Could not load this conversation"
-        description="A temporary error prevented the shared conversation from loading."
+        title={t('share.loadFailed.title')}
+        description={t('share.loadFailed.description')}
         retry={() => void query.refetch()}
       />
     );
@@ -369,8 +375,8 @@ export function PublicSharePage({ slug }: { slug: string }) {
       excerpt: messageExcerpt(sharedTextOf(message)),
     })),
   );
-  const sharedAtLabel = formatDate(thread.sharedAt);
-  const expiryLabel = expiresAt ? formatDate(expiresAt) : null;
+  const sharedAtLabel = dateLabel(thread.sharedAt);
+  const expiryLabel = expiresAt ? dateLabel(expiresAt) : null;
 
   return (
     <div className="min-h-dvh bg-[var(--bg-root)]">
@@ -385,7 +391,7 @@ export function PublicSharePage({ slug }: { slug: string }) {
           />
           <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
             <LockKeyhole className="size-3.5" aria-hidden="true" />
-            Read-only share
+            {t('share.readOnly')}
           </span>
         </div>
       </header>
@@ -400,11 +406,17 @@ export function PublicSharePage({ slug }: { slug: string }) {
               />
             </span>
             <div className="min-w-0">
-              <h1 className="break-words text-xl sm:text-2xl">{thread.title}</h1>
+              <h1 dir="auto" className="break-words text-xl sm:text-2xl">
+                {thread.title}
+              </h1>
               <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
-                {snapshot ? 'Snapshot' : 'Live conversation'}
-                {sharedAtLabel ? ` · Shared ${sharedAtLabel}` : ''}
-                {expiryLabel ? ` · Expires ${expiryLabel}` : ''}
+                {[
+                  snapshot ? t('share.snapshot') : t('share.live'),
+                  sharedAtLabel ? t('share.shared', { date: sharedAtLabel }) : null,
+                  expiryLabel ? t('share.expires', { date: expiryLabel }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </p>
             </div>
           </div>
@@ -427,7 +439,7 @@ export function PublicSharePage({ slug }: { slug: string }) {
           </PublicArtifactsProvider>
         ) : (
           <p className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 px-4 py-8 text-center text-sm text-[var(--text-muted)]">
-            This shared conversation has no public messages.
+            {t('share.empty')}
           </p>
         )}
       </main>

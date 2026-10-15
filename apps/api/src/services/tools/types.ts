@@ -7,6 +7,8 @@ export interface ToolCaller {
   role: UserRole;
   threadId: string;
   messageId: string;
+  /** The model the turn runs on: classification judges tools against its approvals. */
+  modelSlug: string;
 }
 
 /** What decides whether a tool is offered for one turn, besides role and model. */

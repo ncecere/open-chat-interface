@@ -9,6 +9,16 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export const FIXTURE_SPECS = ['**/long-conversation.spec.ts'];
 
+const MFA_REQUIREMENT_SPEC = '**/mfa-requirement.spec.ts';
+const CLASSIFICATION_SPEC = '**/classification.spec.ts';
+// language.spec.ts changes the instance's enabled languages, and both set their own
+// viewports (320, 768, 1280 px): a second project would only repeat them, or fight
+// over the setting.
+const LANGUAGE_SPECS = ['**/language.spec.ts', '**/rtl.spec.ts'];
+// a11y-fixes-*.spec.ts set its own 1280 and 320 px viewports for the audit's measurements, as the
+// language specs do; a phone project would only repeat them.
+const VIEWPORT_SPECS = ['**/a11y-fixes-*.spec.ts'];
+
 export default defineConfig({
   testDir: './tests/e2e',
   testIgnore: process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : [],
@@ -23,7 +33,21 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
+    {
+      name: 'mobile-chromium',
+      // Specs that change an instance-wide setting (the classification mode, the MFA
+      // requirement for a role, the enabled languages), which the desktop run sets and clears; a second project
+      // would do the same under it. Left out, never skipped. (A project's own testIgnore
+      // replaces the top-level one, so the fixture specs are repeated here.)
+      testIgnore: [
+        ...(process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : []),
+        MFA_REQUIREMENT_SPEC,
+        CLASSIFICATION_SPEC,
+        ...LANGUAGE_SPECS,
+        ...VIEWPORT_SPECS,
+      ],
+      use: { ...devices['Pixel 7'] },
+    },
     // The instance falls back to the dark theme, so the scans above never saw
     // light, where every AA contrast failure the QA walk found was (#72). The
     // specs store the light theme for projects whose name ends in -light.

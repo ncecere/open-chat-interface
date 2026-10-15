@@ -168,7 +168,11 @@ export function RunHistory<Run extends OperationRun>({
                     : (run.errorMessage ?? 'Failed')}
               </p>
               {details?.(run)}
-              {key && <p className="truncate font-mono text-xs text-[var(--text-muted)]">{key}</p>}
+              {key && (
+                <p className="[overflow-wrap:anywhere] font-mono text-xs text-[var(--text-muted)]">
+                  {key}
+                </p>
+              )}
             </div>
           </li>
         );

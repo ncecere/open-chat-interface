@@ -82,7 +82,7 @@ export function UserBulkToolbar({ selection }: { selection: ReturnType<typeof us
               </span>
             )}
           </span>
-          <span className="ml-auto flex flex-wrap items-center gap-2">
+          <span className="ms-auto flex flex-wrap items-center gap-2">
             <Select
               aria-label="Role to apply"
               value={bulkRole}

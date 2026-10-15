@@ -29,7 +29,9 @@ vi.mock('../../services/settings.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/settings.js')>()),
   getSetting: async (key: string) => {
     if (key === 'maintenance') return {};
-    throw new Error(`Nothing but the read-only check may run here (read ${key})`);
+    // The two-step verification gate reads the requirement for a signed-in person: none here.
+    if (key === 'auth') return {};
+    throw new Error(`Nothing but the read-only check and the MFA gate may run here (read ${key})`);
   },
 }));
 vi.mock('../../lib/logger.js', () => ({
@@ -95,6 +97,10 @@ describe('acceptable use policy: every write route is refused unless allowlisted
         "DELETE /api/me/sessions/:id",
         "DELETE /api/share-links/links/:linkId",
         "POST /api/me/delete-account",
+        "POST /api/me/mfa/recovery-codes",
+        "POST /api/me/mfa/totp",
+        "POST /api/me/mfa/totp/confirm",
+        "POST /api/me/mfa/totp/disable",
         "POST /api/me/onboarding/accept-policy",
         "POST /api/me/sessions/revoke-others",
         "POST /api/me/share-links/revoke-all",
@@ -138,19 +144,23 @@ describe('acceptable use policy: every write route is refused unless allowlisted
         "DELETE /api/attachments/:id",
         "DELETE /api/attachments/:id/unsent",
         "DELETE /api/connectors/:id/account",
+        "DELETE /api/groups/managed/:id/members/:userId",
         "DELETE /api/me/imports/:id",
         "DELETE /api/memory",
         "DELETE /api/memory/:id",
         "DELETE /api/projects/:id",
         "DELETE /api/projects/:id/files/:fileId",
+        "DELETE /api/projects/:id/shares/:shareId",
         "DELETE /api/threads/:id",
         "DELETE /api/threads/:id/compaction/failure",
+        "DELETE /api/threads/:id/data-classes/:classId",
         "DELETE /api/threads/:id/permanent",
         "DELETE /api/threads/:id/unused",
         "DELETE /api/threads/trash",
         "PATCH /api/me/preferences",
         "PATCH /api/memory/:id",
         "PATCH /api/projects/:id",
+        "PATCH /api/projects/:id/shares/:shareId",
         "PATCH /api/threads/:id",
         "PATCH /api/threads/:id/messages/:messageId/active",
         "POST /api/artifacts/:id/versions",
@@ -158,6 +168,7 @@ describe('acceptable use policy: every write route is refused unless allowlisted
         "POST /api/chat",
         "POST /api/chat/:threadId/approvals",
         "POST /api/connectors/:id/connect",
+        "POST /api/groups/managed/:id/members",
         "POST /api/me/broadcasts/:id/dismiss",
         "POST /api/me/imports",
         "POST /api/me/onboarding/complete",
@@ -166,13 +177,18 @@ describe('acceptable use policy: every write route is refused unless allowlisted
         "POST /api/memory/undo",
         "POST /api/projects",
         "POST /api/projects/:id/files",
+        "POST /api/projects/:id/leave",
+        "POST /api/projects/:id/shares",
+        "POST /api/projects/:id/transfer",
         "POST /api/share-links/threads/:threadId",
         "POST /api/threads",
         "POST /api/threads/:id/branches",
         "POST /api/threads/:id/compact",
+        "POST /api/threads/:id/data-classes",
         "POST /api/threads/:id/forks",
         "POST /api/threads/:id/restore",
         "PUT /api/memory/settings",
+        "PUT /api/projects/:id/data-classes",
       ]
     `);
     for (const write of refused) {

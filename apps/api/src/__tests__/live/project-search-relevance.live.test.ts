@@ -67,6 +67,8 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'chat') return {};
     if (key === 'embeddings') return {};
     if (key === 'reranking') return {};
+    // Data classification is off (v0.14): the default, nothing carried.
+    if (key === 'classification') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

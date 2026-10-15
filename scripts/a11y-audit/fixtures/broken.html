@@ -1,0 +1,92 @@
+<!doctype html>
+<!--
+  Negative control for the accessibility audit. Every defect here is deliberate and each check
+  in scripts/a11y-audit must flag its own: a check that cannot fail proves nothing. The page
+  is exercised by apps/web/tests/e2e/accessibility-audit-controls.spec.ts. Do not "fix" it.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- No <title>, no lang on <html>, zoom switched off: 2.4.2, 3.1.1, 1.4.4. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <style>
+      body { margin: 0; font: 16px/1.4 sans-serif; background: #fff; color: #111; }
+      /* 1.4.3: #999 on white is 2.85:1. */
+      .faint { color: #999999; }
+      /* 2.5.8: two 10 px buttons 4 px apart. */
+      .tiny { width: 10px; height: 10px; padding: 0; margin-right: 4px; font-size: 6px; }
+      /* 2.4.7: the focus indicator is removed. */
+      .noring:focus, .noring:focus-visible { outline: none; box-shadow: none; }
+      /* 1.4.10: 600 px of fixed width at a 320 px window. */
+      .wide { width: 600px; background: #eef; }
+      /* 1.4.12: a box that hides what no longer fits once spacing grows. */
+      .clip { width: 180px; height: 42px; overflow: hidden; line-height: 1.2; border: 1px solid #333; }
+      /* 1.4.4: a box in px around text in rem: at 200% the text outgrows it. */
+      .clip-rem { width: 180px; height: 42px; overflow: hidden; font-size: 1rem; line-height: 1.2; border: 1px solid #333; }
+      /* 1.4.11: a 1px #ddd border on white is 1.3:1; and an icon-only button in #ccc. */
+      .pale { border: 1px solid #dddddd; background: #fff; padding: 6px; }
+      .bare { border: 0; background: transparent; }
+      .icon-combobox { border: 0; background: transparent; min-width: 44px; min-height: 44px; }
+      .bare:focus-visible, .icon-combobox:focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
+      .card { border: 2px solid #595959; padding: 6px; }
+      .pale-frame { border: 1px solid #dddddd; padding: 6px; }
+      /* 2.2.2: starts by itself and never stops, not a loading indicator. */
+      @keyframes wobble { from { transform: translateX(0); } to { transform: translateX(6px); } }
+      .wobble { display: inline-block; animation: wobble 1s infinite alternate; }
+      /* 2.4.11: a fixed bar covers the last link when it takes focus. */
+      .cover { position: fixed; left: 0; right: 0; bottom: 0; height: 80px; background: #222; color: #fff; z-index: 10; }
+      .spacer { height: 420px; }
+      .hidden-target { position: absolute; left: 20px; bottom: 20px; }
+    </style>
+  </head>
+  <body>
+    <!-- 1.3.1 / 2.4.1: no <main>, no landmarks. -->
+    <div id="content">
+      <h3>Skipped heading level</h3>
+      <p class="faint">This sentence is light grey on white and fails contrast.</p>
+
+      <p>
+        <button class="tiny" aria-label="one">1</button><button class="tiny" aria-label="two">2</button>
+      </p>
+
+      <p><a href="#one" class="noring">A link with no focus indicator</a></p>
+
+      <!-- 3.3.2 / 4.1.2: an input with no label and no name. -->
+      <p><input type="text" id="bare" /></p>
+
+      <!-- 1.4.11: a borderless field in a strongly bordered card (not a marked frame: the card is not
+           its edge), one in a marked frame whose edge is pale, and an icon-only combobox button. -->
+      <div class="card"><textarea class="bare in-card" aria-label="Notes in a card"></textarea></div>
+      <div class="pale-frame" data-field-frame><textarea class="bare in-pale-frame" aria-label="Notes in a pale frame"></textarea></div>
+      <p><button type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-label="Pick one" class="icon-combobox"><svg width="12" height="12" aria-hidden="true"><path d="M2 4l4 4 4-4" stroke="#222" fill="none"/></svg></button></p>
+
+      <!-- 1.3.5 and 3.3.8: no autocomplete tokens; pasting into the password field is refused. -->
+      <form onsubmit="return false">
+        <label>Email <input type="email" class="pale" /></label>
+        <label>Password <input type="password" class="pale" onpaste="event.preventDefault()" /></label>
+      </form>
+
+      <div class="wide">This block is 600 px wide and makes a 320 px window scroll sideways.</div>
+
+      <div class="clip">A long title that fits on two lines now but needs a third once the text spacing grows.</div>
+
+      <div class="clip-rem">A long title that fits on two lines at normal size but is cut off when text is enlarged.</div>
+
+      <!-- 1.4.11: icon-only button, glyph #cccccc on white; 4.1.2: empty button, checkbox with no state. -->
+      <button aria-label="Pale icon" style="background:#fff;border:0">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#cccccc" stroke-width="2"><circle cx="10" cy="10" r="7" /></svg>
+      </button>
+      <button></button>
+      <div role="checkbox" tabindex="0" aria-label="No state"></div>
+
+      <p><span class="wobble">Moving text</span></p>
+
+      <a class="hidden-target" href="#end">Link under the bar</a>
+
+      <!-- 2.1.2: Tab is swallowed here and focus stays put. -->
+      <input type="text" aria-label="Trap" onkeydown="if (event.key === 'Tab') { event.preventDefault(); this.focus(); }" />
+    </div>
+    <div class="spacer"></div>
+    <div class="cover" aria-hidden="true">A fixed bar over the page</div>
+  </body>
+</html>

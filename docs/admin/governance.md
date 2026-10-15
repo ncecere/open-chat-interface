@@ -30,6 +30,12 @@ For each role:
 - **Usage budgets** — the budgets assigned to the role, read-only, with a link
   to [Usage budgets](#usage-budgets) to change them.
 
+Below the roles, a read-only **Groups** section lists each
+[group](groups.md) with its members and managers, the budgets it carries and the
+extra models it grants, and links to **People → Groups** to change them. Groups
+add to a role; they never take access away. The per-role model count above
+counts what the role alone sees.
+
 Below the role tabs, **Instance-wide** holds the limits that apply to everybody
 regardless of role: sign-in attempts per minute (counted per IP address and per
 account; see [below](#sign-in-attempts)), and the cost and tokens reserved
@@ -140,10 +146,61 @@ switch alone decides. Governance follows the features projects reuse:
 - **Retention** applies to conversations, not projects: an inactive
   conversation in a project is trashed as usual, and the project stays.
   Deleting a project detaches its conversations; it never deletes them.
+- **Data classes** (v0.14): an owner can label a project with
+  [data classes](data-classification.md), and so can an administrator (from the
+  person's page; that label is locked). Every conversation in the project
+  carries them. Changing a project's labels *is* written to the audit log
+  (`project.data_classes.update`, by owner or administrator), unlike the rest of
+  a project, because it is a statement about what data is handled where.
 - **Audit**: like conversations and share links, creating, changing and
   deleting projects is personal content and is not written to the audit log.
-- **Export** includes each project's name, instructions and files.
-- Deleting an account deletes its projects and their files.
+  **Sharing is different** (v0.14): it moves content between people, so it is
+  recorded as `project.share.create`, `project.share.update`,
+  `project.share.delete` (also when a person leaves) and `project.transfer`, and
+  the system's `project.access.revoked` (counts of conversations detached and
+  files handed to the owner, no names). They name the project by id, the
+  person or group and the permission, never the project's name or content, and
+  are not exempt from retention-based pruning of the audit log. Webhooks carry
+  them like any audit event.
+- **Export** includes each project's name, instructions and files; the owner's
+  includes every file in it, and a member's adds only the files they added to
+  projects shared with them.
+- **Sharing** (v0.14): an owner shares a project with a person (by exact email)
+  or a group they belong to, as viewer or editor. Viewers and editors use the
+  project in their own conversations, which stay private. **Administrators and
+  auditors are outsiders to project content**, as before; they manage groups,
+  not other people's projects. See [Sharing](#sharing-projects) below.
+- Deleting an account deletes its projects and their files. A deleted editor's
+  files are handed to the owners first.
+
+#### Sharing projects
+
+- **Who may share**: any person whose role has the Projects switch on; there is
+  no separate setting. A person with projects off sees nothing shared with them.
+- **Limits** (fixed): 50 shares per project (a group counts one), 100 projects
+  shared directly with one person, and 30 email lookups and share changes a
+  minute per person. Looking up an email answers whether an account exists to any
+  signed-in person (managers adding by email have the same power), which is why
+  it is rate limited.
+- **Files and storage**: files an editor adds count against the editor's storage
+  and follow their role's limits. When an editor loses access their files move
+  to the owner and the allowance moves with them; this never refuses for lack of
+  room. Deleting the owner's account deletes files other people added to the
+  project; the dialog says how many shared projects and other people's
+  conversations are affected, and the `user.delete` entry records `sharedProjects`.
+- **Legal hold**: deleting a project, or a file in one, is refused while the
+  person doing it, or the person who added the file, is on hold; deleting an
+  owner's account is refused while anyone who added files to their projects is on
+  hold. Moving files to the owner is not a deletion and is allowed.
+- **Deleting an editor's account** hands the files they added to the owners.
+- **While an upgrade is running**: creating a share or transferring a project
+  answers 409 "An upgrade is still in progress" while a replica of an older
+  release is live. See [Upgrading to v0.14](../OPERATIONS.md#upgrading-to-v014).
+- **Reconciliation**: the `projects.reconcile-access` job (every minute) moves
+  stray files to the owner and takes conversations of people without access out
+  of a project, after anything that ended access without doing it itself. Access
+  is always checked at request time, so the job never decides who may see
+  anything.
 
 The level a new conversation starts at is set instance-wide as **Default
 reasoning level** on [General settings](instance-settings.md). When the chosen
@@ -299,7 +356,11 @@ labels.
 **Models → Usage budgets** (`/admin/quotas`). A budget — a quota policy —
 caps consumption, and is applied to one or more roles. A role can carry several
 at once and every one is enforced; each person gets the full amount on their
-own. Its name is for administrators: people see what a budget counts and its
+own. A budget can also be attached to a [group](groups.md#budgets), which holds
+its members to it in addition to their role's budgets: every budget is enforced,
+the most restrictive wins, and nothing is added up (a group budget never raises a
+role budget). Groups are attached from the group, not from this page, which shows
+them as read-only chips. Its name is for administrators: people see what a budget counts and its
 period ("You have reached your message limit for today"), never its name.
 Three things to decide.
 
@@ -352,7 +413,9 @@ eighty per cent adjusts.
 
 An individual can be granted more without changing the policy, from **Limits**
 beside their name in [the user list](people.md) or **Adjust limits** on their
-account page. Set an expiry where the need is temporary.
+account page. Set an expiry where the need is temporary. An override can adjust
+a budget the person has through their role or through a group they are in, and
+nothing else.
 
 ## Storage allowance
 
@@ -481,7 +544,11 @@ entries are kept. Each field shows
   and security changes are kept regardless: account creation, edits and
   deletion, role changes (including bulk role, ban and unban), provider and
   single sign-on changes, sign-in policy changes, webhook endpoint changes,
-  backup and compliance export settings changes, and legal holds.
+  backup and compliance export settings changes, and legal holds. So are
+  the [data classification](data-classification.md) changes an administrator
+  makes (classes, approvals of models, what connectors carry, the mode and the
+  services' approvals); a person's own labels and the refusals and warnings
+  follow the normal period.
 
 People on [legal hold](compliance.md#legal-hold) are skipped by conversation,
 trash, audit and memory retention until the hold is lifted.

@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
 import { api, apiErrorMessage, saveBlob } from '~/lib/api-client';
+import { type MessageKey, translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -32,9 +33,23 @@ export function exportFormatsFor(markdown: string): DocumentFormat[] {
   return MENU_ORDER.filter((format) => format !== 'xlsx' || tables);
 }
 
+const FORMAT_NAME_KEYS = {
+  docx: 'chat.exportMenu.formatDocx',
+  pdf: 'chat.exportMenu.formatPdf',
+  pptx: 'chat.exportMenu.formatPptx',
+  xlsx: 'chat.exportMenu.formatXlsx',
+} as const satisfies Record<DocumentFormat, MessageKey>;
+
 function formatMenuLabel(format: DocumentFormat): string {
-  return `${DOCUMENT_FORMAT_INFO[format].label} (.${DOCUMENT_FORMAT_INFO[format].extension})`;
+  return translate('chat.exportMenu.formatItem', {
+    name: translate(FORMAT_NAME_KEYS[format]),
+    extension: DOCUMENT_FORMAT_INFO[format].extension,
+  });
 }
+
+/** The format as the file is named, "PPTX": a file type, not a word to translate. */
+const fileType = (format: DocumentFormat): string =>
+  DOCUMENT_FORMAT_INFO[format].extension.toUpperCase();
 
 interface DocumentExport {
   /** The format being prepared, or null. */
@@ -72,7 +87,7 @@ export function useDocumentExport(
         setError(
           apiErrorMessage(
             failure,
-            `The ${DOCUMENT_FORMAT_INFO[format].description} file could not be downloaded. Check your connection and try again.`,
+            translate('chat.exportMenu.downloadFailed', { format: fileType(format) }),
           ),
         );
       } finally {
@@ -103,11 +118,12 @@ export function ExportMenu({
   /** An icon button (reply actions) rather than a labelled one (artifact panel). */
   compact?: boolean;
   disabled?: boolean;
-  /** Which reply, added to the icon button's name: ` “Here is the plan…”` (#194). */
+  /** Which reply, added to the icon button's name: `“Here is the plan…”` (#194). */
   about?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
-  const label = state.busy ? 'Preparing file…' : 'Export as…';
+  const label = state.busy ? t('chat.exportMenu.preparing') : t('chat.exportMenu.label');
   return (
     // Not modal: a modal menu marks the rest of the page aria-hidden while it is
     // still focusable (axe: aria-hidden-focus). Escape, an outside click or a
@@ -120,17 +136,22 @@ export function ExportMenu({
           type="button"
           variant="ghost"
           size={compact ? 'icon-sm' : 'sm'}
-          aria-label={compact ? `${label}${about}` : undefined}
+          aria-label={
+            compact ? (about ? t('chat.exportMenu.named', { label, about }) : label) : undefined
+          }
           title={compact ? label : undefined}
           data-export-menu=""
         >
-          <FileDown aria-hidden="true" className={cn(state.busy && 'animate-pulse')} />
+          <FileDown
+            aria-hidden="true"
+            className={cn(state.busy && 'animate-pulse motion-reduce:animate-none')}
+          />
           {!compact && label}
         </Button>
       </DropdownMenuTrigger>
       {open && (
         <DropdownMenuContent align="start" className="w-60">
-          <DropdownMenuLabel>Export as</DropdownMenuLabel>
+          <DropdownMenuLabel>{t('chat.exportMenu.heading')}</DropdownMenuLabel>
           {exportFormatsFor(markdown).map((format) => (
             <DropdownMenuItem
               key={format}
@@ -148,10 +169,11 @@ export function ExportMenu({
 
 /** The live progress and the inline error of an export, under its button. */
 export function ExportNotice({ state, className }: { state: DocumentExport; className?: string }) {
+  const t = useT();
   return (
     <>
       <span className="sr-only" role="status" aria-live="polite">
-        {state.busy ? `Preparing the ${DOCUMENT_FORMAT_INFO[state.busy].description} file…` : ''}
+        {state.busy ? t('chat.exportMenu.preparingFile', { format: fileType(state.busy) }) : ''}
       </span>
       {state.error && (
         <p
@@ -164,7 +186,7 @@ export function ExportNotice({ state, className }: { state: DocumentExport; clas
             className="shrink-0 underline underline-offset-2"
             onClick={state.dismiss}
           >
-            Dismiss
+            {t('chat.exportMenu.dismiss')}
           </button>
         </p>
       )}

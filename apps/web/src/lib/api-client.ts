@@ -1,5 +1,6 @@
 import type { ApiErrorBody, ReadOnlyStatus } from '@oci/shared';
 import type { FieldProblem } from '~/hooks/use-clear-on-edit';
+import { MFA_ENROLMENT_REQUIRED, noteMfaRequired } from '~/lib/mfa-required';
 import { notePolicyRequired, POLICY_ACCEPTANCE_REQUIRED } from '~/lib/policy-required';
 import { noteReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
 import { noteUnauthorized } from '~/lib/session-ended';
@@ -11,10 +12,17 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly details?: unknown,
+    /** Seconds the server asked the client to wait (`Retry-After`), when it did. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/** `Retry-After` as whole seconds; a date, or nothing, is not used. */
+function retryAfterSeconds(header: string | null): number | undefined {
+  return header && /^\d{1,6}$/.test(header.trim()) ? Number(header.trim()) : undefined;
 }
 
 /**
@@ -131,11 +139,20 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
       // the gate looks again and shows the acceptance page.
       if (response.status === 403 && (code as string) === POLICY_ACCEPTANCE_REQUIRED)
         notePolicyRequired();
+      // A session limited until a second step is set up (#399): the gate looks
+      // again and the setup page is shown.
+      if (response.status === 403 && (code as string) === MFA_ENROLMENT_REQUIRED) noteMfaRequired();
     } catch {
       // Non-JSON error responses keep the status text.
     }
 
-    throw new ApiError(response.status, code, message, details);
+    throw new ApiError(
+      response.status,
+      code,
+      message,
+      details,
+      retryAfterSeconds(response.headers.get('retry-after')),
+    );
   }
   return response;
 }

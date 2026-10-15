@@ -1,6 +1,9 @@
 import {
   DEFAULT_MAX_TOOL_STEPS,
   type InstanceSettings,
+  type LanguageSettings,
+  type MfaRequirement,
+  normalizeLanguageSettings,
   SEARCH_PROVIDERS,
   type SearchProviderKind,
   type SearchTestResult,
@@ -25,11 +28,23 @@ import {
 import { publicLogoUrl, storeInstanceLogo } from '../../services/branding-assets.js';
 import { sendTestEmail } from '../../services/email.js';
 import {
+  assertRequirementAllowed,
+  currentRequirement,
+  mfaImpact,
+  nextRequirement,
+  requirementChanged,
+} from '../../services/mfa/requirement.js';
+import {
   runSearch,
   storedFallbackSearchKey,
   storedSearchKey,
 } from '../../services/search/index.js';
-import { getSetting, type SearchSettings, updateSetting } from '../../services/settings.js';
+import {
+  getSetting,
+  normalizeMfaRequirement,
+  type SearchSettings,
+  updateSetting,
+} from '../../services/settings.js';
 import { diffSettings, redactSecrets } from '../../services/settings-diff.js';
 import {
   applyS3SettingsPatch,
@@ -49,6 +64,7 @@ const AUTH_SETTING_KEYS = new Set([
   'localAuthEnabled',
   'sessionLifetimeDays',
   'sessionRefreshDays',
+  'mfaRequirement',
 ]);
 
 const storageTestSchema = z.object({
@@ -63,19 +79,27 @@ const storageTestSchema = z.object({
  * show that storage or search configuration changed and what it was.
  */
 async function currentSettingsSnapshot(): Promise<Record<string, unknown>> {
-  const [branding, authSettings, features, storage, search, smtp, chat] = await Promise.all([
-    getSetting('branding'),
-    getSetting('auth'),
-    getSetting('features'),
-    getSetting('storage'),
-    getSetting('search'),
-    getSetting('smtp'),
-    getSetting('chat'),
-  ]);
+  const [branding, language, authSettings, features, storage, search, smtp, chat] =
+    await Promise.all([
+      getSetting('branding'),
+      getSetting('language'),
+      getSetting('auth'),
+      getSetting('features'),
+      getSetting('storage'),
+      getSetting('search'),
+      getSetting('smtp'),
+      getSetting('chat'),
+    ]);
 
   return {
     ...branding,
+    language,
     ...authSettings,
+    // As a patch states it: the roles and the grace, not the server's stamps.
+    mfaRequirement: {
+      roles: normalizeMfaRequirement(authSettings.mfaRequirement).roles,
+      graceDays: normalizeMfaRequirement(authSettings.mfaRequirement).graceDays,
+    },
     defaultSystemPrompt: chat.defaultSystemPrompt,
     defaultEffort: chat.defaultEffort ?? 'instant',
     maxToolSteps: chat.maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS,
@@ -90,16 +114,29 @@ async function currentSettingsSnapshot(): Promise<Record<string, unknown>> {
   };
 }
 
+/**
+ * Who a two-step verification requirement would limit, per role, for the saved
+ * requirement (v0.14, #399): how many people, how many have no password and so
+ * are never limited, how many are set up, how many are not, when the first of
+ * them is limited and how many already are. The Authentication page shows it
+ * beside the role checkboxes.
+ */
+settingsRoutes.get('/mfa-impact', async (c) => {
+  return c.json(await mfaImpact());
+});
+
 settingsRoutes.get('/', async (c) => {
-  const [branding, authSettings, features, storage, search, smtp, chat] = await Promise.all([
-    getSetting('branding'),
-    getSetting('auth'),
-    getSetting('features'),
-    getSetting('storage'),
-    getSetting('search'),
-    getSetting('smtp'),
-    getSetting('chat'),
-  ]);
+  const [branding, language, authSettings, features, storage, search, smtp, chat] =
+    await Promise.all([
+      getSetting('branding'),
+      getSetting('language'),
+      getSetting('auth'),
+      getSetting('features'),
+      getSetting('storage'),
+      getSetting('search'),
+      getSetting('smtp'),
+      getSetting('chat'),
+    ]);
 
   const payload: InstanceSettings = {
     appName: branding.appName,
@@ -109,11 +146,13 @@ settingsRoutes.get('/', async (c) => {
     loginMessage: branding.loginMessage,
     defaultTheme: branding.defaultTheme,
     colorTheme: branding.colorTheme,
+    language,
     registrationMode: authSettings.registrationMode,
     emailVerificationRequired: authSettings.emailVerificationRequired,
     localAuthEnabled: authSettings.localAuthEnabled,
     sessionLifetimeDays: authSettings.sessionLifetimeDays,
     sessionRefreshDays: authSettings.sessionRefreshDays,
+    mfaRequirement: normalizeMfaRequirement(authSettings.mfaRequirement),
     defaultSystemPrompt: chat.defaultSystemPrompt,
     defaultEffort: chat.defaultEffort ?? 'instant',
     maxToolSteps: chat.maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS,
@@ -331,6 +370,18 @@ settingsRoutes.patch('/', async (c) => {
   const actor = currentUser(c);
   const patch = await parseBody(c, updateInstanceSettingsSchema);
 
+  // Two-step verification: checked before anything is written, so a refusal
+  // leaves nothing half-saved. Only a change is a "save": a form that sends the
+  // unchanged requirement along with something else is not held to it.
+  let mfaRequirement: MfaRequirement | null = null;
+  if (patch.mfaRequirement) {
+    const current = await currentRequirement();
+    if (requirementChanged(current, patch.mfaRequirement)) {
+      mfaRequirement = nextRequirement(current, patch.mfaRequirement, new Date());
+      await assertRequirementAllowed(mfaRequirement, c.get('mfa'));
+    }
+  }
+
   // Captured before anything is written, so the audit entry can say what the
   // value was as well as what it became.
   const previous = await currentSettingsSnapshot();
@@ -355,14 +406,43 @@ settingsRoutes.patch('/', async (c) => {
     });
   }
 
+  // The merged result is what is stored and what the audit entry records, so
+  // "enabled: [es]" is written (and shown) as it reads: English always on.
+  let language: LanguageSettings | null = null;
+  if (
+    patch.language &&
+    (patch.language.default !== undefined || patch.language.enabled !== undefined)
+  ) {
+    const current = await getSetting('language');
+    const enabled =
+      patch.language.enabled !== undefined
+        ? normalizeLanguageSettings({ enabled: patch.language.enabled }).enabled
+        : current.enabled;
+    const requested =
+      patch.language.default !== undefined ? patch.language.default : current.default;
+    if (requested && !enabled.includes(requested)) {
+      const asked = patch.language.default !== undefined;
+      const message = asked
+        ? 'The default language must be one of the enabled languages.'
+        : 'Choose another default language, or none, before turning the default off.';
+      throw validationFailed(message, [
+        { path: ['language', asked ? 'default' : 'enabled'], message },
+      ]);
+    }
+    language = { default: requested, enabled };
+    await updateSetting('language', language);
+  }
+
   if (
     patch.registrationMode !== undefined ||
     patch.emailVerificationRequired !== undefined ||
     patch.localAuthEnabled !== undefined ||
     patch.sessionLifetimeDays !== undefined ||
-    patch.sessionRefreshDays !== undefined
+    patch.sessionRefreshDays !== undefined ||
+    mfaRequirement !== null
   ) {
     await updateSetting('auth', {
+      ...(mfaRequirement !== null && { mfaRequirement }),
       ...(patch.registrationMode !== undefined && { registrationMode: patch.registrationMode }),
       ...(patch.emailVerificationRequired !== undefined && {
         emailVerificationRequired: patch.emailVerificationRequired,
@@ -488,7 +568,7 @@ settingsRoutes.patch('/', async (c) => {
     });
   }
 
-  const changes = diffSettings(previous, patch as Record<string, unknown>);
+  const changes = diffSettings(previous, { ...patch, ...(language && { language }) });
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
@@ -508,7 +588,8 @@ settingsRoutes.patch('/', async (c) => {
       targetType: 'instance',
       metadata: {
         keys: authKeys,
-        changes: changes.filter((change) => AUTH_SETTING_KEYS.has(change.key)),
+        // A nested setting (the requirement's roles) is named by its path.
+        changes: changes.filter((change) => AUTH_SETTING_KEYS.has(change.key.split('.')[0] ?? '')),
       },
     });
   }

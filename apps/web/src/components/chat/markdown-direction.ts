@@ -12,8 +12,10 @@
  * children that have a direction of their own, so a list of Arabic items
  * would stay left to right and its numbers would fall outside it. They get the
  * direction of their first strong letter instead, and so indent, number and
- * draw their bar on the right side. Code blocks, inline code and maths are not
- * touched: code stays left to right (see the prose classes in markdown.tsx).
+ * draw their bar on the right side. Code blocks and inline code get
+ * `dir="ltr"` (and `unicode-bidi: isolate` from the prose classes in
+ * markdown.tsx): source code and identifiers read left to right whatever
+ * surrounds them. Maths is not touched.
  */
 
 interface HastNode {
@@ -50,12 +52,28 @@ function words(node: HastNode): string {
 
 function mark(node: HastNode): void {
   if (node.type === 'element' && node.tagName) {
-    if (LEAF_BLOCKS.has(node.tagName)) {
+    if (node.tagName === 'pre' || node.tagName === 'code') {
+      node.properties = { dir: 'ltr', ...node.properties };
+    } else if (LEAF_BLOCKS.has(node.tagName)) {
       // A direction the Markdown itself carried (raw HTML) is the author's.
       node.properties = { dir: 'auto', ...node.properties };
     } else if (CONTAINERS.has(node.tagName)) {
       const direction = firstStrongDirection(words(node));
       if (direction) node.properties = { dir: direction, ...node.properties };
+      // An item that reads the other way from its list (an Arabic item in an
+      // English list) is marked, so the marker can sit inside its own text. A
+      // `:dir()` selector would do it, but the CSS toolchain compiles `:dir()`
+      // to `:lang()` for older browsers, which matches the language, not the
+      // direction: it is marked here instead.
+      if (direction && (node.tagName === 'ul' || node.tagName === 'ol')) {
+        for (const item of node.children ?? []) {
+          if (item.type !== 'element' || item.tagName !== 'li') continue;
+          const own = firstStrongDirection(words(item));
+          if (own && own !== direction) {
+            item.properties = { ...item.properties, dataOppositeDirection: '' };
+          }
+        }
+      }
     }
   }
   for (const child of node.children ?? []) mark(child);

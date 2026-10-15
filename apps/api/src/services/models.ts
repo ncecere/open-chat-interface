@@ -1,4 +1,4 @@
-import { and, asc, eq, schema } from '@oci/db';
+import { and, asc, eq, inArray, schema } from '@oci/db';
 import {
   type CatalogModel,
   effectiveSupportedEfforts,
@@ -33,18 +33,48 @@ function effortsForRole(
   };
 }
 
-/** Models the given role may select, ordered for the picker. */
-export async function listAvailableModels(role: UserRole): Promise<CatalogModel[]> {
-  const { reasoningEfforts } = await roleFeatures(role);
+/** Who is choosing a model: their role and their groups (found by `userId`) decide what they may use. */
+export interface ModelViewer {
+  userId: string;
+  role: UserRole;
+}
+
+/**
+ * The models any group the person is in grants (v0.14, #394), read on every
+ * call and never cached: removing someone from a group takes the models away
+ * on their next request. A group only adds; this never narrows what the role
+ * allows.
+ */
+async function groupGrantedModelIds(userId: string, among?: string[]): Promise<Set<string>> {
   const rows = await db
-    .select({ model: schema.model, provider: schema.provider })
-    .from(schema.model)
-    .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id))
-    .where(and(eq(schema.model.enabled, true), eq(schema.provider.enabled, true)))
-    .orderBy(asc(schema.model.sortOrder), asc(schema.model.displayName));
+    .select({ modelId: schema.modelGroupAccess.modelId })
+    .from(schema.modelGroupAccess)
+    .innerJoin(schema.groupMember, eq(schema.groupMember.groupId, schema.modelGroupAccess.groupId))
+    .where(
+      and(
+        eq(schema.groupMember.userId, userId),
+        among ? inArray(schema.modelGroupAccess.modelId, among) : undefined,
+      ),
+    );
+  return new Set(rows.map((row) => row.modelId));
+}
+
+/** Models the person may select (their role's, plus those their groups grant), ordered for the picker. */
+export async function listAvailableModels(viewer: ModelViewer): Promise<CatalogModel[]> {
+  const { role } = viewer;
+  const { reasoningEfforts } = await roleFeatures(role);
+  const [rows, viaGroups] = await Promise.all([
+    db
+      .select({ model: schema.model, provider: schema.provider })
+      .from(schema.model)
+      .innerJoin(schema.provider, eq(schema.model.providerId, schema.provider.id))
+      .where(and(eq(schema.model.enabled, true), eq(schema.provider.enabled, true)))
+      .orderBy(asc(schema.model.sortOrder), asc(schema.model.displayName)),
+    groupGrantedModelIds(viewer.userId),
+  ]);
 
   return rows
-    .filter(({ model }) => model.visibleToRoles.includes(role))
+    .filter(({ model }) => model.visibleToRoles.includes(role) || viaGroups.has(model.id))
     .map(({ model, provider }) => {
       const efforts = effortsForRole(model, reasoningEfforts);
       return {
@@ -99,10 +129,14 @@ interface ResolvedModel {
 
 /**
  * Resolves a catalog slug to a ready language model, enforcing that the model
- * is enabled and visible to the caller's role. Client input never reaches the
- * provider as a raw model ID.
+ * is enabled and visible to the caller: to their role, or to a group they are
+ * in. Client input never reaches the provider as a raw model ID.
  */
-export async function resolveModelForRole(slug: string, role: UserRole): Promise<ResolvedModel> {
+export async function resolveModelForRole(
+  slug: string,
+  viewer: ModelViewer,
+): Promise<ResolvedModel> {
+  const { role } = viewer;
   const [row] = await db
     .select({ model: schema.model, provider: schema.provider })
     .from(schema.model)
@@ -114,7 +148,11 @@ export async function resolveModelForRole(slug: string, role: UserRole): Promise
   if (!row.model.enabled || !row.provider.enabled) {
     throw forbidden('That model is currently disabled');
   }
-  if (!row.model.visibleToRoles.includes(role)) {
+  // The group lookup is made only when the role alone does not allow it.
+  if (
+    !row.model.visibleToRoles.includes(role) &&
+    !(await groupGrantedModelIds(viewer.userId, [row.model.id])).has(row.model.id)
+  ) {
     throw forbidden('You do not have access to that model');
   }
   const { reasoningEfforts } = await roleFeatures(role);

@@ -70,6 +70,17 @@ where you would otherwise have to check the answer yourself.
 something you have attached. Searching adds a step, and for these it adds
 nothing else.
 
+## Conversations with data classes
+
+If your institution uses [data classes](conversations.md#data-classes), a web
+search sends text to an outside search provider, so it is allowed only for
+classes your administrator has approved for web search (none, unless they say
+otherwise). In a conversation that carries a class that is not approved, the
+search tool is not offered to the model. With a model that cannot call tools,
+the search before the reply is skipped and the reply says **Web search is not
+available for this conversation, so nothing was searched.** In Warn mode the
+search is made and recorded for the administrator, with no note on the reply.
+
 ## Following a link
 
 Links in a grounded answer point outside your institution. Following one asks

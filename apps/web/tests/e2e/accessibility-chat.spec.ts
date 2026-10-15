@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { describeViolations, scan, signIn, storeThemeForProject } from './accessibility.helpers';
+import { LABELLED, openLabelledConversation } from './classification.fixtures';
 
 /**
  * WCAG 2.2 AA scans: projects, conversations, replies, tool steps and
@@ -359,5 +360,177 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
     await expect(full.getByRole('tabpanel', { name: 'Versions' })).toContainText('Version 1');
     const fullResults = await scan(page);
     expect(describeViolations(fullResults), describeViolations(fullResults)).toBe('');
+  });
+  test('a labelled conversation, its model picker and a refused send have no violations (v0.14)', async ({
+    page,
+  }) => {
+    await signIn(page);
+    const { blockPlain } = await openLabelledConversation(page, {
+      refuseSends: true,
+      plainUnblockedAtFirst: true,
+    });
+
+    // Chips with their reasons, and "Add label"; the others are explained in words.
+    const chips = page.getByRole('list', { name: 'Data classes' });
+    await expect(chips.getByRole('listitem')).toHaveCount(4);
+    await expect(chips).toContainText('from the SIS connector');
+    await expect(chips).toContainText('kept from its earlier project');
+    const chipResults = await scan(page);
+    expect(describeViolations(chipResults), describeViolations(chipResults)).toBe('');
+
+    // The picker, with the model the labels forbid listed and disabled.
+    const trigger = page.getByRole('combobox', { name: /Select model/ });
+    await trigger.click();
+    await page.getByRole('option', { name: new RegExp(LABELLED.plain) }).click();
+    blockPlain();
+    await page.getByRole('textbox', { name: 'Message input' }).fill('Marks for J. Smith');
+    // Adding a label makes the page ask again: the plain model is now refused.
+    await page.getByRole('button', { name: 'Add label' }).click();
+    await page.getByRole('menuitem', { name: 'Research data' }).click();
+    const note = page.locator('[data-classification-composer-note="blocked"]');
+    await expect(note).toContainText(`${LABELLED.plain} is not approved for`);
+    await trigger.click();
+    const plain = page.getByRole('option', { name: new RegExp(LABELLED.plain) });
+    await expect(plain).toHaveAttribute('aria-disabled', 'true');
+    await expect(plain).toContainText('Not approved for Student records and Payroll');
+    const pickerResults = await scan(page);
+    expect(describeViolations(pickerResults), describeViolations(pickerResults)).toBe('');
+    await page.keyboard.press('Escape');
+
+    // The refusal, with the approved models as buttons.
+    await page.getByRole('button', { name: 'Send message' }).click();
+    const refusal = page.locator('[data-classification-blocked="send"]');
+    await expect(refusal.getByRole('button', { name: `Use ${LABELLED.approved}` })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Message input' })).toHaveValue(
+      'Marks for J. Smith',
+    );
+    const refusalResults = await scan(page);
+    expect(describeViolations(refusalResults), describeViolations(refusalResults)).toBe('');
+  });
+
+  test('a reply sent in warn mode, with its note, has no violations (v0.14)', async ({ page }) => {
+    const created = '2026-01-01T00:00:00.000Z';
+    await page.route('**/api/chat/a11y-warned/messages**', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          thread: { id: 'a11y-warned', temporary: false, expiresAt: null },
+          messages: [
+            {
+              id: 'a11y-warned-prompt',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Marks for J. Smith' }],
+              metadata: { status: 'complete', createdAt: created },
+            },
+            {
+              id: 'a11y-warned-reply',
+              role: 'assistant',
+              parts: [
+                {
+                  type: 'data-classification',
+                  data: {
+                    mode: 'warn',
+                    point: 'send',
+                    model: 'plain',
+                    missing: ['Student records'],
+                  },
+                },
+                {
+                  type: 'data-project-search',
+                  data: {
+                    mode: 'search',
+                    files: [{ name: 'handbook.pdf', passages: 1 }],
+                    withheld: ['embeddings', 'reranking'],
+                  },
+                },
+                { type: 'text', text: 'Here is a summary.' },
+              ],
+              metadata: { status: 'complete', createdAt: created },
+            },
+          ],
+        }),
+      }),
+    );
+    await signIn(page);
+    await page.goto('/chat/a11y-warned');
+    const reply = page.getByRole('article', { name: 'Assistant message' });
+    await expect(reply).toContainText(
+      'It was sent anyway because data classification is set to warn',
+    );
+    await expect(reply).toContainText('Meaning-based search and reranking are not approved');
+
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+
+  test('a share link of a labelled conversation, paused, has no violations (v0.14)', async ({
+    page,
+  }) => {
+    await signIn(page);
+    const created = await page.request.post('/api/threads', { data: { title: 'Paused link' } });
+    const { thread } = (await created.json()) as { thread: { id: string } };
+    const slug = 'P'.repeat(32);
+    await page.route(`**/api/share-links/threads/${thread.id}`, (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+              links: [
+                {
+                  id: 'l1',
+                  slug,
+                  path: `/share/${slug}`,
+                  upToMessageId: null,
+                  viewCount: 3,
+                  expiresAt: null,
+                  revokedAt: null,
+                  createdAt: '2026-01-01T00:00:00.000Z',
+                  paused: true,
+                },
+              ],
+            }),
+          })
+        : route.continue(),
+    );
+    await page.goto(`/chat/${thread.id}`);
+    await page.getByRole('button', { name: 'Share conversation' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Share conversation' });
+    await expect(dialog).toContainText('Paused: this conversation carries a data class');
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
+  });
+  test('the data classes of a project, labelled by an administrator, have no violations (v0.14)', async ({
+    page,
+  }) => {
+    await signIn(page);
+    const created = await page.request.post('/api/projects', {
+      data: { name: `Labelled project ${Date.now()}` },
+    });
+    const { project } = (await created.json()) as { project: { id: string } };
+    await page.route('**/api/classification?**', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          mode: 'block',
+          classes: [
+            { id: 'c-locked', name: 'Student records', reasons: ['project'], locked: true },
+            { id: 'c-own', name: 'Health data', reasons: ['project'], locked: false },
+          ],
+          models: [],
+        }),
+      }),
+    );
+    await page.route('**/api/data-classes', (route) =>
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ classes: [{ id: 'c-extra', name: 'Research data' }] }),
+      }),
+    );
+    await page.goto(`/projects/${project.id}?tab=settings`);
+    const section = page.getByRole('region', { name: 'Data classes' });
+    await expect(section).toContainText('set by an administrator');
+    await expect(section).toContainText('Labels an administrator set stay until an administrator');
+    const results = await scan(page);
+    expect(describeViolations(results), describeViolations(results)).toBe('');
   });
 });

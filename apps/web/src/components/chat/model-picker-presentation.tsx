@@ -1,5 +1,5 @@
-import type { CatalogModel } from '@oci/shared';
-import { Info } from 'lucide-react';
+import type { CatalogModel, ClassificationModel } from '@oci/shared';
+import { Info, ShieldAlert } from 'lucide-react';
 import { CapabilityIcon } from '~/components/model/capability-pill';
 import { LabLogo } from '~/components/model/lab-logo';
 import { ModelInfoCard } from '~/components/model/model-info-card';
@@ -8,8 +8,10 @@ import {
   HIGHLIGHTED_ROW_TEXT,
   HOVERED_ROW_TEXT,
 } from '~/components/ui/item-focus';
+import { notApprovedText, warnNoteText } from '~/lib/classification';
+import { formatList, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
-import { CAPABILITY_LABELS, modelDescription } from './model-picker-data';
+import { capabilityLabel, modelDescription } from './model-picker-data';
 
 /** The DOM id of a model's option, for the search box's aria-activedescendant. */
 export const modelOptionId = (modelId: string) => `model-option-${modelId}`;
@@ -20,10 +22,17 @@ export function ModelPickerOption({
   active = false,
   canShowDetails,
   detailsOpen,
+  availability,
   onSelect,
   onDetails,
 }: {
   model: CatalogModel;
+  /**
+   * Whether the conversation's data classes allow this model (v0.14, #395):
+   * a blocked model stays in the list, aria-disabled, with the classes it is
+   * not approved for in words; in `warn` it can be chosen, with an amber note.
+   */
+  availability?: ClassificationModel | undefined;
   selected: boolean;
   /** The option the arrow keys are on (focus stays in the search box). */
   active?: boolean;
@@ -32,6 +41,9 @@ export function ModelPickerOption({
   onSelect: (model: CatalogModel) => void;
   onDetails: (id: string) => void;
 }) {
+  const t = useT();
+  const blocked = availability?.status === 'blocked';
+  const warned = availability?.status === 'warn';
   return (
     // The info trigger is a sibling rather than a child: a button
     // inside a button is invalid markup, and browsers resolve it by
@@ -44,8 +56,8 @@ export function ModelPickerOption({
       className={cn(
         'relative flex w-full items-center rounded-lg transition-colors',
         // --bg-control is the panel's own white in light, so it showed nothing (#135).
-        'hover:bg-[var(--bg-control-hover)]',
-        HOVERED_ROW_TEXT,
+        !blocked && 'hover:bg-[var(--bg-control-hover)]',
+        !blocked && HOVERED_ROW_TEXT,
         // The description stays readable on the wash (#188).
         selected && cn('bg-[var(--accent-soft)]', HIGHLIGHTED_ROW_TEXT),
         // Visible like a focus ring, since focus itself stays in the search box.
@@ -57,8 +69,16 @@ export function ModelPickerOption({
         role="option"
         id={modelOptionId(model.id)}
         aria-selected={selected}
-        onClick={() => onSelect(model)}
-        className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 rounded-lg py-2.5 pr-3 pl-3 text-left text-[var(--text-secondary)] outline-offset-[-2px]"
+        // Still reachable with the arrow keys and read out with its reason, but
+        // not chosen: the server refuses it anyway (#395).
+        aria-disabled={blocked || undefined}
+        onClick={() => {
+          if (!blocked) onSelect(model);
+        }}
+        className={cn(
+          'flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-lg py-2.5 pe-3 ps-3 text-start text-[var(--text-secondary)] outline-offset-[-2px]',
+          blocked ? 'cursor-not-allowed' : 'cursor-pointer',
+        )}
       >
         {/* Name and description wrap rather than end in an ellipsis: on a
             phone there is no hover for a tooltip, and the cut hid what tells
@@ -70,12 +90,27 @@ export function ModelPickerOption({
           </span>
         </span>
 
-        <span className="w-full pl-6 text-xs font-medium leading-4 wrap-anywhere text-[var(--text-muted)]">
+        <span className="w-full ps-6 text-xs font-medium leading-4 wrap-anywhere text-[var(--text-muted)]">
           {modelDescription(model)}
         </span>
+        {availability && availability.status !== 'ok' && (
+          // Text, not colour alone: the reason is part of the option's name.
+          <span
+            data-classification-note={availability.status}
+            className={cn(
+              'flex w-full items-start gap-1.5 ps-6 text-xs font-semibold leading-4 wrap-anywhere',
+              warned ? 'text-[var(--warning)]' : 'text-[var(--text-secondary)]',
+            )}
+          >
+            <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            {warned ? warnNoteText(availability) : notApprovedText(availability)}
+          </span>
+        )}
         {model.capabilities.length > 0 && (
           <span className="sr-only">
-            {`, ${model.capabilities.map((capability) => CAPABILITY_LABELS[capability]).join(', ')}`}
+            {t('chat.modelPicker.optionCapabilities', {
+              capabilities: formatList(model.capabilities.map(capabilityLabel)),
+            })}
           </span>
         )}
       </button>
@@ -85,7 +120,7 @@ export function ModelPickerOption({
        * column, so both line up down the list however long a model
        * name happens to be.
        */}
-      <span className="flex shrink-0 items-center gap-1 pr-2" aria-hidden="true">
+      <span className="flex shrink-0 items-center gap-1 pe-2" aria-hidden="true">
         {model.capabilities.map((capability) => (
           <CapabilityIcon key={capability} capability={capability} />
         ))}
@@ -94,11 +129,11 @@ export function ModelPickerOption({
           <button
             type="button"
             tabIndex={-1}
-            aria-label={`Details for ${model.displayName}`}
+            aria-label={t('chat.modelPicker.details', { name: model.displayName })}
             aria-expanded={detailsOpen}
             onClick={() => onDetails(model.id)}
             className={cn(
-              'ml-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
+              'ms-0.5 shrink-0 rounded p-1.5 transition-colors hover:text-[var(--text-primary)]',
               detailsOpen ? 'text-[var(--text-primary)]' : 'text-[var(--text-faint)]',
             )}
           >

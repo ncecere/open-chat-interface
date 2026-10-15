@@ -413,7 +413,11 @@ cluster and surviving its loss:
   rotation holds values encrypted with the older key: see
   [Rotating ENCRYPTION_KEY](../OPERATIONS.md#rotating-encryption_key) ("older
   database backups still need it"), and set `ENCRYPTION_KEYS_PREVIOUS`.
-- **`AUTH_SECRET`**. Without it, sessions and signed tokens cannot be read.
+- **`AUTH_SECRET`**. Without it, sessions and signed tokens cannot be read, and
+  from v0.14 neither can the authenticators and recovery codes of people who use
+  two-step verification (they are encrypted with it, not `ENCRYPTION_KEY`; the
+  recovery is `reset-mfa --all --yes`, see
+  [OPERATIONS](../OPERATIONS.md#two-step-verification-and-auth_secret)).
 - **The Kubernetes Secrets** and the `DATABASE_URL` credentials, including the
   ones CloudNativePG creates for the cluster (on-demand backups do not include
   them).

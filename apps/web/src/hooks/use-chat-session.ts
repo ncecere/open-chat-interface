@@ -1,5 +1,10 @@
 import { useChat } from '@ai-sdk/react';
-import type { Attachment, CatalogModel, ReasoningEffort } from '@oci/shared';
+import type {
+  Attachment,
+  CatalogModel,
+  ClassificationResponse,
+  ReasoningEffort,
+} from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DefaultChatTransport,
@@ -20,10 +25,13 @@ import {
   readChatSubmission,
   readRefusedSubmission,
 } from '~/lib/chat-submission';
+import { blockedSlugs } from '~/lib/classification';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import { translate } from '~/lib/i18n';
+import { noteMfaRequiredResponse } from '~/lib/mfa-required';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
-import { startingModel } from '~/lib/starting-model';
+import { startingModelAmong } from '~/lib/starting-model';
 import { requestStop } from '~/lib/stop-request';
 import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
@@ -36,8 +44,7 @@ const MESSAGE_SAVED_HEADER = 'X-OCI-Message-Saved';
  * stored (#326). Not why: a lost database, a proxy's 502 or a dropped
  * connection end the same way.
  */
-export const UNSAVED_MESSAGE_TEXT =
-  'Your message could not be saved, so it is back in the message box. Send it again.';
+export const unsavedMessageText = () => translate('chat.session.unsaved');
 
 /**
  * A user message among the saved ones that was not there before the send,
@@ -85,6 +92,11 @@ export function useChatSession(options: {
   initialEffort?: ReasoningEffort;
   initialWebSearch?: boolean;
   temporary?: boolean;
+  /**
+   * What the conversation's data classes allow each model (v0.14, #395), read
+   * by the page; absent while classification is off or not yet loaded.
+   */
+  classification?: ClassificationResponse | undefined;
 }) {
   const queryClient = useQueryClient();
   const modelsQuery = useModels();
@@ -191,7 +203,11 @@ export function useChatSession(options: {
       const refusedStatus =
         (response.status >= 400 && response.status < 500) || response.status === 503 || notSaved;
       // Not accepted the acceptable use policy yet (#367): show the acceptance page.
-      if (!response.ok) void notePolicyRequiredResponse(response);
+      if (!response.ok) {
+        void notePolicyRequiredResponse(response);
+        // Or limited until a second step is set up (#399): the setup page.
+        void noteMfaRequiredResponse(response);
+      }
       if (sending && !response.ok && scope.request === request) {
         const sent = readRefusedSubmission(init?.body);
         if (sent && refusedStatus) refuseSubmission.current(sent);
@@ -222,9 +238,12 @@ export function useChatSession(options: {
   // rather than stored, so a default that arrives after the catalog still
   // applies, and a model withdrawn from the catalog falls through silently.
   const personalDefault = currentUser?.chat?.defaultModelSlug;
+  // Never a default the conversation's data classes forbid (v0.14, #395).
+  const classification = options.classification;
+  const unapproved = useMemo(() => blockedSlugs(classification), [classification]);
   const selectedModel = useMemo(
-    () => startingModel(models, chosenSlug, personalDefault),
-    [models, chosenSlug, personalDefault],
+    () => startingModelAmong(models, unapproved, chosenSlug, personalDefault),
+    [models, unapproved, chosenSlug, personalDefault],
   );
   const modelSlug = selectedModel?.slug ?? null;
 
@@ -328,6 +347,8 @@ export function useChatSession(options: {
       }
       // The reply reorders the sidebar and may have given the conversation a title.
       void invalidateConversationLists(queryClient);
+      // A connector tool it used may have added a label (v0.14, #395).
+      void queryClient.invalidateQueries({ queryKey: ['classification'] });
     },
   });
 
@@ -351,7 +372,7 @@ export function useChatSession(options: {
     // anything typed meanwhile is kept after it rather than either being lost.
     setDraft((current) => (current.trim() ? `${sent.text}\n\n${current}` : sent.text));
     setRefused(true);
-    setNotice(UNSAVED_MESSAGE_TEXT);
+    setNotice(unsavedMessageText());
   };
   acceptSubmission.current = (submission, promptId) => {
     consumeFiles(submission.attachmentIds);

@@ -64,7 +64,9 @@ The first administrator is created from `INITIAL_ADMIN_EMAIL` /
 `INITIAL_ADMIN_PASSWORD` on an empty database. If no password is supplied (the
 variable is unset or empty) a one-time password is printed to the API logs.
 
-Locked out? `pnpm --filter @oci/api admin:promote you@example.com`.
+Locked out? `pnpm --filter @oci/api admin:promote you@example.com`. Locked out by
+two-step verification? `pnpm --filter @oci/api admin:reset-mfa you@example.com`
+(see [docs/OPERATIONS.md](docs/OPERATIONS.md#when-two-step-verification-stands-in-the-way)).
 
 ## Production
 
@@ -86,7 +88,7 @@ installation; existing instances must follow the drained upgrade procedure in
 [Production operations](docs/OPERATIONS.md) before starting new API producers:
 
 ```bash
-export OCI_VERSION=v0.13.1
+export OCI_VERSION=v0.14.0
 export OCI_REGISTRY=ghcr.io/ncecere/open-chat-interface
 export OCI_API_IMAGE="$OCI_REGISTRY/api:$OCI_VERSION"
 export OCI_WEB_IMAGE="$OCI_REGISTRY/web:$OCI_VERSION"

@@ -1,9 +1,10 @@
+import { passkey } from '@better-auth/passkey';
 import { sso } from '@better-auth/sso';
-import { schema } from '@oci/db';
-import { betterAuth } from 'better-auth';
+import { eq, schema } from '@oci/db';
+import { type BetterAuthPlugin, betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
-import { admin as adminPlugin } from 'better-auth/plugins';
+import { admin as adminPlugin, twoFactor } from 'better-auth/plugins';
 import { loadEnv } from '../config/env.js';
 import { db } from '../db/index.js';
 import { clientIpFromHeaders } from '../lib/client-ip.js';
@@ -15,14 +16,27 @@ import {
   sendPasswordResetEmail,
   VERIFY_LINK_TTL_SECONDS,
 } from '../services/email.js';
+import { notifyMfaChange } from '../services/mfa/notify.js';
 import { getDefaultOrganizationId } from '../services/organization.js';
 import { getSetting } from '../services/settings.js';
-import { recordAuthEvent } from './audit.js';
+import { recordAuthEvent, recordRecoveryCodeUsed } from './audit.js';
 import { deliverVerificationEmail } from './email-verification.js';
 import { logBetterAuth } from './log.js';
+import { authMethodFor, MFA_LOCKOUT_ATTEMPTS, MFA_LOCKOUT_SECONDS } from './mfa.js';
+import {
+  type MfaHookContext,
+  mfaAfter,
+  mfaBefore,
+  verificationLinkIsForEnrolled,
+} from './mfa-hooks.js';
 import { ac, roles } from './permissions.js';
-import { enforceAuthRequestPolicy, enforceSelfServicePolicy } from './policy.js';
+import {
+  enforceAuthRequestPolicy,
+  enforcePasskeySignInPolicy,
+  enforceSelfServicePolicy,
+} from './policy.js';
 import { applySsoProvisioning, SsoRoleRequiredError } from './provisioning.js';
+import { countRecoveryCodes } from './recovery-codes.js';
 import { assertSsoLinkAllowed } from './sso-linking.js';
 
 const env = loadEnv();
@@ -76,6 +90,48 @@ function configuredTrustedOrigins(): string[] {
   return [...new Set([env.APP_URL, ...(configured ?? [])].map((origin) => new URL(origin).origin))];
 }
 
+/** The requests the second step's hooks look at (auth/mfa-hooks.ts). */
+const MFA_HOOK_PATHS = new Set([
+  '/two-factor/verify-totp',
+  '/two-factor/verify-backup-code',
+  '/passkey/generate-register-options',
+  '/passkey/verify-registration',
+]);
+
+const appUrl = new URL(env.APP_URL);
+
+/**
+ * Passkeys. `origin` and `rpID` come from APP_URL, so passkeys are bound to
+ * its host. A passkey is both factors, so a key that only proved presence
+ * (no PIN or biometric) is refused at sign-in.
+ *
+ * Typed as a plain plugin: the plugin's own type names types of
+ * @simplewebauthn/server, which this package does not depend on directly, so
+ * `auth` could not be declared. Its endpoints are reached over HTTP only.
+ */
+const passkeyPlugin = passkey({
+  origin: appUrl.origin,
+  rpID: appUrl.hostname,
+  authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+  authentication: {
+    afterVerification: async ({ verification, clientData }) => {
+      if (!verification.authenticationInfo.userVerified) {
+        throw new APIError('UNAUTHORIZED', {
+          code: 'USER_VERIFICATION_REQUIRED',
+          message:
+            'This passkey did not verify you with a PIN, fingerprint or face, so it cannot be used to sign in.',
+        });
+      }
+      const [found] = await db
+        .select({ userId: schema.passkey.userId })
+        .from(schema.passkey)
+        .where(eq(schema.passkey.credentialID, String(clientData.id)))
+        .limit(1);
+      if (found) await enforcePasskeySignInPolicy(found.userId);
+    },
+  },
+}) as BetterAuthPlugin;
+
 export const auth = betterAuth({
   appName: 'Open Chat Interface',
   baseURL: env.APP_URL,
@@ -98,6 +154,10 @@ export const auth = betterAuth({
       account: schema.account,
       verification: schema.verification,
       ssoProvider: schema.ssoProvider,
+      // The plugins' tables, under their model names (the Drizzle properties
+      // carry the plugins' field names: credentialID, backupCodes...).
+      twoFactor: schema.twoFactor,
+      passkey: schema.passkey,
     },
   }),
 
@@ -140,16 +200,21 @@ export const auth = betterAuth({
          * Sessions already issued keep their original expiry; shortening the
          * lifetime does not retroactively end them.
          */
-        before: async (session) => {
+        before: async (session, context) => {
+          // How the session was made, from the endpoint that makes it (also
+          // inside OCI's own auth.api calls: mfa-library-behaviour.unit.test.ts).
+          // The per-role requirement reads it (SPEC-mfa.md). Unknown stays NULL.
+          const authMethod = authMethodFor(context?.path);
+          const made = authMethod ? { ...session, authMethod } : session;
           try {
             const { sessionLifetimeDays } = await getSetting('auth');
             const expiresAt = new Date(Date.now() + sessionLifetimeDays * 24 * 60 * 60 * 1000);
-            return { data: { ...session, expiresAt } };
+            return { data: { ...made, expiresAt } };
           } catch (error) {
             // Falling back to the static lifetime is safe; refusing to issue a
             // session because a setting could not be read is not.
             logger.error({ error }, 'Could not read session lifetime; using the default');
-            return { data: session };
+            return { data: made };
           }
         },
       },
@@ -194,6 +259,28 @@ export const auth = betterAuth({
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      // The second step (v0.14, #399): cleaned codes, no "trust this device",
+      // the replay guard, and passkeys only for accounts with a password.
+      if (MFA_HOOK_PATHS.has(ctx.path)) {
+        return mfaBefore(ctx as unknown as MfaHookContext);
+      }
+      // Verifying an address signs the person in once; for somebody with the
+      // second step on that would skip it, so it does not (auth/mfa-hooks.ts).
+      if (ctx.path === '/verify-email' && (await verificationLinkIsForEnrolled(ctx.query?.token))) {
+        return {
+          context: {
+            context: {
+              options: {
+                ...ctx.context.options,
+                emailVerification: {
+                  ...ctx.context.options.emailVerification,
+                  autoSignInAfterVerification: false,
+                },
+              },
+            },
+          },
+        };
+      }
       if (ctx.path === '/change-password' || ctx.path === '/update-user') {
         const session = await getSessionFromCtx(ctx).catch(() => null);
         const replaced = await enforceSelfServicePolicy(
@@ -265,13 +352,30 @@ export const auth = betterAuth({
           ? returned.body.code
           : null;
 
+      // A refused code is given back to the replay guard (a typing mistake is not a replay).
+      await mfaAfter(ctx as unknown as MfaHookContext);
+      const mfaActor = (ctx.context as { mfaActor?: string }).mfaActor ?? null;
+
       await recordAuthEvent({
         path: ctx.path,
         status,
         failureCode,
         ipAddress: clientIpFromHeaders(ctx.headers),
         userAgent: ctx.headers?.get('user-agent') ?? null,
-        actorUserId: session?.user?.id ?? null,
+        actorUserId: session?.user?.id ?? mfaActor,
+        // The password was right and a second step is pending. This hook runs
+        // before the plugin's own (options hooks come first), so the session
+        // the password made still exists here and the plugin has not yet deleted
+        // it: the person's flag says what it is about to do (OCI never sets the
+        // "trust this device" cookie that would skip it).
+        challenged:
+          ctx.path === '/sign-in/email' &&
+          status === 200 &&
+          (session?.user as { twoFactorEnabled?: boolean } | undefined)?.twoFactorEnabled === true,
+        targetId:
+          typeof (ctx.body as { id?: unknown } | undefined)?.id === 'string'
+            ? (ctx.body as { id: string }).id
+            : null,
         // Falls back to the submitted address so a failed attempt still says
         // which account was tried, which is the point of recording it.
         actorEmail:
@@ -280,6 +384,44 @@ export const auth = betterAuth({
             ? (ctx.body as { email: string }).email
             : null),
       });
+
+      // A passkey added or removed: the person is told, in case it was not them.
+      if (
+        (ctx.path === '/passkey/verify-registration' || ctx.path === '/passkey/delete-passkey') &&
+        status === 200 &&
+        session?.user?.email
+      ) {
+        notifyMfaChange(
+          { id: session.user.id, email: session.user.email },
+          ctx.path === '/passkey/verify-registration' ? 'passkey_added' : 'passkey_removed',
+        );
+      }
+
+      // A recovery code is used up: say how many remain (never which).
+      if (ctx.path === '/two-factor/verify-backup-code' && status === 200) {
+        const userId = session?.user?.id ?? mfaActor;
+        const row = userId
+          ? await ctx.context.adapter.findOne<{ backupCodes: string }>({
+              model: 'twoFactor',
+              where: [{ field: 'userId', value: userId }],
+            })
+          : null;
+        const remaining = row
+          ? await countRecoveryCodes(ctx.context.secretConfig, row.backupCodes)
+          : null;
+        await recordRecoveryCodeUsed({
+          actorUserId: userId,
+          actorEmail: session?.user?.email ?? null,
+          ipAddress: clientIpFromHeaders(ctx.headers),
+          remaining,
+        });
+        // Whoever else has the account learns a recovery code was used.
+        if (userId && session?.user?.email) {
+          notifyMfaChange({ id: userId, email: session.user.email }, 'recovery_code_used', {
+            remaining,
+          });
+        }
+      }
     }),
   },
 
@@ -298,6 +440,13 @@ export const auth = betterAuth({
      * per request (session-revocation.live.test.ts).
      */
     cookieCache: { enabled: false },
+    additionalFields: {
+      /**
+       * How the session was made (migration 0051): see `authMethodFor`. Set
+       * by the session hook, never by a client.
+       */
+      authMethod: { type: 'string', required: false, input: false },
+    },
   },
 
   /**
@@ -338,6 +487,23 @@ export const auth = betterAuth({
   },
 
   plugins: [
+    // Two-step verification for local accounts (v0.14, #399): TOTP and recovery
+    // codes. No `sendOTP`: there are no email or SMS codes. The plugin's own
+    // HTTP endpoints for enabling, disabling, the URI and recovery codes are
+    // answered 404 (routes/index.ts); OCI's /api/me/mfa routes call them
+    // server-side with their audit, limits and rules.
+    twoFactor({
+      issuer: 'Open Chat Interface',
+      accountLockout: {
+        enabled: true,
+        maxFailedAttempts: MFA_LOCKOUT_ATTEMPTS,
+        durationSeconds: MFA_LOCKOUT_SECONDS,
+      },
+    }),
+    // Passkeys. `origin` and `rpID` come from APP_URL, so passkeys are bound to
+    // its host. A passkey is both factors, so a key that only proved presence
+    // (no PIN or biometric) is refused at sign-in.
+    passkeyPlugin,
     adminPlugin({
       ac,
       roles,

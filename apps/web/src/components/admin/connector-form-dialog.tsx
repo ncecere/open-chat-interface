@@ -1,6 +1,7 @@
 import type { AdminConnector, ConnectorAuthMode } from '@oci/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useRef, useState } from 'react';
+import { DataClassSelect, useAdminDataClasses } from '~/components/admin/data-class-select';
 import { useEditedSince } from '~/components/admin/unsaved-changes';
 import { Button } from '~/components/ui/button';
 import {
@@ -22,7 +23,7 @@ import {
   problemsElsewhere,
   useFieldProblems,
 } from '~/hooks/use-clear-on-edit';
-import { api, apiErrorProblems } from '~/lib/api-client';
+import { api, apiErrorMessage, apiErrorProblems } from '~/lib/api-client';
 
 export const AUTH_MODE_LABELS: Record<ConnectorAuthMode, string> = {
   none: 'No sign-in',
@@ -40,8 +41,16 @@ const AUTH_MODE_HINTS: Record<ConnectorAuthMode, string> = {
 
 type SecretAction = 'keep' | 'replace' | 'clear';
 
+/** The connector saved but what it carries did not; the message says so. */
+class CarriesNotSaved extends Error {
+  constructor(reason: string) {
+    super(`The connector was saved, but what it carries was not. ${reason}`);
+  }
+}
+
 /** The form's names for the fields the API names differently (#127). */
 const CONNECTOR_LABELS = {
+  dataClassIds: 'Carries',
   url: 'Server URL',
   slug: 'Short name',
   authMode: 'Authentication',
@@ -57,7 +66,11 @@ const CONNECTOR_LABELS = {
  * refused only while "Allow private network" is off, so switching it on
  * clears the complaint, as correcting the URL does (#283).
  */
-const LINKED_FIELDS = { url: ['allowPrivateNetwork'] };
+const LINKED_FIELDS = {
+  url: ['allowPrivateNetwork'],
+  // "Carries no classified data" answers a complaint about the classes, as choosing one does.
+  dataClassIds: ['carriesNothing'],
+};
 
 /** Where authorization servers send people back, for registering an OAuth client. */
 function connectorRedirectUrl(connector: AdminConnector | null): string {
@@ -189,6 +202,13 @@ export function ConnectorFormDialog({
   const [scopes, setScopes] = useState(connector?.oauthScopes ?? '');
   const [enabled, setEnabled] = useState(connector?.enabled ?? true);
   const [allowPrivate, setAllowPrivate] = useState(connector?.allowPrivateNetwork ?? false);
+  // What the connector carries (v0.14, #395): classes, or the explicit statement
+  // that it carries no classified data. Neither means it has not been reviewed.
+  const [carries, setCarries] = useState<string[]>(connector?.dataClassIds ?? []);
+  const [carriesNothing, setCarriesNothing] = useState(
+    Boolean(connector?.reviewed) && (connector?.dataClassIds.length ?? 0) === 0,
+  );
+  const dataClasses = useAdminDataClasses();
   // The values sent, by the API's names for them, so each error the API
   // returns is shown under its field and goes when that field is corrected,
   // and every problem is listed at once (#217, #283).
@@ -206,6 +226,8 @@ export function ConnectorFormDialog({
     oauthScopes: scopes,
     enabled,
     allowPrivateNetwork: allowPrivate,
+    dataClassIds: carries,
+    carriesNothing,
   };
   const form = useRef<HTMLFormElement>(null);
   const [problems, setProblems] = useFieldProblems(values, form);
@@ -220,23 +242,55 @@ export function ConnectorFormDialog({
     ...(connector ? [] : ['slug']),
     ...(authMode === 'shared' ? ['sharedHeaderName', 'sharedHeaderValue'] : []),
     ...(authMode === 'oauth' ? ['oauthClientId', 'oauthClientSecret', 'oauthScopes'] : []),
+    'dataClassIds',
   ];
   const error = problemsElsewhere(problems, shown);
 
+  const reviewed = carriesNothing || carries.length > 0;
+  const carriesChanged =
+    [...carries].sort().join() !== [...(connector?.dataClassIds ?? [])].sort().join() ||
+    reviewed !== Boolean(connector?.reviewed);
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'data-classes'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'classification'] }),
+    ]);
   const save = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      connector
-        ? api.patch(`/admin/connectors/${connector.id}`, body)
-        : api.post('/admin/connectors', body),
+    mutationFn: async (body: Record<string, unknown>) => {
+      if (!connector) {
+        // A new connector says what it carries in the same request; with
+        // classification on, the API refuses (422) one that says nothing.
+        await api.post('/admin/connectors', {
+          ...body,
+          ...(reviewed ? { dataClassIds: carries, reviewed: true } : {}),
+        });
+        return;
+      }
+      if (Object.keys(body).length > 0) await api.patch(`/admin/connectors/${connector.id}`, body);
+      if (carriesChanged) {
+        try {
+          await api.put(`/admin/connectors/${connector.id}/data-classes`, {
+            classIds: carries,
+            reviewed,
+          });
+        } catch (cause) {
+          await refresh();
+          throw new CarriesNotSaved(apiErrorMessage(cause, 'Try again.'));
+        }
+      }
+    },
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'connectors'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] }),
-      ]);
+      await refresh();
       onClose();
     },
     onError: (cause) =>
-      report(apiErrorProblems(cause, 'The connector could not be saved.', CONNECTOR_LABELS)),
+      report(
+        cause instanceof CarriesNotSaved
+          ? [{ fields: [], text: cause.message }]
+          : apiErrorProblems(cause, 'The connector could not be saved.', CONNECTOR_LABELS),
+      ),
   });
 
   function submit(event: FormEvent) {
@@ -270,7 +324,7 @@ export function ConnectorFormDialog({
           ],
         },
       );
-      if (Object.keys(patch).length === 0) {
+      if (Object.keys(patch).length === 0 && !carriesChanged) {
         onClose();
         return;
       }
@@ -454,6 +508,39 @@ export function ConnectorFormDialog({
             </Field>
           </>
         )}
+
+        {/* What coming back from this connector puts into a conversation
+            (v0.14, #395). Until someone has said, it is "Not reviewed". */}
+        <DataClassSelect
+          legend="Carries"
+          classes={dataClasses.data}
+          value={carries}
+          onChange={(ids) => {
+            setCarries(ids);
+            if (ids.length > 0) setCarriesNothing(false);
+          }}
+          emptyText={
+            carriesNothing
+              ? 'No classified data: conversations that use this connector are not labelled.'
+              : 'Not reviewed: choose what it carries, or say that it carries no classified data.'
+          }
+          hint="A conversation that uses a connector carries its classes from then on."
+          error={at('dataClassIds')}
+          extra={
+            <label className="flex min-h-6 cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--accent)]"
+                checked={carriesNothing}
+                onChange={(event) => {
+                  setCarriesNothing(event.target.checked);
+                  if (event.target.checked) setCarries([]);
+                }}
+              />
+              Carries no classified data
+            </label>
+          }
+        />
 
         <div className="flex items-center justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
           <div>

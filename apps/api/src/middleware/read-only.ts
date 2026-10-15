@@ -55,6 +55,24 @@ export const READ_ONLY_ALLOWLIST: readonly ReadOnlyAllowance[] = [
   // Signing in and out (Better Auth). Session refresh happens on GET.
   { method: 'POST', path: '/api/auth/sign-in/*', why: 'Signing in' },
   { method: 'POST', path: '/api/auth/sign-out', why: 'Signing out' },
+  // The second step of signing in (v0.14, #399): without these nobody with
+  // two-step verification could sign in during maintenance. A passkey sign-in
+  // is a sign-in too. None of them changes anything but the session.
+  {
+    method: 'POST',
+    path: '/api/auth/two-factor/verify-totp',
+    why: 'Signing in: the authenticator code',
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/two-factor/verify-backup-code',
+    why: 'Signing in: a recovery code',
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/passkey/verify-authentication',
+    why: 'Signing in with a passkey',
+  },
   {
     method: 'POST',
     path: '/api/auth/accept-invite/validate',

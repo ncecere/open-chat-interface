@@ -17,9 +17,21 @@ describe('admin navigation catalogue', () => {
     ).toEqual([
       [
         'People',
-        ['Users /admin/users', 'Invitations /admin/invites', 'Roles & access /admin/roles'],
+        [
+          'Users /admin/users',
+          'Groups /admin/groups',
+          'Invitations /admin/invites',
+          'Roles & access /admin/roles',
+        ],
       ],
-      ['Models', ['Providers & Models /admin/models', 'Usage budgets /admin/quotas']],
+      [
+        'Models',
+        [
+          'Providers & Models /admin/models',
+          'Usage budgets /admin/quotas',
+          'Data classes /admin/data-classes',
+        ],
+      ],
       [
         'Tools & integrations',
         ['Web search /admin/search', 'Connectors /admin/connectors', 'Webhooks /admin/webhooks'],
@@ -74,6 +86,13 @@ describe('active state', () => {
     expect(isAdminNavItemActive('/admin/users/user-42', '/admin/users')).toBe(true);
     expect(isAdminNavItemActive('/admin/storage-limits', '/admin/storage')).toBe(false);
     expect(isAdminNavItemActive('/admin/settings/email', '/admin/settings/general')).toBe(false);
+  });
+
+  it('names a group’s own page as Groups, within People (v0.14)', () => {
+    expect(findActiveAdminNav('/admin/groups/group-7')).toMatchObject({
+      item: { label: 'Groups', to: '/admin/groups' },
+      section: { label: 'People' },
+    });
   });
 
   it('resolves the current item and its group', () => {

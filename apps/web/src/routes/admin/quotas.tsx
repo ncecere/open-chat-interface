@@ -6,6 +6,7 @@ import { EditOnly } from '~/components/admin/admin-access';
 import { AdminPageHeader, EmptyState, LoadError, Row, RowList } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { QuotaPolicyDialog } from '~/components/admin/quota-policy-dialog';
+import { GroupChips } from '~/components/groups/group-chips';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Dialog } from '~/components/ui/dialog';
@@ -83,66 +84,82 @@ export function AdminQuotasPage() {
       ) : quotas.isError || !data ? (
         <LoadError title="Quota policies could not be loaded." query={quotas} />
       ) : policies.length > 0 ? (
-        <RowList>
-          {policies.map((policy) => (
-            <Row key={policy.id}>
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-control-hover)]">
-                <Gauge className="size-4 text-[var(--text-secondary)]" />
-              </span>
+        <>
+          {policies.some((policy) => (policy.groups ?? []).length > 0) && (
+            <p className="mb-3 text-xs text-[var(--text-muted)]">
+              Groups are chosen on each group’s own page, under Budgets and models.
+            </p>
+          )}
+          <RowList>
+            {policies.map((policy) => (
+              <Row key={policy.id}>
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-control-hover)]">
+                  <Gauge className="size-4 text-[var(--text-secondary)]" />
+                </span>
 
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate font-medium" title={policy.name}>
-                    {policy.name}
-                  </p>
-                  <Badge variant="neutral">{formatLimit(policy)}</Badge>
-                  {!policy.enabled && <Badge variant="warning">not enforced</Badge>}
-                  {policy.roles.length === 0 && <Badge variant="warning">no roles</Badge>}
-                  <Badge variant="neutral">
-                    {policy.modelSlugs.length === 0
-                      ? 'all models'
-                      : `${policy.modelSlugs.length} model${policy.modelSlugs.length === 1 ? '' : 's'}`}
-                  </Badge>
-                  {/* Keeps an override discoverable from the policy as well as
-                      from the person it was granted to. */}
-                  {policy.overrideCount > 0 && (
-                    <Badge variant="outline">
-                      {policy.overrideCount} override{policy.overrideCount === 1 ? '' : 's'}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p
+                      className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium"
+                      title={policy.name}
+                    >
+                      {policy.name}
+                    </p>
+                    <Badge variant="neutral">{formatLimit(policy)}</Badge>
+                    {!policy.enabled && <Badge variant="warning">not enforced</Badge>}
+                    {policy.roles.length === 0 && <Badge variant="warning">no roles</Badge>}
+                    <Badge variant="neutral">
+                      {policy.modelSlugs.length === 0
+                        ? 'all models'
+                        : `${policy.modelSlugs.length} model${policy.modelSlugs.length === 1 ? '' : 's'}`}
                     </Badge>
-                  )}
+                    {/* Keeps an override discoverable from the policy as well as
+                      from the person it was granted to. */}
+                    {policy.overrideCount > 0 && (
+                      <Badge variant="outline">
+                        {policy.overrideCount} override{policy.overrideCount === 1 ? '' : 's'}
+                      </Badge>
+                    )}
+                  </div>
+                  <p
+                    className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]"
+                    title={`${formatWindow(policy)}${policy.roles.length > 0 ? ` · ${policy.roles.join(', ')}` : ''}${policy.description ? ` · ${policy.description}` : ''}`}
+                  >
+                    {formatWindow(policy)}
+                    {policy.roles.length > 0 ? ` · ${policy.roles.join(', ')}` : ''}
+                    {policy.description ? ` · ${policy.description}` : ''}
+                  </p>
+                  {/* Set from each group's page, never here (v0.14). */}
+                  <GroupChips
+                    groups={policy.groups}
+                    label="Groups with this budget"
+                    className="mt-1.5"
+                  />
                 </div>
-                <p
-                  className="truncate text-xs text-[var(--text-muted)]"
-                  title={`${formatWindow(policy)}${policy.roles.length > 0 ? ` · ${policy.roles.join(', ')}` : ''}${policy.description ? ` · ${policy.description}` : ''}`}
-                >
-                  {formatWindow(policy)}
-                  {policy.roles.length > 0 ? ` · ${policy.roles.join(', ')}` : ''}
-                  {policy.description ? ` · ${policy.description}` : ''}
-                </p>
-              </div>
 
-              <EditOnly>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Edit ${policy.name}`}
-                  onClick={() => setFormFor({ policy })}
-                >
-                  <Pencil />
-                </Button>
+                <EditOnly>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Edit ${policy.name}`}
+                    onClick={() => setFormFor({ policy })}
+                  >
+                    <Pencil />
+                  </Button>
 
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Delete ${policy.name}`}
-                  onClick={() => setDeleteFor(policy)}
-                >
-                  <Trash2 />
-                </Button>
-              </EditOnly>
-            </Row>
-          ))}
-        </RowList>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Delete ${policy.name}`}
+                    onClick={() => setDeleteFor(policy)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </EditOnly>
+              </Row>
+            ))}
+          </RowList>
+        </>
       ) : (
         <EmptyState icon={Gauge} title="No usage budgets yet.">
           Usage is unlimited until a budget is applied to a role. Dollar budgets need per-model

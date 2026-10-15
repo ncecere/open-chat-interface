@@ -11,7 +11,7 @@ import {
   assertAttachmentUseAllowed,
   deleteAttachment,
   discardUnsentAttachment,
-  getOwnedAttachment,
+  getReadableAttachment,
   listAttachments,
   uploadAttachment,
 } from '../services/attachments/index.js';
@@ -127,10 +127,10 @@ attachmentRoutes.post(
   },
 );
 
-/** Files are streamed through the API so ownership is always enforced. */
+/** Files are streamed through the API so access is always enforced: an own file, or a file of a project the person can read (v0.14). */
 attachmentRoutes.get('/:id/content', async (c) => {
   const user = currentUser(c);
-  const row = await getOwnedAttachment(c.req.param('id'), user.id);
+  const row = await getReadableAttachment(c.req.param('id'), user.id, user.role);
   const driver = await getStorageDriver();
   const bytes = await driver.get(row.storageKey);
 

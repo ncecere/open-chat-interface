@@ -1,0 +1,15 @@
+-- The language a person chose for the web app (v0.14, #397): `en`, `es`, `ar`.
+-- Null means they have not chosen, and the instance default (or their
+-- browser's language) applies. Which tags are valid is the web app's and the
+-- API's to say (packages/shared), not the database's: a language added in a
+-- later release needs no migration, and a value this release does not know
+-- reads as no choice.
+--
+-- Pre-deploy safe: the previous release neither writes nor reads the column
+-- and works unchanged on this schema (its inserts name their columns, its
+-- reads list theirs).
+-- * `locale` is nullable without a default: a catalog-only change, with no
+--   table rewrite. Existing people get NULL.
+--
+-- Re-runnable: the statement is guarded.
+ALTER TABLE "user_preference" ADD COLUMN IF NOT EXISTS "locale" text;

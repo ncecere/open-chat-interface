@@ -1,5 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import { Button } from '~/components/ui/button';
+import { useT } from '~/lib/i18n';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 
 /** A stored reason as a sentence; the server's own reasons have no full stop. */
@@ -26,6 +27,7 @@ export function ReplyFailureNote({
   onRetry?: () => void;
   latest: boolean;
 }) {
+  const t = useT();
   const readOnly = useReadOnlyStatus();
   return (
     <div
@@ -33,7 +35,7 @@ export function ReplyFailureNote({
       className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[var(--danger)]/15 px-4 py-2.5 text-sm text-[var(--danger-on-tint)]"
     >
       <p className="min-w-0 flex-1">
-        <span className="font-medium">This reply failed.</span> {sentence(reason)}
+        <span className="font-medium">{t('chat.replyOutcome.failed')}</span> {sentence(reason)}
       </p>
       {onRetry && (
         <Button
@@ -44,7 +46,7 @@ export function ReplyFailureNote({
           onClick={onRetry}
         >
           <RefreshCw aria-hidden="true" />
-          Try again
+          {t('chat.replyOutcome.tryAgain')}
         </Button>
       )}
     </div>

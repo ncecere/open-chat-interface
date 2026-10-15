@@ -14,6 +14,9 @@ import {
 import { db } from '../db/index.js';
 import { AppError, notFound, validationFailed } from '../lib/errors.js';
 import { pathThrough } from './chat/reply-path.js';
+import { classificationMode } from './classification/config.js';
+import { guardShare, shareReadable } from './classification/guard.js';
+import type { Decision } from './classification/resolve.js';
 import { assertRoleFeature } from './role-features.js';
 import { getSetting } from './settings.js';
 import { shareableThreadCondition } from './share-link-availability.js';
@@ -65,13 +68,52 @@ function randomSlug(): string {
   return Buffer.from(bytes).toString('base64url');
 }
 
+/**
+ * A link is paused, not revoked, while its conversation carries a class (data
+ * classification, `block`): the same answer as a link that never was, so an
+ * anonymous reader learns nothing, and it returns when the label goes. Read
+ * before the transaction, which holds a connection, and not at all while
+ * classification is off.
+ */
+async function assertNotPaused(slug: string): Promise<void> {
+  if ((await classificationMode()) === 'off') return;
+  const [target] = await db
+    .select({ threadId: schema.shareLink.threadId })
+    .from(schema.shareLink)
+    .where(eq(schema.shareLink.slug, slug))
+    .limit(1);
+  if (target && !(await shareReadable(target.threadId))) throw notFound('Share link not found');
+}
+
 export async function createShareLink(
   threadId: string,
   userId: string,
   input: CreateShareLinkInput,
+  /** Told what data classification decided (a `warn` the owner should be told about). */
+  onDecision?: (decision: Decision) => void,
 ) {
   if (input.expiresAt && input.expiresAt.getTime() <= Date.now()) {
     throw validationFailed('Expiration must be in the future');
+  }
+
+  // Data classification (v0.14): a link shows the whole conversation to anyone
+  // who has it, which no class is approved for. Judged only for the person's own
+  // shareable conversation, so a stranger gets the same 404 as before and
+  // learns no class. Read before the transaction below, which holds a connection.
+  if ((await classificationMode()) !== 'off') {
+    const [owned] = await db
+      .select({ id: schema.thread.id })
+      .from(schema.thread)
+      .where(
+        and(
+          eq(schema.thread.id, threadId),
+          eq(schema.thread.userId, userId),
+          shareableThreadCondition(),
+        ),
+      )
+      .limit(1);
+    if (!owned) throw notFound('Thread not found');
+    onDecision?.(await guardShare(userId, threadId));
   }
 
   return db.transaction(async (tx) => {
@@ -419,6 +461,7 @@ async function publicArtifacts(
 
 export async function getPublicShare(slug: string) {
   await assertPublicSharingEnabled();
+  await assertNotPaused(slug);
 
   return db.transaction(async (tx) => {
     const [link] = await tx

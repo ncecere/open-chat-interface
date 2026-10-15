@@ -117,7 +117,7 @@ export function UpgradesSection() {
           <p className="font-medium text-sm">{data.verdict.summary}</p>
         </div>
         {data.verdict.reasons.length > 0 && (
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--text-muted)] text-xs">
+          <ul className="mt-2 list-disc space-y-1 ps-5 text-[var(--text-muted)] text-xs">
             {data.verdict.reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
@@ -341,7 +341,7 @@ function BackgroundRow({ migration }: { migration: BackgroundMigrationSummary })
     <li className="px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-mono text-xs">{migration.name}</p>
+          <p className="[overflow-wrap:anywhere] font-mono text-xs">{migration.name}</p>
           <p className="text-[var(--text-muted)] text-xs">
             {migration.description ?? 'Scheduled by a newer release; this release cannot run it.'}{' '}
             On {migration.table}

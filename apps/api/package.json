@@ -1,6 +1,6 @@
 {
   "name": "@oci/api",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -13,6 +13,7 @@
     "test:unit": "vitest run src/__tests__/unit src/services/share-links.test.ts src/services/storage/config.test.ts",
     "test:integration": "vitest run src/__tests__/integration",
     "admin:promote": "tsx --env-file=../../.env src/scripts/promote-admin.ts",
+    "admin:reset-mfa": "tsx --env-file=../../.env src/scripts/reset-mfa.ts",
     "backup:restore-files": "tsx src/scripts/restore-backup-files.ts",
     "upgrade:check": "tsx --env-file-if-exists=../../.env src/scripts/upgrade-check.ts",
     "test:live": "vitest run src/__tests__/live",
@@ -25,6 +26,7 @@
     "@ai-sdk/openai": "4.0.33",
     "@ai-sdk/openai-compatible": "3.0.25",
     "@aws-sdk/client-s3": "3.1105.0",
+    "@better-auth/passkey": "1.6.26",
     "@better-auth/sso": "1.6.26",
     "@hono/node-server": "2.1.0",
     "@oci/db": "workspace:*",

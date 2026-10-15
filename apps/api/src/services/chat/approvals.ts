@@ -9,6 +9,7 @@ import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { conflict, notFound, rateLimited, validationFailed } from '../../lib/errors.js';
 import { beginChatRun } from '../chat-streams.js';
+import { guardModel, toTurnClassification } from '../classification/guard.js';
 import { acquireStreamSlot } from '../limits/concurrency.js';
 import { resolveModelForRole } from '../models.js';
 import { releaseReservation, reserveQuotaForRun } from '../quota/index.js';
@@ -110,13 +111,23 @@ export async function setupApprovalContinuation(
     .limit(1);
   if (!reply) throw notFound('Reply not found');
   if (!reply.modelSlug || !reply.parentMessageId) throw validationFailed(NOT_PENDING);
-  const resolved = await resolveModelForRole(reply.modelSlug, user.role);
+  const resolved = await resolveModelForRole(reply.modelSlug, { userId: user.id, role: user.role });
+  // Data classification: labels may have changed since the call was requested.
+  // Refused before the claim below, so the reply stays waiting for an answer.
+  const guarded = await guardModel({
+    user,
+    threadId: thread.id,
+    model: { slug: resolved.slug, displayName: resolved.displayName ?? resolved.slug },
+    point: 'approval',
+  });
+  const classification = toTurnClassification(guarded, { point: 'approval', model: resolved.slug });
   const tools = await resolveTurnTools({
     role: user.role,
     userId: user.id,
     capabilities: resolved.capabilities,
     webSearch: reply.webSearchUsed,
     temporary: thread.temporary,
+    classification: { modelSlug: resolved.slug, classes: classification },
   });
   const [prompt] = await db
     .select({ parts: schema.message.parts })
@@ -140,7 +151,7 @@ export async function setupApprovalContinuation(
     // Today's date where the person is, as for a new message (#248).
     ...(body.timeZone ? { timeZone: body.timeZone } : {}),
   };
-  const context: TurnContext = { user, input, thread, resolved, tools };
+  const context: TurnContext = { user, input, thread, resolved, tools, classification };
 
   const runIdentity = {
     runId: `${reply.id}:${crypto.randomUUID().slice(0, 8)}`,

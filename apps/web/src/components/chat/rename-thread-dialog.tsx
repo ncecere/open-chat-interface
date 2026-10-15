@@ -14,6 +14,7 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { useUpdateThread } from '~/hooks/use-threads';
 import { apiErrorMessage } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 
 /**
  * Renames a conversation. Enter saves and Escape cancels; the name is trimmed
@@ -31,12 +32,13 @@ export function RenameThreadDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100%-2rem)] max-w-md">
         <DialogHeader>
-          <DialogTitle>Rename conversation</DialogTitle>
-          <DialogDescription>The new name shows in the sidebar and in History.</DialogDescription>
+          <DialogTitle>{t('chat.rename.title')}</DialogTitle>
+          <DialogDescription>{t('chat.rename.description')}</DialogDescription>
         </DialogHeader>
         {/* Mounted only while open, so every opening starts from the current name. */}
         {open && (
@@ -56,6 +58,7 @@ function RenameThreadForm({
   title: string;
   onDone: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(title);
   const update = useUpdateThread();
   const inputId = useId();
@@ -70,7 +73,7 @@ function RenameThreadForm({
 
   return (
     <form onSubmit={(event) => void submit(event).catch(() => undefined)} noValidate>
-      <Field label="Name" htmlFor={inputId}>
+      <Field label={t('chat.rename.name')} htmlFor={inputId}>
         <Input
           id={inputId}
           dir="auto"
@@ -87,16 +90,16 @@ function RenameThreadForm({
           role="alert"
           className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
-          {apiErrorMessage(update.error, 'The conversation could not be renamed.')}
+          {apiErrorMessage(update.error, t('chat.rename.failed'))}
         </p>
       )}
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t('chat.rename.cancel')}
         </Button>
         <Button type="submit" variant="primary" disabled={!trimmed || update.isPending}>
           {update.isPending && <Spinner />}
-          Rename
+          {t('chat.rename.submit')}
         </Button>
       </DialogFooter>
     </form>

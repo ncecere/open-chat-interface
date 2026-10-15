@@ -346,7 +346,10 @@ describe.skipIf(!available)('live: rotating ENCRYPTION_KEY', { timeout: 120_000 
 
     // A model call: the provider's key, decrypted and sent to the stub.
     const { resolveModelForRole } = await import('../../services/models.js');
-    const resolved = await resolveModelForRole('stub-model', 'user');
+    const resolved = await resolveModelForRole('stub-model', {
+      userId: 'person-without-groups',
+      role: 'user',
+    });
     const reply = await generateText({ model: resolved.languageModel, prompt: 'ping' });
     expect(reply.text).toBe('pong');
     expect(seenKeys.at(-1)).toBe('sk-provider-secret');

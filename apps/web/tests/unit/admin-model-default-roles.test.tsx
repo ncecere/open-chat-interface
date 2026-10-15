@@ -1,11 +1,17 @@
 // @vitest-environment happy-dom
 import type { Provider } from '@oci/shared';
 import type { Root } from 'react-dom/client';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { ModelFormDialog } from '../../src/components/admin/model-form-dialog';
 import { Dialog } from '../../src/components/ui/dialog';
 import { ThemeProvider } from '../../src/providers/theme-provider';
 import { cleanup, renderAdmin } from './admin-test-utils';
+
+// The dialog also asks for the data classes it can approve the model for (v0.14).
+vi.mock('../../src/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/lib/api-client')>()),
+  api: { get: vi.fn(async () => ({ classes: [] })) },
+}));
 
 let root: Root | undefined;
 afterEach(async () => {

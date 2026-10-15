@@ -2,6 +2,7 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { Button } from '~/components/ui/button';
 import { UnavailableState } from '~/components/ui/unavailable-state';
 import { useCurrentUser } from '~/hooks/use-current-user';
+import { useT } from '~/lib/i18n';
 
 /**
  * An address with no page, in the layout every unavailable page uses (#131).
@@ -12,6 +13,7 @@ import { useCurrentUser } from '~/hooks/use-current-user';
  * led to sign-in: someone signed out is offered Sign in instead (#197).
  */
 export function NotFoundPage({ admin = false }: { admin?: boolean }) {
+  const t = useT();
   const path = useRouterState({ select: (state) => state.location.pathname });
   // Signed in inside the admin and the chat shell; /me answers null when not.
   const { data: me } = useCurrentUser();
@@ -22,30 +24,30 @@ export function NotFoundPage({ admin = false }: { admin?: boolean }) {
   const exact = { exact: true };
   return (
     <UnavailableState
-      title="Page not found"
+      title={t('ui.notFound.title')}
       actions={
         <Button asChild>
           {admin ? (
             <Link to="/admin" activeOptions={exact}>
-              Go to Overview
+              {t('ui.notFound.toOverview')}
             </Link>
           ) : signedOut ? (
             <Link to="/auth/login" activeOptions={exact}>
-              Sign in
+              {t('ui.notFound.signIn')}
             </Link>
           ) : (
             <Link to="/" activeOptions={exact}>
-              New chat
+              {t('ui.notFound.newChat')}
             </Link>
           )}
         </Button>
       }
     >
       {admin
-        ? `There is no administration page at ${path}. Choose a page from the menu, or start from the overview.`
+        ? t('ui.notFound.adminBody', { path })
         : signedOut
-          ? `There is no page at ${path}. Check the address, or sign in.`
-          : `There is no page at ${path}. Check the address, or start a new chat.`}
+          ? t('ui.notFound.signedOutBody', { path })
+          : t('ui.notFound.body', { path })}
     </UnavailableState>
   );
 }

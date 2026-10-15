@@ -1,4 +1,5 @@
 import { schema, sql } from '@oci/db';
+import { projectReadableBy } from '../project-sharing/access.js';
 import {
   type EmbeddingConfig,
   type Generation,
@@ -75,11 +76,16 @@ function assertScope(scope: VectorScope): void {
   }
 }
 
-/** The person-and-project filter, on `e` (vectors) joined to `a` (attachment). */
+/**
+ * The person-and-project filter, on `e` (vectors) joined to `a` (attachment).
+ * `personId` is the person asking (v0.14: the actor, who may be a viewer or an
+ * editor rather than the owner or the uploader): vectors of a project they can
+ * read, and only those.
+ */
 export function scopeFilter(scope: VectorScope) {
   assertScope(scope);
-  return sql`a.user_id = ${scope.personId}
-    and a.project_id = ${scope.projectId}
+  return sql`a.project_id = ${scope.projectId}
+    and ${projectReadableBy(sql`a.project_id`, scope.personId)}
     and a.upload_pending = false
     and a.deleted_at is null
     ${scope.fileIds ? sql`and e.attachment_id = any(${textArray(scope.fileIds)})` : sql``}`;
