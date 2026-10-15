@@ -64,11 +64,17 @@ export async function createPeople(
   run: string,
   labels: string[],
   people: Person[],
+  /**
+   * A display name for a label, instead of `Sharing <label> <run>`. The run token is random, and how wide
+   * it renders depends on its letters and on the font: a name with it in is not one a test can rely on
+   * to fit in a given number of lines. The email keeps the token, so addresses stay unique.
+   */
+  displayNames: Record<string, string> = {},
 ) {
   await whileVerificationLifted(admin, async () => {
     for (const label of labels) {
       const person = {
-        name: `Sharing ${label} ${run}`,
+        name: displayNames[label] ?? `Sharing ${label} ${run}`,
         email: `sharing-${label}-${run}@example.test`,
         password: `Disposable-${run}${PASSWORD_SUFFIX}`,
       };

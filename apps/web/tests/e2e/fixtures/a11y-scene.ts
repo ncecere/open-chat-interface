@@ -74,6 +74,10 @@ export function provideScene() {
       run,
       ['a-person-with-an-unusually-long-address-to-wrap', 'scene-admin'],
       people,
+      // The administrator's name is what the sidebar's account button shows, and the checks expect it
+      // to fit two lines under the text spacing (a longer one is cut there by design): so a fixed name,
+      // not one with the random run token in it, whose width changes with its letters and the font.
+      { 'scene-admin': 'Scene Administrator' },
     );
     const [person, admin] = people as [Person, Person];
     const promoted = await request.patch(`/api/admin/users/${admin.id}`, {
