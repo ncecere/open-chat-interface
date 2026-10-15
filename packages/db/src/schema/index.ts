@@ -5,6 +5,7 @@ export * from './compaction.js';
 export * from './compliance.js';
 export * from './connector.js';
 export * from './embeddings.js';
+export * from './groups.js';
 export * from './lifecycle.js';
 export * from './memory.js';
 export * from './migrations.js';
