@@ -1,0 +1,317 @@
+{
+  "routes": [
+    {
+      "path": "/",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/__not-found__",
+      "audience": "public",
+      "kind": "notfound",
+      "synthetic": true,
+      "reason": "an address no route matches: the app's own not-found page, which router.tsx renders without a path"
+    },
+    {
+      "path": "/admin",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/audit",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/backups",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/branding",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/broadcasts",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/compliance",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/connectors",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/data-classes",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/groups",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/groups/$groupId",
+      "audience": "admin",
+      "kind": "page",
+      "fixture": "group"
+    },
+    {
+      "path": "/admin/health",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/invites",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/maintenance",
+      "audience": "admin",
+      "kind": "redirect",
+      "to": "/admin/health"
+    },
+    {
+      "path": "/admin/models",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/policies",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/providers",
+      "audience": "admin",
+      "kind": "redirect",
+      "to": "/admin/models"
+    },
+    {
+      "path": "/admin/quotas",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/rate-limits",
+      "audience": "admin",
+      "kind": "redirect",
+      "to": "/admin/roles"
+    },
+    {
+      "path": "/admin/reports",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/retention",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/roles",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/search",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/settings",
+      "audience": "admin",
+      "kind": "redirect",
+      "to": "/admin/settings/general"
+    },
+    {
+      "path": "/admin/settings/authentication",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/settings/email",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/settings/general",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/sso",
+      "audience": "admin",
+      "kind": "redirect",
+      "to": "/admin/settings/authentication"
+    },
+    {
+      "path": "/admin/storage",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/storage-limits",
+      "audience": "admin",
+      "kind": "redirect",
+      "to": "/admin/roles"
+    },
+    {
+      "path": "/admin/usage",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/users",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/admin/users/$userId",
+      "audience": "admin",
+      "kind": "page",
+      "fixture": "user"
+    },
+    {
+      "path": "/admin/webhooks",
+      "audience": "admin",
+      "kind": "page"
+    },
+    {
+      "path": "/auth/accept-invite",
+      "audience": "public",
+      "kind": "page",
+      "note": "opened without a token: the page shows its invalid-link state"
+    },
+    {
+      "path": "/auth/forgot-password",
+      "audience": "public",
+      "kind": "page"
+    },
+    {
+      "path": "/auth/login",
+      "audience": "public",
+      "kind": "page"
+    },
+    {
+      "path": "/auth/mfa-setup",
+      "audience": "end-user",
+      "kind": "page",
+      "state": "mfa-limited",
+      "note": "only for a person whose role requires two-step verification and who has not set it up"
+    },
+    {
+      "path": "/auth/reset-password",
+      "audience": "public",
+      "kind": "page",
+      "note": "opened without a token: the page shows its invalid-link state"
+    },
+    {
+      "path": "/auth/signup",
+      "audience": "public",
+      "kind": "page"
+    },
+    {
+      "path": "/auth/two-factor",
+      "audience": "public",
+      "kind": "page",
+      "state": "second-step",
+      "note": "reached by signing in with a password as an enrolled account; the audit reaches it that way"
+    },
+    {
+      "path": "/auth/verify-email",
+      "audience": "public",
+      "kind": "page",
+      "note": "opened without a token"
+    },
+    {
+      "path": "/chat/$threadId",
+      "audience": "end-user",
+      "kind": "page",
+      "fixture": "thread"
+    },
+    {
+      "path": "/projects",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/projects/$projectId",
+      "audience": "end-user",
+      "kind": "page",
+      "fixture": "project"
+    },
+    {
+      "path": "/settings",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/attachments",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/connectors",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/contact",
+      "audience": "end-user",
+      "kind": "redirect",
+      "to": "/settings"
+    },
+    {
+      "path": "/settings/customization",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/groups",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/history",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/memory",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/models",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/sharing",
+      "audience": "end-user",
+      "kind": "page"
+    },
+    {
+      "path": "/settings/shortcuts",
+      "audience": "end-user",
+      "kind": "redirect",
+      "to": "/settings"
+    },
+    {
+      "path": "/share/$slug",
+      "audience": "public",
+      "kind": "page",
+      "fixture": "share-missing",
+      "note": "a link that does not exist: the unavailable page"
+    }
+  ]
+}
