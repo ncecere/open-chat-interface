@@ -1,6 +1,7 @@
 /**
- * Text that `truncate` may cut short with an ellipsis but that has no tooltip
- * with its full value (#110, #130).
+ * Text that `truncate` may cut short with an ellipsis, or that two lines of
+ * `line-clamp-2 text-ellipsis` may (the 1.4.12 text spacing, #401), but that
+ * has no tooltip with its full value (#110, #130).
  *
  * happy-dom has no layout, so it cannot tell which text actually overflows;
  * every truncatable element is checked, as any of them can overflow on a
@@ -9,7 +10,9 @@
  */
 export function untitledTruncations(root: ParentNode = document): string[] {
   const missing: string[] = [];
-  for (const element of root.querySelectorAll<HTMLElement>('.truncate')) {
+  for (const element of root.querySelectorAll<HTMLElement>(
+    '.truncate, .line-clamp-2.text-ellipsis',
+  )) {
     const text = element.textContent?.replace(/\s+/g, ' ').trim();
     if (!text || element.closest('[aria-hidden="true"]')) continue;
     let covered = false;

@@ -140,6 +140,17 @@ This spec needs no server and runs with the other accessibility specs in CI. If 
 add its defect to `broken.html` and its negative control to the spec first, and watch it fail.
 (`broken.html` is excluded from `biome` because biome's own accessibility rules flag it.)
 
+A defect the audit found is fixed with a test that fails first. `tests/e2e/a11y-fixes-*.spec.ts` run
+the audit's own checks (`nonTextContrastCheck`, `textSpacingCheck`, `textResizeCheck`,
+`targetSizeCheck`) on the real pages of a seeded instance, with a scene of fresh accounts and long
+names (`tests/e2e/fixtures/a11y-scene.ts`), so the page is held to the measurement the report is. They
+set their own 1280 and 320 px viewports and are left out of the mobile project
+(`playwright.config.ts`):
+
+```bash
+pnpm --filter @oci/web exec playwright test tests/e2e/a11y-fixes- --project=chromium
+```
+
 ## Keeping the report current
 
 The report's version must not be more than one minor release behind `apps/api/src/version.ts`
