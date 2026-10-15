@@ -24,6 +24,8 @@ export interface UserPreferences {
   defaultModelSlug: string | null;
   /** The person's own starting reasoning level (v0.10); null or absent for the instance default. */
   defaultEffort?: ReasoningEffort | null;
+  /** The person's saved language (v0.14); null follows the instance default; absent from an older API. */
+  locale?: string | null;
   /** The person's own memory switch; absent from an API before v0.9. */
   memoryEnabled?: boolean;
 }

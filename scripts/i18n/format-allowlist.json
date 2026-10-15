@@ -1,0 +1,205 @@
+{
+  "description": "Locale-formatting call sites (toLocale*String, Intl.NumberFormat, DateTimeFormat, RelativeTimeFormat, ListFormat, DisplayNames) that existed before the formatter, counted per file. The count may only go down; a new site outside apps/web/src/lib/i18n/format.ts fails scripts/check-i18n.mjs.",
+  "files": [
+    {
+      "file": "apps/web/src/components/admin/capacity-limits.tsx",
+      "count": 2,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/admin/embeddings-section.tsx",
+      "count": 10,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/admin/model-form-draft.ts",
+      "count": 2,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/admin/quota-override-dialog.tsx",
+      "count": 2,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/admin/quota-policy-dialog.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/admin/upgrades.tsx",
+      "count": 4,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/admin/user-limits.tsx",
+      "count": 4,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/artifacts/artifact-drafts.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/artifacts/artifact-panel/panel-helpers.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/artifacts/artifact-source.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/chat/composer.tsx",
+      "count": 2,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/chat/share-thread-dialog.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/layout/top-bar.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/settings/storage-meter.tsx",
+      "count": 3,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/settings/trait-chips.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/components/settings/your-data.tsx",
+      "count": 5,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/hooks/use-chat-session.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/lib/activity-series.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/lib/read-only.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/lib/utils.ts",
+      "count": 5,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/lib/validation-issues.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/health.tsx",
+      "count": 3,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/lifecycle-shared.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/models.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/quotas.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/reports.tsx",
+      "count": 2,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/roles/rate-limit-form.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/roles/role-panel.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/storage/storage-draft.ts",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/storage/uploads-panel.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/usage/limits-tab.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/usage/overview-tab.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/usage/usage-helpers.ts",
+      "count": 3,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/usage/usage-ui.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/user-detail.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/admin/users/bulk-toolbar.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/projects/project.tsx",
+      "count": 2,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/settings/attachment-list.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/settings/sharing.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    },
+    {
+      "file": "apps/web/src/routes/share/public-share.tsx",
+      "count": 1,
+      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+    }
+  ]
+}

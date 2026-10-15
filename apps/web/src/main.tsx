@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 import { DocumentBranding } from '~/components/brand/document-branding';
 import { listenForInstallPrompt } from '~/lib/install-prompt';
+import { activateLocale, I18nProvider, initialLocale } from '~/lib/i18n';
 import { clearReadOnlyRefusalsWhenLifted } from '~/lib/read-only-refusals';
 import { InstanceThemeSync } from '~/providers/instance-theme-sync';
 import { ThemeProvider } from '~/providers/theme-provider';
@@ -26,15 +27,24 @@ listenForInstallPrompt();
 const container = document.getElementById('root');
 if (!container) throw new Error('Root element not found');
 
-createRoot(container).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <InstanceThemeSync />
-        <DocumentBranding router={router} />
-        <RouterProvider router={router} />
-        <Toaster theme="dark" position="top-right" />
-      </ThemeProvider>
-    </QueryClientProvider>
-  </StrictMode>,
+const root = createRoot(container);
+
+// The language shown last time is loaded before the first render, so a person
+// who reads Spanish never sees English flash first. English is in the bundle,
+// so for most people this does not wait for anything.
+void activateLocale(initialLocale()).finally(() =>
+  root.render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider>
+          <ThemeProvider>
+            <InstanceThemeSync />
+            <DocumentBranding router={router} />
+            <RouterProvider router={router} />
+            <Toaster theme="dark" position="top-right" />
+          </ThemeProvider>
+        </I18nProvider>
+      </QueryClientProvider>
+    </StrictMode>,
+  ),
 );

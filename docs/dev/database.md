@@ -10,7 +10,7 @@ PostgreSQL, with Drizzle. Schema in `packages/db/src/schema/`, migrations in
 | `auth.ts` | users, sessions, accounts, SSO providers, invitations, `two_factor` (an authenticator's key and recovery codes, encrypted by the plugin with `AUTH_SECRET`; migration 0050) and `passkey` (migration 0051); `user.two_factor_enabled` and `session.auth_method` |
 | `chat.ts` | threads, messages, attachments, share links |
 | `provider.ts` | providers and the model catalogue |
-| `usage.ts` | usage events, quotas, audit log |
+| `usage.ts` | usage events, quotas, audit log, personal preferences (`user_preference`, with the language, migration `0055`) |
 | `groups.ts` | groups, their members, and the budgets and models they grant (migration 0053) |
 | `lifecycle.ts` | retention, storage policies, jobs, saved views, reports |
 | `organization.ts` | the organisation and its settings |
@@ -714,6 +714,18 @@ The `classification` instance setting is
 `{ mode, services: { webSearch, embeddings, reranking } }`; a v0.13 replica
 ignores the unknown key. Setting a mode other than `off` is refused until the
 migration is scheduled (`migrate --post`, after every replica runs 0.14).
+## The person's language (migration 0055)
+
+| Migration | Statement | Why it is safe |
+| --- | --- | --- |
+| `0055_user_locale` (v0.14, #397) | `ALTER TABLE "user_preference" ADD COLUMN IF NOT EXISTS "locale" text` | Nullable, no default: a catalog-only change with no rewrite. A v0.13 replica names its columns when it writes and lists them when it reads, so it neither sees nor needs it. |
+
+`locale` holds `en`, `es` or `ar` (the tags in `packages/shared/src/locales.ts`)
+or null for no choice. The database does not constrain it: the API validates
+what it saves (422 for anything else), and a value this release does not know
+reads as no choice, so a language added in a later release needs no migration.
+The instance's own setting (`language`: `{ default, enabled[] }`) is an
+`instance_setting` JSON value and needs none.
 
 ## Migrations under several replicas
 

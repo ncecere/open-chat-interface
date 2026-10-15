@@ -67,6 +67,16 @@ The accessibility check is a **regression net, not a conformance claim**.
 Automation covers perhaps a third of the criteria — contrast, names, roles,
 structure. Whether an error message actually helps still needs a person.
 
+## Translations
+
+`pnpm lint` also runs `node scripts/check-i18n.mjs` (catalogs against `en`,
+literals in migrated directories, locale formatting outside the formatter) and
+`node --test scripts/*.test.mjs` tests it. `pnpm build` ends by holding the
+initial JavaScript to its size budget. `tests/e2e/language.spec.ts` switches
+language in a browser (`<html lang dir>`, Arabic right-to-left). To look at the
+pseudo-locales in a production build, build with `VITE_OCI_PSEUDO_LOCALES=1`.
+See [Translations](translations.md).
+
 ## GitHub Actions
 
 Pull requests and `main` pushes run read-only validation with Node 22 and pnpm

@@ -8,6 +8,8 @@ import {
   MFA_DEFAULT_GRACE_DAYS,
   MFA_MAX_GRACE_DAYS,
   type MfaRequirement,
+  type LanguageSettings,
+  normalizeLanguageSettings,
   type QueuePriority,
   type ReasoningEffort,
   type RoleFeatures,
@@ -21,6 +23,7 @@ import { getDefaultOrganizationId } from './organization.js';
 
 export type SettingKey =
   | 'branding'
+  | 'language'
   | 'auth'
   | 'features'
   | 'storage'
@@ -403,6 +406,8 @@ export interface StoredClassificationSettings {
 
 interface SettingsMap {
   branding: BrandingSettings;
+  /** The instance's language and the languages people may choose (v0.14, #397). */
+  language: LanguageSettings;
   auth: AuthSettings;
   features: FeatureSettings;
   storage: StorageSettings;
@@ -467,7 +472,9 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<Settings
           ? normalizeFeatureSettings(stored as FeatureSettings)
           : key === 'auth'
             ? normalizeAuthSettings(stored as AuthSettings)
-            : stored
+            : key === 'language'
+              ? normalizeLanguageSettings(stored)
+              : stored
   ) as SettingsMap[K];
   if (readGeneration === generation)
     cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });

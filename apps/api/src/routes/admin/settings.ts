@@ -2,6 +2,8 @@ import {
   DEFAULT_MAX_TOOL_STEPS,
   type InstanceSettings,
   type MfaRequirement,
+  type LanguageSettings,
+  normalizeLanguageSettings,
   SEARCH_PROVIDERS,
   type SearchProviderKind,
   type SearchTestResult,
@@ -77,18 +79,21 @@ const storageTestSchema = z.object({
  * show that storage or search configuration changed and what it was.
  */
 async function currentSettingsSnapshot(): Promise<Record<string, unknown>> {
-  const [branding, authSettings, features, storage, search, smtp, chat] = await Promise.all([
-    getSetting('branding'),
-    getSetting('auth'),
-    getSetting('features'),
-    getSetting('storage'),
-    getSetting('search'),
-    getSetting('smtp'),
-    getSetting('chat'),
-  ]);
+  const [branding, language, authSettings, features, storage, search, smtp, chat] =
+    await Promise.all([
+      getSetting('branding'),
+      getSetting('language'),
+      getSetting('auth'),
+      getSetting('features'),
+      getSetting('storage'),
+      getSetting('search'),
+      getSetting('smtp'),
+      getSetting('chat'),
+    ]);
 
   return {
     ...branding,
+    language,
     ...authSettings,
     // As a patch states it: the roles and the grace, not the server's stamps.
     mfaRequirement: {
@@ -121,15 +126,17 @@ settingsRoutes.get('/mfa-impact', async (c) => {
 });
 
 settingsRoutes.get('/', async (c) => {
-  const [branding, authSettings, features, storage, search, smtp, chat] = await Promise.all([
-    getSetting('branding'),
-    getSetting('auth'),
-    getSetting('features'),
-    getSetting('storage'),
-    getSetting('search'),
-    getSetting('smtp'),
-    getSetting('chat'),
-  ]);
+  const [branding, language, authSettings, features, storage, search, smtp, chat] =
+    await Promise.all([
+      getSetting('branding'),
+      getSetting('language'),
+      getSetting('auth'),
+      getSetting('features'),
+      getSetting('storage'),
+      getSetting('search'),
+      getSetting('smtp'),
+      getSetting('chat'),
+    ]);
 
   const payload: InstanceSettings = {
     appName: branding.appName,
@@ -139,6 +146,7 @@ settingsRoutes.get('/', async (c) => {
     loginMessage: branding.loginMessage,
     defaultTheme: branding.defaultTheme,
     colorTheme: branding.colorTheme,
+    language,
     registrationMode: authSettings.registrationMode,
     emailVerificationRequired: authSettings.emailVerificationRequired,
     localAuthEnabled: authSettings.localAuthEnabled,
@@ -398,6 +406,33 @@ settingsRoutes.patch('/', async (c) => {
     });
   }
 
+  // The merged result is what is stored and what the audit entry records, so
+  // "enabled: [es]" is written (and shown) as it reads: English always on.
+  let language: LanguageSettings | null = null;
+  if (
+    patch.language &&
+    (patch.language.default !== undefined || patch.language.enabled !== undefined)
+  ) {
+    const current = await getSetting('language');
+    const enabled =
+      patch.language.enabled !== undefined
+        ? normalizeLanguageSettings({ enabled: patch.language.enabled }).enabled
+        : current.enabled;
+    const requested =
+      patch.language.default !== undefined ? patch.language.default : current.default;
+    if (requested && !enabled.includes(requested)) {
+      const asked = patch.language.default !== undefined;
+      const message = asked
+        ? 'The default language must be one of the enabled languages.'
+        : 'Choose another default language, or none, before turning the default off.';
+      throw validationFailed(message, [
+        { path: ['language', asked ? 'default' : 'enabled'], message },
+      ]);
+    }
+    language = { default: requested, enabled };
+    await updateSetting('language', language);
+  }
+
   if (
     patch.registrationMode !== undefined ||
     patch.emailVerificationRequired !== undefined ||
@@ -533,7 +568,7 @@ settingsRoutes.patch('/', async (c) => {
     });
   }
 
-  const changes = diffSettings(previous, patch as Record<string, unknown>);
+  const changes = diffSettings(previous, { ...patch, ...(language && { language }) });
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,

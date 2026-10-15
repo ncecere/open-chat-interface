@@ -2,6 +2,7 @@ import { and, count, eq, isNull, schema } from '@oci/db';
 import {
   completeOnboardingSchema,
   deleteOwnAccountSchema,
+  localeSchema,
   myShareLinksQuerySchema,
   personalDefaultsInputSchema,
   type ReasoningEffort,
@@ -56,6 +57,8 @@ const preferenceSchema = z
     occupation: z.string().max(200).nullable().optional(),
     traits: z.array(z.string().max(60)).max(20).optional(),
     additionalContext: z.string().max(4000).nullable().optional(),
+    /** The language of the web app (v0.14); null returns to the instance default. */
+    locale: localeSchema.nullable().optional(),
   })
   .extend(personalDefaultsInputSchema.shape);
 

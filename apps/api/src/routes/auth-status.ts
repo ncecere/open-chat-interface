@@ -27,9 +27,10 @@ authStatusRoutes.post('/accept-invite', async (c) => {
  * how the instance is branded.
  */
 authStatusRoutes.get('/status', async (c) => {
-  const [authSettings, branding, smtpConfigured, providers] = await Promise.all([
+  const [authSettings, branding, language, smtpConfigured, providers] = await Promise.all([
     getAuthPolicySettings(),
     getSetting('branding'),
+    getSetting('language'),
     isSmtpUsable(),
     db
       .select({
@@ -63,6 +64,7 @@ authStatusRoutes.get('/status', async (c) => {
       colorTheme: branding.colorTheme,
       defaultTheme: branding.defaultTheme,
     },
+    language,
   };
 
   return c.json(payload);

@@ -4,6 +4,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useState } from 'react';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
 import { InstallAppSection } from '~/components/settings/install-app-section';
+import { LanguagePicker } from '~/components/settings/language-picker';
 import { TraitChips, traitChange } from '~/components/settings/trait-chips';
 import { Button } from '~/components/ui/button';
 import { Switch } from '~/components/ui/switch';
@@ -368,6 +369,8 @@ export function SettingsCustomizationPage() {
           </Button>
         </div>
       </div>
+
+      <LanguagePicker />
 
       <Section title="Appearance">
         <AppearanceRow />
