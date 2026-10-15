@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULTS, parseArgs, USAGE } from './lib/args.mjs';
 import { loadTools } from './lib/deps.mjs';
-import { createEvidence } from './lib/evidence.mjs';
+import { contextKey, createEvidence } from './lib/evidence.mjs';
 import { createGroup, ensureCatalog, userIdFor } from './lib/fixtures.mjs';
 import { buildMatrix } from './lib/matrix.mjs';
 import { loadRoutes, REPO_ROOT } from './lib/routes.mjs';
@@ -231,6 +231,8 @@ export async function main(argv, env = process.env) {
         views: options.views,
         languages,
         contexts: contexts.length,
+        // Exactly which contexts ran: a profile name alone does not say.
+        ran: contexts.map((context) => contextKey(context)),
         routeFilter: options.routes ?? null,
         parts: [...only],
       },

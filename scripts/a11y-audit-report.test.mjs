@@ -281,3 +281,26 @@ test('an example inside a code fence is not an inspection', () => {
   const text = `Format:\n\n\`\`\`\n### 1.1.1\n- Status: Supports | Not Applicable\n\`\`\`\n\n${INSPECTIONS}`;
   assert.deepEqual(Object.keys(parseInspections(text)), ['1.2.1', '2.4.2']);
 });
+
+test('the report lists the contexts that ran, not the dimensions that were asked for', () => {
+  const evidence = evidenceWith(() => {});
+  evidence.matrix = {
+    ...evidence.matrix,
+    themes: ['light', 'dark'],
+    contexts: 2,
+    ran: ['user/light/neutral/1280/en', 'user/dark/neutral/320/ar-XB'],
+  };
+  const text = renderReport({
+    evidence,
+    inspections: {},
+    version: '0.14.0',
+    draft: true,
+    contact: 'c',
+  });
+  assert.match(text, /\| Views \| 1280 px, 320 px \|/);
+  assert.match(text, /\| Languages \| en, ar-XB \|/);
+  assert.match(
+    text,
+    /\| user \| light \/ neutral \/ 1280 \/ en; dark \/ neutral \/ 320 \/ ar-XB \|/,
+  );
+});

@@ -32,7 +32,7 @@ export const DECISIVE = {
   '1.4.3': {
     checks: ['contrast', 'axe'],
     scope:
-      'the computed colour of every piece of rendered text over the background colour of its element and ancestors, in each theme and accent in the matrix; text over images or gradients is not judged and is counted separately',
+      'the computed colour of every piece of rendered text over the background colour of its element and ancestors, in the themes and accents that ran (see the matrix above); text over images or gradients is not judged and is counted separately',
   },
   '1.4.4': {
     checks: ['text-resize', 'document'],
@@ -62,7 +62,7 @@ export const DECISIVE = {
   '3.3.8': {
     checks: ['forms', 'walkthrough'],
     scope:
-      'paste into every password and code field, the autocomplete token of the code field, and the absence of any puzzle on the sign-in, second-step, sign-up and reset pages',
+      'paste into every password and code field, the autocomplete token of the code field, and the absence of any puzzle, on the pages where this run found such a field (the routes counted)',
   },
 };
 
@@ -75,7 +75,7 @@ export const PARTIAL_EVIDENCE = {
   '1.4.11':
     'the edge of fields, the glyph of icon-only controls and the focus indicator are measured; charts and other graphics are not',
   '2.1.1':
-    'twelve primary tasks were completed with the keyboard alone; other functions were not walked',
+    'the primary tasks listed in the methods were completed with the keyboard alone; other functions were not walked',
   '2.1.2':
     'the tab order of the pages in the walkthroughs was walked for traps; other pages were not',
   '2.4.1': 'landmarks on every page and the skip link where the walkthroughs loaded the page',
@@ -83,6 +83,8 @@ export const PARTIAL_EVIDENCE = {
   '2.4.3': 'the tab order of the walked pages and the focus behaviour of two dialogs',
   '2.4.7': 'the focus indicator at every tab stop of the walked pages',
   '2.4.11': 'every tab stop of the walked pages against fixed and sticky content',
+  '3.2.6':
+    'five pages were searched for a link or button named help, contact, support, feedback or documentation; where a help mechanism is repeated is for an inspection',
   '4.1.2': "the accessibility tree's names and states, not what a screen reader says",
   '4.1.3':
     'live regions observed while a reply streamed, failed and was stopped; not every status message',

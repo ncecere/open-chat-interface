@@ -73,6 +73,15 @@ export function parseInspections(markdown) {
   return found;
 }
 
+/** The first few finding ids, then how many more: a criterion can have a hundred. */
+function listIds(list, shown = 5) {
+  const ids = list
+    .slice(0, shown)
+    .map((finding) => finding.id)
+    .join(', ');
+  return list.length > shown ? `${ids} and ${list.length - shown} more` : ids;
+}
+
 const cell = (text) =>
   String(text)
     .replace(/\|/g, '\\|')
@@ -122,7 +131,7 @@ export function deriveRow(id, evidence, inspections) {
   if (entry && entry.samples > 0) {
     const where = routes.length ? ` on ${plural(routes.length, 'route')}` : '';
     parts.push(
-      `${plural(entry.samples, 'sample')}${where}: ${plural(failures.length, 'finding')}${failures.length ? ` (${failures.map((finding) => finding.id).join(', ')})` : ''}.`,
+      `${plural(entry.samples, 'sample')}${where}: ${plural(failures.length, 'finding')}${failures.length ? ` (${listIds(failures)})` : ''}.`,
     );
   }
   for (const finding of failures.slice(0, 3)) {
@@ -132,11 +141,22 @@ export function deriveRow(id, evidence, inspections) {
   }
   if (failures.length > 3) parts.push(`${failures.length - 3} more in findings.md.`);
   if (reviews.length > 0)
-    parts.push(
-      `${plural(reviews.length, 'item')} to review by a person (${reviews.map((finding) => finding.id).join(', ')}).`,
-    );
-  if (decisive && ran && failures.length === 0) parts.push(`No failures in: ${decisive.scope}.`);
-  else if (decisive && !ran)
+    parts.push(`${plural(reviews.length, 'item')} to review by a person (${listIds(reviews)}).`);
+  if (decisive && ran && failures.length === 0) {
+    parts.push(`No failures in: ${decisive.scope}.`);
+    if (routes.length > 0 && routes.length <= 10) {
+      parts.push(`Routes: ${routes.map(([route]) => route).join(', ')}.`);
+    }
+    if (id === '1.4.3') {
+      const counters = evidence.checks?.contrast?.counters ?? {};
+      const notJudged = Object.entries(counters)
+        .filter(([name]) => name.startsWith('not-judged'))
+        .reduce((sum, [, count]) => sum + count, 0);
+      parts.push(
+        `${counters.elements ?? 0} text elements were measured, ${notJudged} could not be judged.`,
+      );
+    }
+  } else if (decisive && !ran)
     parts.push(
       `The checks that test this (${decisive.checks.join(', ')}) did not all run in this audit.`,
     );
@@ -293,6 +313,18 @@ export function renderReport({ evidence, inspections, version, draft, contact })
     `Run on ${date} with ${tool.name} (Playwright ${tool['@playwright/test']}, ${tool.browser}, axe-core ${tool['axe-core']} through @axe-core/playwright ${tool['@axe-core/playwright']}), against a seeded instance, as fresh administrator, user and restricted accounts and signed out.`,
   );
   out.push('');
+  const ran = (matrix.ran ?? []).map((key) => key.split('/'));
+  const distinct = (index, fallback) =>
+    ran.length ? [...new Set(ran.map((parts) => parts[index]))] : fallback;
+  const viewName = (view) =>
+    ({
+      1280: '1280 px',
+      768: '768 px',
+      320: '320 px',
+      zoom400: '400% zoom (320 by 256 px at scale 4)',
+      text200: 'text at 200%',
+      reduce: 'reduced motion',
+    })[view] ?? view;
   out.push(
     table(
       [
@@ -300,26 +332,11 @@ export function renderReport({ evidence, inspections, version, draft, contact })
           'Matrix profile',
           `${matrix.profile} (${matrix.contexts} contexts of role, theme, accent, view and language)`,
         ],
-        ['Roles', matrix.roles.join(', ')],
-        ['Themes', matrix.themes.join(', ')],
-        ['Accents', matrix.accents.join(', ')],
-        [
-          'Views',
-          matrix.views
-            .map(
-              (view) =>
-                ({
-                  1280: '1280 px',
-                  768: '768 px',
-                  320: '320 px',
-                  zoom400: '400% zoom (320 by 256 px at scale 4)',
-                  text200: 'text at 200%',
-                  reduce: 'reduced motion',
-                })[view] ?? view,
-            )
-            .join(', '),
-        ],
-        ['Languages', matrix.languages.join(', ')],
+        ['Roles', distinct(0, matrix.roles).join(', ')],
+        ['Themes', distinct(1, matrix.themes).join(', ')],
+        ['Accents', distinct(2, matrix.accents).join(', ')],
+        ['Views', distinct(3, matrix.views).map(viewName).join(', ')],
+        ['Languages', distinct(4, matrix.languages).join(', ')],
         [
           'Routes',
           `${evidence.routes.listed} listed in scripts/a11y-audit/routes.json (from router.tsx)`,
@@ -330,6 +347,23 @@ export function renderReport({ evidence, inspections, version, draft, contact })
     ),
   );
   out.push('');
+  if (ran.length) {
+    out.push(
+      'The contexts that ran, as theme / accent / view / language, by role (a profile is a bounded subset of the full combination, so a combination that is not listed was not tested):',
+    );
+    out.push('');
+    const byRole = new Map();
+    for (const [role, ...rest] of ran) {
+      byRole.set(role, [...(byRole.get(role) ?? []), rest.join(' / ')]);
+    }
+    out.push(
+      table(
+        [...byRole].map(([role, list]) => [role, list.join('; ')]),
+        ['Role', 'Contexts'],
+      ),
+    );
+    out.push('');
+  }
   out.push('The methods, from the specification of the report:');
   out.push('');
   out.push(
