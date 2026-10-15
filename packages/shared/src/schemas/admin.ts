@@ -15,6 +15,7 @@ import {
   USER_ROLES,
 } from '../constants.js';
 import { DEFAULT_MAX_TOOL_STEPS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from '../tools.js';
+import { groupRefSchema } from './groups.js';
 import { patchSchema } from './patch.js';
 
 export const adminUserSchema = z.object({
@@ -298,6 +299,8 @@ export const quotaPolicySchema = z.object({
   modelSlugs: z.array(z.string()),
   /** How many people hold a per-user override of this policy's limit. */
   overrideCount: z.number().int().nonnegative(),
+  /** Groups the policy is attached to (v0.14), read-only; set from the group. */
+  groups: z.array(groupRefSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
