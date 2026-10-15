@@ -591,7 +591,7 @@ builds took 381 ms and 136 ms.
 
 ## Search folding
 
-Accent-insensitive search (#362, `SPEC-accent-search.md`) folds text in
+Accent-insensitive search (#362, `specs/v0.13/SPEC-accent-search.md`) folds text in
 **one place**: the SQL function `oci_fold_search_text(text)` (migration 0047),
 IMMUTABLE and STRICT. A `translate()` table maps precomposed Latin letters to
 their base letters and a few `replace()` calls expand `ß`, `æ` and `œ`.

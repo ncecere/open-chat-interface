@@ -1,7 +1,7 @@
 # Tasks: release-hygiene (v0.12.1)
 
-Plan: [release-hygiene-plan.md](release-hygiene-plan.md). Spec: [SPEC-release-hygiene.md](../../SPEC-release-hygiene.md).
-Branch: `patch/v0.12.1`. Shared commands are in [SPEC.md](../../SPEC.md)
+Plan: [release-hygiene-plan.md](release-hygiene-plan.md). Spec: [SPEC-release-hygiene.md](../../specs/v0.13/SPEC-release-hygiene.md).
+Branch: `patch/v0.12.1`. Shared commands are in [SPEC.md](../../specs/v0.13/SPEC.md)
 (`H=~/.oci-harness`).
 
 ## Task 1: Drop `project_file_embedding_failure` in post-deploy step 0013 ✅

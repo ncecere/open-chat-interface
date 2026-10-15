@@ -1,34 +1,57 @@
-# Spec: Open Chat Interface v0.13 (index)
+# Spec: Open Chat Interface v0.14 (index)
 
-Status: **v0.13.0 released 2026-10-14: `release-hygiene` (v0.12.1), `accent-search` and `external-backups` shipped; `scale-on-cluster` shipped its tooling, and the `medium` and `large` runs are open (see ROADMAP.md).** The chart gap #385 (found during v0.12.1) shipped in v0.13.0 too. This file is
-the index: the approved capability map, the build order, and what every
-module shares (commands, structure, style, testing, boundaries). Each module
-has its own spec, named by its id. The map, not file names, says what exists.
+Status: **map and module specs approved 2026-10-14 under the maintainer's delegation ("use your judgement"); building.** This file is
+the index: the capability map, the scope decisions, the build order, and what every module shares (commands,
+structure, style, testing, boundaries). Each module has its own spec, named by its id (`SPEC-<id>.md`). The v0.13
+specs are in `specs/v0.13/`.
 
 ## Objective
 
-Close the work left open after v0.12.0: the one open issue (#362), the
-item deferred from v0.11 ("backups at scale"), the service objectives not
-yet shown to hold at the `large` scale, and small release-hygiene debts found
-since. The users are the same as OCI's: people who chat (search),
-administrators (backups, System health) and operators (upgrades, backups,
-capacity); developers benefit from the hygiene work.
+Close the "governance and access" and "reach and compliance" items the roadmap lists for v1.0: groups and
+delegated administration (#394), data classification for models and connectors (#395), multi-factor
+authentication for local accounts (#399), interface translations and right-to-left layout (#397), an installable
+app (#400) and an accessibility conformance report (#401). The users are the same as OCI's: people who chat
+(language, installing, MFA), group managers (a new kind of delegated administrator), administrators (groups,
+classification, MFA policy) and institutions that buy software (the conformance report).
 
 ## Capability map
 
-| Module id | Responsibility | Depends on | Spec |
-|---|---|---|---|
-| `release-hygiene` | Drop `project_file_embedding_failure`; preflight report wording; guard development-image pruning; bring `ROADMAP.md` up to date | — | [SPEC-release-hygiene.md](SPEC-release-hygiene.md) — **done, v0.12.1** |
-| `accent-search` | Accent-insensitive search of message text by default: a stored folded column filled by a throttled background migration, its index built concurrently, search falling back until both are ready; project/file keyword search folded too; ß, æ, œ (#362) | — | [SPEC-accent-search.md](SPEC-accent-search.md) — **approved, building** |
-| `external-backups` | An "external database backup" mode for clusters with their own backups: OCI copies attachments and verifies, documents recovery objectives, and has a restore drill | — | [SPEC-external-backups.md](SPEC-external-backups.md) — **approved, building** |
-| `scale-on-cluster` | Run `tools/scale` up to `large` against a `dev-env` environment on the cluster and publish the results against the service objectives | `accent-search` | [SPEC-scale-on-cluster.md](SPEC-scale-on-cluster.md) — **approved; tooling built, medium and large not yet run** |
+| Module id | Responsibility | Issue | Depends on | Spec |
+|---|---|---|---|---|
+| `mfa` | TOTP and recovery codes for local accounts (Better Auth's `twoFactor`), passkeys if the official package fits, an option to require MFA per role, safe for the break-glass administrator | #399 | — | `SPEC-mfa.md` |
+| `installable-app` | A web manifest served by the instance (its name, colours, icons), install metadata; no offline mode | #400 | — | `SPEC-installable-app.md` |
+| `data-classification` | Admin-defined data classes; models and connectors approved per class; conversations carry classes (project, connector use, a person's label); warn or block when one crosses to an unapproved model or connector | #395 | — | `SPEC-data-classification.md` |
+| `groups` | Groups of people, delegated group managers, group budgets and model access, projects shared with people or groups as viewer or editor | #394 | — | `SPEC-groups.md` |
+| `i18n` | A translation framework without a new dependency, per-person and instance language, right-to-left layout, the end-user surfaces translated, a contributor guide; English plus (beta) Spanish and Arabic | #397 | the features above (strings are extracted last) | `SPEC-i18n.md` |
+| `accessibility-report` | A WCAG 2.2 AA review of every route (automated, keyboard, accessibility tree, reflow, contrast, target size), the fixes it finds, and a published conformance report in the VPAT 2.5 layout that states its method and limits | #401 | everything above (it reviews the final UI) | `SPEC-accessibility-report.md` |
 
-Build order: `release-hygiene` → `accent-search`, `external-backups` (one
-adds migrations at a time) → `scale-on-cluster`.
+Build order: `mfa`, `data-classification`, `groups`, `installable-app` in parallel (each in its own worktree and
+branch, migrations numbered in advance); then `i18n` string extraction; then `accessibility-report`; then the
+release. Migrations are numbered in advance so branches do not collide: `0050` and `0051` mfa, `0052`
+data-classification, `0053` and `0054` groups. `0055_user_locale` i18n (a nullable preference column). `installable-app` needs none (branding is JSON).
 
-Out of scope: the homelab's own manifests (the API's `Recreate` strategy, the
-Caddyfile's health settings) are changed in `~/homelab/bitop-talos`, not here,
-and only when asked.
+## Scope decisions (2026-10-14)
+
+1. **Custom roles are not in v0.14.** The four roles are a closed list that 85 source files and every per-role
+   setting (limits, model visibility, features, tools, storage) key off. Making roles data touches all of them;
+   it deserves its own release. **Groups** cover the use case the issue gives ("departments need their own
+   limits"): they add limits, model access and delegated management on top of a person's role. #394 is split:
+   groups, delegated managers and shared projects ship; custom roles move to a new issue.
+2. **Passkeys are included only if the official `@better-auth/passkey` package fits Better Auth 1.6.26** and its
+   licences pass `pnpm licenses:check`; otherwise v0.14 ships TOTP and recovery codes and says so. A passkey sign-in
+   counts as MFA for the policy. People who sign in through single sign-on are exempt: their identity provider
+   enforces it.
+3. **Classification is deny-by-default.** A model approved for no class cannot receive labelled content. Turning
+   the feature on changes nothing until something is labelled. Modes: off (default), warn, block.
+4. **Shared projects keep conversations private.** A viewer or editor uses the project's instructions and files in
+   their own conversations, which stay theirs. Only the owner deletes or reshares. Files count against the
+   uploader's storage.
+5. **Translations: framework, RTL and the end-user surfaces; the admin console stays English.** No translation
+   library is added (`Intl` plus a small typed catalog). Spanish and Arabic are machine-drafted, shown as beta,
+   and the docs invite native review. Pseudo-locales exist for tests.
+6. **The conformance report is a self-assessment**, not a third-party audit, and says exactly how it was made
+   (including that no screen reader was driven by a person). It recommends an independent audit for procurement
+   that needs one.
 
 ## Tech stack (unchanged)
 
@@ -134,33 +157,21 @@ Changed, Removed, Fixed) with an **Upgrade note** wherever an operator must act.
   touch the `open-chat-interface` (production) namespace or any namespace
   other than `dev-oci` to test; skip or delete a failing test to get green.
 
-## Success criteria (v0.13 as a whole)
+## Success criteria (v0.14 as a whole)
 
-- Each module's own success criteria are met and its spec is marked done.
-- v0.13.0 is released by `docs/RELEASING.md`: CI green, multi-arch images and
-  the chart published, the rolling-upgrade test passes from v0.12.0.
-- Issue #362 is closed.
+Every module's acceptance criteria hold; `python3 $H/run.py coverage` passes with zero skips and the floors hold
+(new floors for new services); `checks`, `pnpm lint:migrations`, `pnpm release:check`, licences and audit pass;
+`node tools/upgrade-test/run.mjs --from v0.13.1` passes (new migrations are additive and rolling-safe);
+`packages/db/releases.json` has an entry for 0.14.0 (a test enforces it); the browser suites pass including MFA
+and passkeys with a virtual authenticator; the branch is checked on `dev-env` (sign-in with MFA, a group, a
+classified conversation, a Spanish and an Arabic session, installing); docs, CHANGELOG, ROADMAP and the upgrade
+notes are updated; the release follows `docs/RELEASING.md`.
 
-## Decisions (2026-10-11)
+## Boundaries (v0.14 additions)
 
-1. **Release split:** `release-hygiene` ships alone as **v0.12.1**; the other
-   three modules are **v0.13.0**.
-2. **`accent-search`:** accents are folded for everyone by default, no
-   setting; "ß" matches "ss", "æ" matches "ae", "œ" matches "oe".
-3. **`external-backups`:** CloudNativePG and pgBackRest are supported and
-   tested; WAL-G is documented only.
-4. **`scale-on-cluster`:** the `large` profile may run on the shared cluster.
-   Measured capacity (2026-10-11): the local volume pool (`local-dev`,
-   a loop file in `/var/lib/miroir`) has a 200 GiB quota on talos-cp-1 and
-   talos-cp-3 (NVMe, ~476 GB free on each node) and is nearly empty; the
-   `large` database is estimated at ~70 GB, so the run uses
-   `dev-env up … --pg-size 150Gi` (75% of the pool, under the existing 85%
-   alert). Because that pool shares the NVMe with the control-plane node's
-   system disk and etcd, the module spec must pin the run to cp-1 or cp-3
-   (never cp-2, SATA), generate data in-cluster and throttled, watch etcd
-   fsync latency and pool usage and stop automatically past a threshold, run
-   at a quiet time, and tear everything down after. Fallback: `nfs-dev`.
-
-## Open questions
-
-None at the index level.
+- **Always:** access checks are server-side and deny by default; every new endpoint has a permission test that
+  proves a person without the right gets 403 or 404 (never data); audit events for every administrative change.
+- **Ask first / decided here:** the only new dependencies this release may add are `@better-auth/passkey` 1.6.26
+  (API, decision 2) and `qrcode-generator` (web, for the TOTP enrolment QR code; MIT, no dependencies). No other.
+- **Never:** weaken an existing access check to make a feature fit; skip a test; ship an unreviewed translation
+  without the beta label; claim in the conformance report anything that was not tested.
