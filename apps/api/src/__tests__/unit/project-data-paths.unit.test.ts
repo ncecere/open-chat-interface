@@ -139,6 +139,42 @@ const FILES: Record<string, Entry> = {
     via: 'requireProjectAccess',
     why: 'Listing, creating, changing, removing shares and transfer demand owner; the access summary and leaving demand any access; each checks first and again under the project row lock.',
   },
+  // Data classification (v0.14, #395): labels on projects. The owner labels; anybody who can read the
+  // project may see the labels that constrain their own conversations in it.
+  'services/classification/store.ts': {
+    class: 'A',
+    via: 'requireProjectAccess',
+    why: 'Labelling a project is the owner’s (403 for somebody who can read it, 404 for anybody else), or an administrator’s through the admin route. Matrix row: label.',
+  },
+  'services/classification/describe.ts': {
+    class: 'A',
+    via: 'requireProjectAccess',
+    why: 'What GET /api/classification says about a project needs read access (404 for none): a viewer or editor learns which models their own conversations in it may use.',
+  },
+  'routes/classification.ts': {
+    class: 'U',
+    why: 'Takes a project id from the query and hands it to describeClassification, which decides access; nothing here reads project data.',
+  },
+  'routes/admin/classification.ts': {
+    class: 'O',
+    why: 'An administrator sets labels on a person’s project (locked); admin-only on purpose, and administrators are outsiders to project content (the route returns labels, never content).',
+  },
+  'services/classification/resolve.ts': {
+    class: 'U',
+    why: 'Reads project_data_class by project id for callers that already decided access (a thread the person owns, or describeClassification). Returns labels, never content.',
+  },
+  'services/classification/guard.ts': {
+    class: 'U',
+    why: 'Carries the project id through to the resolver and the audit entry; the callers (send, tools, compaction) have the person’s own thread.',
+  },
+  'services/classification/audit.ts': {
+    class: 'U',
+    why: 'Writes ids into audit metadata; reads no project data and answers no access question.',
+  },
+  'services/groups/access-changes.ts': {
+    class: 'S',
+    why: 'The hooks the groups code calls inside its transaction when members leave or a group is deleted: reconciles the projects it reached (project-sharing/reconcile.ts), keyed by ids the group code already scoped.',
+  },
   'services/project-sharing/reconcile.ts': {
     class: 'S',
     why: 'Puts a project back in line with who may use it, after an event that ended access or from the projects.reconcile-access job; keyed by project, no actor, idempotent.',

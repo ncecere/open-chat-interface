@@ -553,6 +553,39 @@ describe.skipIf(!available)('live data classification: the API', () => {
       expect((await classification(`threadId=${chat.id}`)).classes).toHaveLength(1);
     });
 
+    it('somebody a project is shared with sees its labels, and may not change them (project sharing)', async () => {
+      const student = await createClass('Student records');
+      const project = await createProject(ctx.alice);
+      await labelProject(ctx.alice, project.id, [student.id]);
+      setMode('block');
+      // Before the share Bob is an outsider: the 404 above. Shared as a viewer he can read what
+      // will constrain his own conversations in it, and is told plainly that labelling is the owner's.
+      await ctx.pool.db.execute(
+        sql`insert into project_share (project_id, subject_type, subject_user_id, permission, created_by_user_id)
+            values (${project.id}, 'person', ${ctx.bob}, 'viewer', ${ctx.alice})`,
+      );
+      const seen = await call('GET', `/api/classification?projectId=${project.id}`, {
+        user: ctx.bob,
+      });
+      expect(seen.status).toBe(200);
+      expect(((await seen.json()) as Classification).classes.map((entry) => entry.name)).toEqual([
+        'Student records',
+      ]);
+      const refused = await call('PUT', `/api/projects/${project.id}/data-classes`, {
+        user: ctx.bob,
+        body: { classIds: [] },
+      });
+      expect(refused.status).toBe(403);
+      // Still labelled: nothing Bob did changed it.
+      expect(
+        (
+          (await (
+            await call('GET', `/api/classification?projectId=${project.id}`, { user: ctx.alice })
+          ).json()) as Classification
+        ).classes,
+      ).toHaveLength(1);
+    });
+
     it('a project’s labels reach its conversations; an administrator’s are locked', async () => {
       const student = await createClass('Student records');
       const health = await createClass('Health records');

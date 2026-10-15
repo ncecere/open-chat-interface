@@ -238,6 +238,9 @@ const MATRIX = {
   ],
   // Delete the project.
   delete: ['200:deleted', '403:kept', '403:kept', '403:kept', '403:kept', ...no('404:kept')],
+  // Label the project with a data class (v0.14, #395): the owner only; somebody who can read the
+  // project is refused plainly, anybody else gets the 404 a missing project gets.
+  label: ['200:labelled', '403:none', '403:none', '403:none', '403:none', ...no('404:none')],
   // Add a share (with the outsider).
   'share-add': ['201:added', '403:none', '403:none', '403:none', '403:none', ...no('404:none')],
   // Change a share (the viewer to editor).
@@ -643,6 +646,19 @@ describe.skipIf(!available)('live: project access matrix', () => {
       return `${response.status}:${rows.length === 0 ? 'deleted' : 'kept'}`;
     },
 
+    async label(actor, fx) {
+      const [made] = await pool.db.execute<{ id: string }>(
+        sql`insert into data_class (organization_id, name)
+            values (${state.organizationId}, ${`Matrix ${actor} ${fx.id}`}) returning id`,
+      );
+      const response = await call(actor, 'PUT', `/projects/${fx.id}/data-classes`, {
+        classIds: [made!.id],
+      });
+      const [labelled] = await pool.db.execute<{ n: number }>(
+        sql`select count(*)::int as n from project_data_class where project_id = ${fx.id}`,
+      );
+      return `${response.status}:${labelled!.n > 0 ? 'labelled' : 'none'}`;
+    },
     async delete(actor, fx) {
       const response = await call(actor, 'DELETE', `/projects/${fx.id}`);
       return `${response.status}:${(await projectState(fx.id)) ? 'kept' : 'deleted'}`;
@@ -737,6 +753,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
     'upload',
     'remove-file',
     'delete',
+    'label',
     'share-add',
     'share-change',
     'share-remove',
@@ -825,6 +842,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
       'GET /:id': ['read'],
       'PATCH /:id': ['rename', 'instructions'],
       'DELETE /:id': ['delete'],
+      'PUT /:id/data-classes': ['label'],
       'GET /:id/files': ['files'],
       'POST /:id/files': ['upload'],
       'DELETE /:id/files/:fileId': ['remove-file'],

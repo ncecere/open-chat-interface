@@ -1,5 +1,5 @@
 import type { ClassificationResponse, UserRole } from '@oci/shared';
-import { getOwnedProject } from '../projects.js';
+import { requireProjectAccess } from '../project-sharing/access.js';
 import { getOwnedThread } from '../threads.js';
 import { classificationMode } from './config.js';
 import { loadClasses } from './resolve.js';
@@ -15,7 +15,9 @@ export async function describeClassification(input: {
   const mode = await classificationMode();
   // 404 for another person's conversation or project even with the feature off.
   if (input.threadId) await getOwnedThread(input.threadId, input.userId);
-  else if (input.projectId) await getOwnedProject(input.projectId, input.userId);
+  // A viewer or editor of a shared project sees its labels: they decide which models the
+  // person's own conversations in it may use.
+  else if (input.projectId) await requireProjectAccess(input.projectId, input.userId);
   if (mode === 'off') return { mode, classes: [], models: [] };
   const classes = await loadClasses({
     ...(input.threadId ? { threadId: input.threadId } : { projectId: input.projectId }),

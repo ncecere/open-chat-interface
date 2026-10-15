@@ -9,6 +9,7 @@ import { db } from '../../db/index.js';
 import { conflict, notFound, validationFailed } from '../../lib/errors.js';
 import { lockChatThread } from '../chat/thread-claim.js';
 import { getDefaultOrganizationId } from '../organization.js';
+import { requireProjectAccess } from '../project-sharing/access.js';
 import { loadClasses } from './resolve.js';
 
 type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -388,9 +389,11 @@ export async function setProjectClasses(
       .from(schema.project)
       .where(eq(schema.project.id, projectId))
       .for('update');
-    // Another person's project is the same 404 as a missing one.
-    if (!project || (!actor.asAdmin && project.userId !== actor.userId))
-      throw notFound('Project not found');
+    if (!project) throw notFound('Project not found');
+    // Labelling is the owner's. Somebody who can read the project (a viewer, an editor, a member
+    // of a group it is shared with) is told so (403); anybody else gets the 404 a missing project
+    // gets, so existence never leaks (requireProjectAccess).
+    if (!actor.asAdmin) await requireProjectAccess(projectId, actor.userId, 'owner', tx);
     const rows = await tx
       .select()
       .from(schema.projectDataClass)

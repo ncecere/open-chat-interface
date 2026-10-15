@@ -18,6 +18,12 @@ vi.mock('../../db/index.js', () => ({
   },
 }));
 
+// The person's two-step status (part of the detail) reads through the auth module, which opens
+// the database when it is first imported; this test is about sessions and sets the database up
+// afterwards, so the module is a stub (the status needs only `auth.$context` for a person with an
+// authenticator, and nobody here has one).
+vi.mock('../../auth/index.js', () => ({ auth: { $context: Promise.resolve({}) } }));
+
 const DAY = 86_400_000;
 
 const available = await livePostgresAvailable();
