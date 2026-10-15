@@ -363,6 +363,18 @@ export const auth = betterAuth({
             : null),
       });
 
+      // A passkey added or removed: the person is told, in case it was not them.
+      if (
+        (ctx.path === '/passkey/verify-registration' || ctx.path === '/passkey/delete-passkey') &&
+        status === 200 &&
+        session?.user?.email
+      ) {
+        notifyMfaChange(
+          { id: session.user.id, email: session.user.email },
+          ctx.path === '/passkey/verify-registration' ? 'passkey_added' : 'passkey_removed',
+        );
+      }
+
       // A recovery code is used up: say how many remain (never which).
       if (ctx.path === '/two-factor/verify-backup-code' && status === 200) {
         const userId = session?.user?.id ?? mfaActor;

@@ -153,6 +153,8 @@ export const mfaImpactRoleSchema = z.object({
   since: z.string().nullable(),
   /** ISO time the earliest unenrolled account in the role is limited; null with none or not required. */
   firstDeadline: z.string().nullable(),
+  /** Of the unenrolled people, how many are limited right now (the grace has passed); 0 when not required. */
+  limitedNow: z.number().int().nonnegative(),
 });
 export const mfaImpactSchema = z.object({
   graceDays: z.number().int(),
