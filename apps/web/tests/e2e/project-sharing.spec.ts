@@ -132,7 +132,7 @@ test('an owner shares a project as a viewer; the person uses it, is made an edit
     await ownerPage.getByRole('combobox', { name: `Access for ${viewer.name}` }).click();
     await ownerPage.getByRole('option', { name: 'Editor' }).click();
     await expect(ownerPage.getByRole('dialog').getByRole('status')).toContainText(
-      `${viewer.name} is now editor.`,
+      `${viewer.name} is now an editor.`,
     );
     await ownerPage.keyboard.press('Escape');
 

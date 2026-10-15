@@ -24,12 +24,16 @@ async function signIn(page: Page) {
  * and pushed the whole Users page sideways.
  */
 test('admin pages do not scroll sideways on a phone', async ({ page }) => {
-  await page.setViewportSize(PHONE);
-  await signIn(page);
-
   const routes = [ADMIN_OVERVIEW, ...NAV_SECTIONS.flatMap((section) => section.items)].map(
     (item) => item.to,
   );
+  // One page load and a network-idle wait per admin page: about 0.65 s each on an idle
+  // machine, several times that with the suite's other workers running. The budget
+  // follows the number of pages, so adding an admin page does not quietly use up the margin.
+  test.setTimeout(30_000 + routes.length * 4_000);
+  await page.setViewportSize(PHONE);
+  await signIn(page);
+
   const overflowing: string[] = [];
   const wrapped: string[] = [];
   for (const route of routes) {

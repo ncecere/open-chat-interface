@@ -1,7 +1,5 @@
-import { mkdir, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { type Browser, type BrowserContext, expect, type Page } from '@playwright/test';
+import { whileVerificationLifted } from './fixtures/verification-lock';
 import { secretFromUri, totp } from './totp';
 
 /**
@@ -81,48 +79,15 @@ export function spaced(code: string): string {
 }
 
 /**
- * Specs run in separate worker processes, so the lift-and-restore below is
- * serialised between this module's callers by a lock directory (`mkdir` is
- * atomic). It cannot reach the older specs that do the same on their own
- * (settings-account, settings-people): the check after creating the account is
- * what keeps this module's accounts sound, whoever restored the setting.
- */
-const LOCK = join(tmpdir(), 'oci-e2e-verification-setting.lock');
-
-async function withVerificationLock<T>(work: () => Promise<T>): Promise<T> {
-  for (let waited = 0; ; waited += 1) {
-    try {
-      await mkdir(LOCK);
-      break;
-    } catch {
-      // A lock left by a run that died is older than any account creation takes.
-      const age = await stat(LOCK).then(
-        (info) => Date.now() - info.mtimeMs,
-        () => 0,
-      );
-      if (age > 30_000) await rm(LOCK, { recursive: true, force: true });
-      if (waited > 600) throw new Error('The verification setting stayed locked');
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  try {
-    return await work();
-  } finally {
-    await rm(LOCK, { recursive: true, force: true });
-  }
-}
-
-/**
  * A fresh local account, made through the administration API.
  *
- * An account an administrator creates is verified only if the instance does not
- * require verified addresses at that moment, and the fixture requires them yet
- * cannot deliver mail. So the requirement is lifted while the account is made
- * and restored. It is one setting of the whole instance and the specs run in
- * parallel, so another test restoring it between the lift and the creation
- * leaves the account unverified (it could never sign in). The account is
- * therefore checked, and made again under a new address when that happened: the
- * precondition is established, not the test's result retried.
+ * Made while the instance does not require verified addresses (the fixture
+ * requires them yet cannot deliver mail), through the lock every spec shares
+ * (fixtures/verification-lock.ts), so no other spec can restore the requirement
+ * between the lift and the creation. The account is still checked afterwards,
+ * and made again under a new address if it is not verified, as a guard against
+ * the setting being changed from outside the browser tests: the precondition is
+ * established, not the test's result retried.
  */
 export async function createAccount(
   browser: Browser,
@@ -137,32 +102,11 @@ export async function createAccount(
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const email = `mfa-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
       const password = `Disposable-${Math.random().toString(36).slice(2, 10)}-Pw1!`;
-      await withVerificationLock(async () => {
-        // Read inside the lock: outside it, the value may be another caller's lift.
-        const settings = await page.request.get('/api/admin/settings');
-        expect(settings.ok()).toBe(true);
-        const { emailVerificationRequired } = (await settings.json()) as {
-          emailVerificationRequired: boolean;
-        };
-        try {
-          if (emailVerificationRequired) {
-            const lifted = await page.request.patch('/api/admin/settings', {
-              data: { emailVerificationRequired: false },
-            });
-            expect(lifted.ok(), await lifted.text()).toBe(true);
-          }
-          const created = await page.request.post('/api/admin/users', {
-            data: { email, name, password, role },
-          });
-          expect(created.status(), await created.text()).toBe(201);
-        } finally {
-          if (emailVerificationRequired) {
-            const restored = await page.request.patch('/api/admin/settings', {
-              data: { emailVerificationRequired: true },
-            });
-            expect(restored.ok(), await restored.text()).toBe(true);
-          }
-        }
+      await whileVerificationLifted(page.request, async () => {
+        const created = await page.request.post('/api/admin/users', {
+          data: { email, name, password, role },
+        });
+        expect(created.status(), await created.text()).toBe(201);
       });
       const listed = await page.request.get(`/api/admin/users?search=${encodeURIComponent(email)}`);
       const { users } = (await listed.json()) as {

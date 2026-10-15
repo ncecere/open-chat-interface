@@ -1,5 +1,6 @@
 import { type Browser, expect, type Page, test } from '@playwright/test';
 import { scan } from './accessibility.helpers';
+import { whileVerificationLifted } from './fixtures/verification-lock';
 import { expectNoOverflow, SWEEP, shot, THREAD_TITLE, WIDTHS } from './rtl.helpers';
 
 /**
@@ -50,29 +51,16 @@ async function setEnabled(browser: Browser, enabled: string[]) {
 /** A fresh local account, made through the administration API (see settings-account.spec.ts). */
 async function disposableUser(browser: Browser) {
   const { context, page } = await adminPage(browser);
-  const settings = await page.request.get('/api/admin/settings');
-  const { emailVerificationRequired } = (await settings.json()) as {
-    emailVerificationRequired: boolean;
-  };
   const email = `language-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
   const password = `Disposable-${Math.random().toString(36).slice(2, 10)}-Pw1!`;
   try {
-    if (emailVerificationRequired) {
-      const lifted = await page.request.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: false },
+    await whileVerificationLifted(page.request, async () => {
+      const response = await page.request.post('/api/admin/users', {
+        data: { email, name: 'Language Fixture', password, role: 'user' },
       });
-      expect(lifted.ok(), await lifted.text()).toBe(true);
-    }
-    const response = await page.request.post('/api/admin/users', {
-      data: { email, name: 'Language Fixture', password, role: 'user' },
+      expect(response.status(), await response.text()).toBe(201);
     });
-    expect(response.status(), await response.text()).toBe(201);
   } finally {
-    if (emailVerificationRequired) {
-      await page.request.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: true },
-      });
-    }
     await context.close();
   }
   return { email, password };

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { type Browser, expect, type Page, test } from '@playwright/test';
+import { whileVerificationLifted } from './fixtures/verification-lock';
 
 /**
  * Settings → Account (v0.9.1) in a real browser against the real API: the
@@ -40,31 +41,16 @@ async function disposableUser(browser: Browser) {
   const page = await context.newPage();
   const admin = adminCredentials();
   await signIn(page, admin.email, admin.password);
-  const settings = await page.request.get('/api/admin/settings');
-  expect(settings.ok()).toBe(true);
-  const { emailVerificationRequired } = (await settings.json()) as {
-    emailVerificationRequired: boolean;
-  };
   const email = `settings-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
   const password = `Disposable-${Math.random().toString(36).slice(2, 10)}-Pw1!`;
   try {
-    if (emailVerificationRequired) {
-      const lifted = await page.request.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: false },
+    await whileVerificationLifted(page.request, async () => {
+      const response = await page.request.post('/api/admin/users', {
+        data: { email, name: 'Settings Fixture', password, role: 'user' },
       });
-      expect(lifted.ok(), await lifted.text()).toBe(true);
-    }
-    const response = await page.request.post('/api/admin/users', {
-      data: { email, name: 'Settings Fixture', password, role: 'user' },
+      expect(response.status(), await response.text()).toBe(201);
     });
-    expect(response.status(), await response.text()).toBe(201);
   } finally {
-    if (emailVerificationRequired) {
-      const restored = await page.request.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: true },
-      });
-      expect(restored.ok(), await restored.text()).toBe(true);
-    }
     await context.close();
   }
   return { email, password };

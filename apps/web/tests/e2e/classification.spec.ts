@@ -6,6 +6,7 @@ import {
   request as playwrightRequest,
   test,
 } from '@playwright/test';
+import { whileVerificationLifted } from './fixtures/verification-lock';
 
 /**
  * Data classification in the browser (v0.14, #395), against the real API and a
@@ -180,16 +181,7 @@ test.beforeAll(async () => {
     }
     // A fresh account is created verified only while the instance does not
     // require email verification: lifted for this one call, then put back.
-    const settings = await admin.get('/api/admin/settings');
-    const verification = ((await settings.json()) as { emailVerificationRequired: boolean })
-      .emailVerificationRequired;
-    if (verification)
-      expect(
-        (
-          await admin.patch('/api/admin/settings', { data: { emailVerificationRequired: false } })
-        ).ok(),
-      ).toBe(true);
-    try {
+    await whileVerificationLifted(admin, async () => {
       const person = await admin.post('/api/admin/users', {
         data: {
           email: PERSON.email,
@@ -199,10 +191,7 @@ test.beforeAll(async () => {
         },
       });
       expect(person.status(), await person.text()).toBe(201);
-    } finally {
-      if (verification)
-        await admin.patch('/api/admin/settings', { data: { emailVerificationRequired: true } });
-    }
+    });
     const unreviewed = await admin.post('/api/admin/connectors', {
       data: { name: `Records ${RUN}`, url: 'https://records.example.test/mcp', authMode: 'none' },
     });
@@ -386,9 +375,23 @@ test('a project is labelled; the picker keeps the model out of reach, with the r
   ).not.toHaveAttribute('aria-disabled', 'true');
 
   // Reachable and announced from the keyboard, but not chosen.
-  await page.keyboard.press('ArrowUp');
-  const plainId = await plain.getAttribute('id');
-  await expect(search).toHaveAttribute('aria-activedescendant', plainId!);
+  // The arrow keys start on the current model and wrap. How far plain is from it depends on
+  // every other model of the instance (the browser suite shares one), so the distance is read
+  // from the list, not assumed.
+  const optionIds = await page
+    .getByRole('listbox', { name: 'Models' })
+    .getByRole('option')
+    .evaluateAll((options) => options.map((option) => option.id));
+  const plainId = (await plain.getAttribute('id'))!;
+  const approvedId = (await page
+    .getByRole('option', { name: new RegExp(world.approved.name) })
+    .getAttribute('id'))!;
+  const presses =
+    (optionIds.indexOf(plainId) - optionIds.indexOf(approvedId) + optionIds.length) %
+    optionIds.length;
+  expect(presses).toBeGreaterThan(0);
+  for (let press = 0; press < presses; press += 1) await page.keyboard.press('ArrowDown');
+  await expect(search).toHaveAttribute('aria-activedescendant', plainId);
   await page.keyboard.press('Enter');
   await expect(page.getByRole('listbox', { name: 'Models' })).toBeVisible();
   // Playwright will not click what is aria-disabled; a person can, so it is forced.

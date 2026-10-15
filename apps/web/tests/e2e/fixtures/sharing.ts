@@ -5,6 +5,7 @@ import {
   expect,
   type Page,
 } from '@playwright/test';
+import { whileVerificationLifted } from './verification-lock';
 
 /**
  * Helpers for the project-sharing specs (v0.14, #394): accounts an
@@ -66,18 +67,7 @@ export async function createPeople(
   labels: string[],
   people: Person[],
 ) {
-  const settings = await admin.get('/api/admin/settings');
-  expect(settings.ok()).toBe(true);
-  const { emailVerificationRequired } = (await settings.json()) as {
-    emailVerificationRequired: boolean;
-  };
-  try {
-    if (emailVerificationRequired) {
-      const lifted = await admin.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: false },
-      });
-      expect(lifted.ok(), await lifted.text()).toBe(true);
-    }
+  await whileVerificationLifted(admin, async () => {
     for (const label of labels) {
       const person = {
         name: `Sharing ${label} ${run}`,
@@ -90,14 +80,7 @@ export async function createPeople(
       expect(created.status(), await created.text()).toBe(201);
       people.push({ ...person, id: ((await created.json()) as { id: string }).id });
     }
-  } finally {
-    if (emailVerificationRequired) {
-      const restored = await admin.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: true },
-      });
-      expect(restored.ok(), await restored.text()).toBe(true);
-    }
-  }
+  });
 }
 
 export async function removePeople(admin: APIRequestContext, people: Person[]) {

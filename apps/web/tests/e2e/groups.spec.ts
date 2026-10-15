@@ -1,6 +1,7 @@
 import { type APIRequestContext, type Browser, expect, type Page, test } from '@playwright/test';
 import { describeViolations, scan } from './accessibility.helpers';
 import { ensureCatalogModels } from './fixtures/catalog';
+import { whileVerificationLifted } from './fixtures/verification-lock';
 
 /**
  * Groups (v0.14, #394) in a real browser against the real API: an
@@ -58,18 +59,7 @@ async function createPeople(
   names: string[],
   people: Person[],
 ) {
-  const settings = await admin.get('/api/admin/settings');
-  expect(settings.ok()).toBe(true);
-  const { emailVerificationRequired } = (await settings.json()) as {
-    emailVerificationRequired: boolean;
-  };
-  try {
-    if (emailVerificationRequired) {
-      const lifted = await admin.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: false },
-      });
-      expect(lifted.ok(), await lifted.text()).toBe(true);
-    }
+  await whileVerificationLifted(admin, async () => {
     for (const label of names) {
       const person = {
         name: `Groups ${label} ${run}`,
@@ -82,14 +72,7 @@ async function createPeople(
       expect(created.status(), await created.text()).toBe(201);
       people.push({ ...person, id: ((await created.json()) as { id: string }).id });
     }
-  } finally {
-    if (emailVerificationRequired) {
-      const restored = await admin.patch('/api/admin/settings', {
-        data: { emailVerificationRequired: true },
-      });
-      expect(restored.ok(), await restored.text()).toBe(true);
-    }
-  }
+  });
 }
 
 async function modelSlugs(page: Page) {
