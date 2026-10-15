@@ -52,11 +52,6 @@
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
     },
     {
-      "file": "apps/web/src/components/chat/composer.tsx",
-      "count": 2,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
       "file": "apps/web/src/components/chat/share-thread-dialog.tsx",
       "count": 1,
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"

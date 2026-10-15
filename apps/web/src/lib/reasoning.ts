@@ -4,6 +4,7 @@ import {
   effectiveSupportedEfforts,
   type ReasoningEffort,
 } from '@oci/shared';
+import { type MessageKey, translate } from '~/lib/i18n';
 
 /**
  * Keeps composer state valid when the selected model changes. The catalog
@@ -24,4 +25,16 @@ export function reasoningEffortForRequest(
   effort: ReasoningEffort,
 ): ReasoningEffort | undefined {
   return model && effectiveSupportedEfforts(model).includes(effort) ? effort : undefined;
+}
+
+const EFFORT_KEYS = {
+  instant: 'chat.effort.instant',
+  low: 'chat.effort.low',
+  medium: 'chat.effort.medium',
+  high: 'chat.effort.high',
+} as const satisfies Record<ReasoningEffort, MessageKey>;
+
+/** The name of a reasoning level as a person reads it (the value itself is an API word). */
+export function effortLabel(effort: string): string {
+  return effort in EFFORT_KEYS ? translate(EFFORT_KEYS[effort as ReasoningEffort]) : effort;
 }

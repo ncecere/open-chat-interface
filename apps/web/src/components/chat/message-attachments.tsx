@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
 import { FileText, FileX } from 'lucide-react';
+import { useT } from '~/lib/i18n';
 
 export interface AttachmentCard {
   id: string;
@@ -75,9 +76,10 @@ export function MessageAttachments({ message }: { message: UIMessage }) {
  * an image, so nothing is requested for it.
  */
 function RemovedFile({ filename }: { filename: string }) {
+  const t = useT();
   return (
     <span
-      title={`${filename}: no longer available`}
+      title={t('chat.messageAttachments.removedTitle', { name: filename })}
       data-attachment-state="removed"
       className="flex items-center gap-2 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--bg-control-alt)] px-3 py-2"
     >
@@ -86,7 +88,9 @@ function RemovedFile({ filename }: { filename: string }) {
         <span className="max-w-52 truncate text-sm text-[var(--text-muted)] line-through">
           {filename}
         </span>
-        <span className="text-xs text-[var(--text-secondary)]">No longer available</span>
+        <span className="text-xs text-[var(--text-secondary)]">
+          {t('chat.messageAttachments.removed')}
+        </span>
       </span>
     </span>
   );

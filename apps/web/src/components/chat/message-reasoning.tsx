@@ -1,5 +1,6 @@
 import { Info } from 'lucide-react';
 import { Markdown } from '~/components/chat/markdown';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /** How much of the end of the reasoning the live preview keeps: a little more than it shows. */
@@ -69,13 +70,11 @@ export function ReasoningText({ text, className }: { text: string; className?: s
 }
 
 export function ReasoningNote() {
+  const t = useT();
   return (
     <p className="mt-2 flex items-start gap-2 px-1 text-[0.6875rem] leading-4 text-[var(--text-muted)]">
       <Info className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-      <span>
-        Some models hide parts of their thinking, so you may see a summary or partial reasoning
-        here.
-      </span>
+      <span>{t('chat.reasoning.hiddenNote')}</span>
     </p>
   );
 }

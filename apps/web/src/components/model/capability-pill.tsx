@@ -1,5 +1,6 @@
 import type { ModelCapability } from '@oci/shared';
-import { CAPABILITY_ICONS, CAPABILITY_LABELS } from '~/components/chat/model-picker-data';
+import { CAPABILITY_ICONS, capabilityLabel } from '~/components/chat/model-picker-data';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -31,6 +32,7 @@ function Tint() {
 
 /** A labelled capability, for surfaces with room to spell it out. */
 export function CapabilityPill({ capability }: { capability: ModelCapability }) {
+  useT(); // the label follows the language
   const Icon = CAPABILITY_ICONS[capability];
 
   return (
@@ -42,7 +44,7 @@ export function CapabilityPill({ capability }: { capability: ModelCapability }) 
     >
       <Tint />
       {Icon && <Icon className="relative size-4" aria-hidden="true" />}
-      <span className="relative whitespace-nowrap">{CAPABILITY_LABELS[capability]}</span>
+      <span className="relative whitespace-nowrap">{capabilityLabel(capability)}</span>
     </span>
   );
 }
@@ -54,6 +56,7 @@ export function CapabilityPill({ capability }: { capability: ModelCapability }) 
  * rather than the only one.
  */
 export function CapabilityIcon({ capability }: { capability: ModelCapability }) {
+  useT(); // the label follows the language
   const Icon = CAPABILITY_ICONS[capability];
   if (!Icon) return null;
 
@@ -65,7 +68,7 @@ export function CapabilityIcon({ capability }: { capability: ModelCapability }) 
       )}
     >
       <Tint />
-      <Icon className="relative size-3.5" aria-label={CAPABILITY_LABELS[capability]} />
+      <Icon className="relative size-3.5" aria-label={capabilityLabel(capability)} />
     </span>
   );
 }

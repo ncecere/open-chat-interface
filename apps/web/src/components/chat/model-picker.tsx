@@ -4,7 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { LabLogo } from '~/components/model/lab-logo';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { availabilityOf } from '~/lib/classification';
-import { useLocale } from '~/lib/i18n';
+import { useLocale, useT } from '~/lib/i18n';
 import { ariaKeyShortcuts, OPEN_MODEL_PICKER_EVENT } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { labsFrom, matchesCapabilities, matchesSearch } from './model-picker-data';
@@ -33,6 +33,7 @@ export const ModelPicker = memo(function ModelPicker({
   /** The list has not arrived yet: say so, not that there are no models (#156). */
   loading?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [labFilter, setLabFilter] = useState<string | null>(null);
@@ -171,7 +172,7 @@ export const ModelPicker = memo(function ModelPicker({
   if (models.length === 0) {
     return (
       <span className="px-2 text-[0.8125rem] text-[var(--text-muted)]">
-        {loading ? 'Loading models…' : 'No models available'}
+        {loading ? t('chat.modelPicker.loading') : t('chat.modelPicker.none')}
       </span>
     );
   }
@@ -191,7 +192,11 @@ export const ModelPicker = memo(function ModelPicker({
       <PopoverTrigger
         role="combobox"
         aria-haspopup="listbox"
-        aria-label={`Select model. Current model: ${selected?.displayName ?? 'none'}`}
+        aria-label={
+          selected
+            ? t('chat.modelPicker.triggerLabel', { name: selected.displayName })
+            : t('chat.modelPicker.triggerLabelNone')
+        }
         aria-keyshortcuts={ariaKeyShortcuts('model-picker')}
         // One line: a narrow composer row cuts a long name short rather than
         // wrapping it ("GPT-4.1 / mini", #109); the full name is in the label,
@@ -200,7 +205,9 @@ export const ModelPicker = memo(function ModelPicker({
         className="inline-flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[0.8125rem] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-control-hover)]"
       >
         {selected && <LabLogo labId={selected.labId} className="size-3.5 shrink-0" />}
-        <span className="min-w-0 truncate">{selected?.displayName ?? 'Select model'}</span>
+        <span className="min-w-0 truncate">
+          {selected?.displayName ?? t('chat.modelPicker.select')}
+        </span>
         <ChevronDown className="size-4 shrink-0 text-[var(--text-muted)]" />
       </PopoverTrigger>
 
@@ -214,7 +221,7 @@ export const ModelPicker = memo(function ModelPicker({
           event.preventDefault();
           searchRef.current?.focus();
         }}
-        aria-label="Choose a model"
+        aria-label={t('chat.modelPicker.panelLabel')}
         ref={panelRef}
         // Never taller than the space Radix measures on the chosen side: from
         // the mid-screen composer on a phone it opened past the top edge,
@@ -225,8 +232,8 @@ export const ModelPicker = memo(function ModelPicker({
           <Search className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
           <input
             ref={searchRef}
-            aria-label="Search models"
-            placeholder="Search models..."
+            aria-label={t('chat.modelPicker.searchLabel')}
+            placeholder={t('chat.modelPicker.searchPlaceholder')}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             // Keep normal Escape handling so the menu remains keyboard-closeable.
@@ -276,10 +283,10 @@ export const ModelPicker = memo(function ModelPicker({
         <div className="flex h-[min(26.5rem,calc(100vh-8rem))] min-h-32 shrink overflow-hidden rounded-b-xl">
           {labs.length > 1 && (
             <fieldset className="scrollbar-thin m-0 flex shrink-0 flex-col items-center gap-1 overflow-y-auto border-0 border-e border-[var(--border-subtle)] p-2">
-              <legend className="sr-only">Filter by lab</legend>
+              <legend className="sr-only">{t('chat.modelPicker.filterByLab')}</legend>
               <button
                 type="button"
-                aria-label="All labs"
+                aria-label={t('chat.modelPicker.allLabs')}
                 aria-pressed={labFilter === null}
                 onClick={() => setLabFilter(null)}
                 className={cn(
@@ -289,7 +296,7 @@ export const ModelPicker = memo(function ModelPicker({
                     : 'text-[var(--text-muted)] hover:bg-[var(--bg-control-hover)]',
                 )}
               >
-                All
+                {t('chat.modelPicker.all')}
               </button>
               {labs.map((lab) => (
                 <button
@@ -315,12 +322,12 @@ export const ModelPicker = memo(function ModelPicker({
           <div
             id="model-picker-listbox"
             role="listbox"
-            aria-label="Models"
+            aria-label={t('chat.modelPicker.listLabel')}
             className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-1.5"
           >
             {visible.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-[var(--text-muted)]">
-                No models match that search.
+                {t('chat.modelPicker.noMatch')}
               </p>
             ) : (
               visible.map((model) => (

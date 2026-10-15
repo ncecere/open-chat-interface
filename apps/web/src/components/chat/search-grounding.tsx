@@ -3,6 +3,7 @@ import type { UIMessage } from 'ai';
 import { ChevronDown, Globe2, Link2, TriangleAlert } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { SafeExternalLink } from '~/components/chat/external-link-warning';
+import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 interface MessageSource {
@@ -150,12 +151,10 @@ export function replySearchOf(message: UIMessage): ReplySearch {
   return { presearch, sources };
 }
 
-const count = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`;
-
 /** The pre-search's line in the work block: "Searched the web · 5 sources". */
 function presearchLabel(grounding: SearchGroundingView): string {
-  if (grounding.error) return 'Web search failed';
-  return `Searched the web · ${count(grounding.results.length, 'source', 'sources')}`;
+  if (grounding.error) return translate('chat.search.failed');
+  return translate('chat.search.searched', { count: grounding.results.length });
 }
 
 /**
@@ -163,18 +162,20 @@ function presearchLabel(grounding: SearchGroundingView): string {
  * read, active. Not a disclosure; it becomes the block when the reply starts.
  */
 export function SearchLoading() {
+  const t = useT();
   return (
     <div className="mb-4 flex items-center gap-2 text-[0.8125rem] font-medium text-[var(--text-primary)]">
       <Globe2 className="size-4 motion-safe:animate-pulse" aria-hidden="true" />
-      <span role="status">Searching the web…</span>
+      <span role="status">{t('chat.search.searching')}</span>
     </div>
   );
 }
 
 /** Sources with their address and snippet, each opened through the external-link check. */
 export function SourceList({ sources }: { sources: Array<SourceLink & { snippet?: string }> }) {
+  const t = useT();
   return (
-    <ul aria-label="Sources" className="space-y-1">
+    <ul aria-label={t('chat.search.sources')} className="space-y-1">
       {sources.map((source) => (
         <li key={source.url} className="min-w-0">
           <SafeExternalLink
@@ -250,6 +251,7 @@ function StepDisclosure({
  * their snippets ("Web search failed" and why, when it failed).
  */
 export function SearchStep({ grounding }: { grounding: SearchGroundingView }) {
+  useT();
   return (
     <StepDisclosure
       label={presearchLabel(grounding)}
@@ -268,18 +270,19 @@ export function SearchStep({ grounding }: { grounding: SearchGroundingView }) {
  * object of inputs and bare titles instead.
  */
 export function SearchDetails({ grounding }: { grounding: SearchGroundingView }) {
+  const t = useT();
   return (
     <>
       <section>
-        <h3 className="font-medium text-[var(--text-primary)]">Search query</h3>
-        <p className="mt-1">{grounding.query ?? 'Query not retained for this older response'}</p>
+        <h3 className="font-medium text-[var(--text-primary)]">{t('chat.search.query')}</h3>
+        <p className="mt-1">{grounding.query ?? t('chat.search.queryNotRetained')}</p>
       </section>
       {grounding.provider && (
         <section>
-          <h3 className="font-medium text-[var(--text-primary)]">Search provider</h3>
+          <h3 className="font-medium text-[var(--text-primary)]">{t('chat.search.provider')}</h3>
           <p className="mt-1">
             {grounding.fallback
-              ? `${grounding.provider} (the fallback provider; the first one did not answer)`
+              ? t('chat.search.providerFallback', { provider: grounding.provider })
               : grounding.provider}
           </p>
         </section>
@@ -288,11 +291,13 @@ export function SearchDetails({ grounding }: { grounding: SearchGroundingView })
         <p role="note">{grounding.error}</p>
       ) : (
         <section>
-          <h3 className="mb-1 font-medium text-[var(--text-primary)]">Sources</h3>
+          <h3 className="mb-1 font-medium text-[var(--text-primary)]">
+            {t('chat.search.sources')}
+          </h3>
           {grounding.results.length ? (
             <SourceList sources={grounding.results} />
           ) : (
-            <p className="text-[var(--text-muted)]">No results.</p>
+            <p className="text-[var(--text-muted)]">{t('chat.search.noResults')}</p>
           )}
         </section>
       )}
@@ -302,8 +307,9 @@ export function SearchDetails({ grounding }: { grounding: SearchGroundingView })
 
 /** Links the reply's tool calls returned (connectors, web search), as one step. */
 export function SourcesStep({ sources }: { sources: SourceLink[] }) {
+  const t = useT();
   return (
-    <StepDisclosure label={`Sources · ${count(sources.length, 'link', 'links')}`} icon={Link2}>
+    <StepDisclosure label={t('chat.search.sourcesStep', { count: sources.length })} icon={Link2}>
       <SourceList sources={sources} />
     </StepDisclosure>
   );

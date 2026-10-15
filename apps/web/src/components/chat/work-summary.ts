@@ -16,6 +16,8 @@
  * one action, and "2 artifacts" where each made something new.
  */
 
+import { type MessageKey, translate } from '~/lib/i18n';
+
 export interface WorkStep {
   toolId: string;
   /** The tool's label, for example "Service Desk lookup". */
@@ -28,9 +30,10 @@ export interface WorkStep {
   presearch?: boolean;
 }
 
-const times = (count: number) => (count === 1 ? '' : count === 2 ? ' twice' : ` ${count} times`);
-const counted = (count: number, one: string, many: string) =>
-  count === 1 ? one : `${count} ${many}`;
+export interface WorkActivity {
+  label: string;
+  brief: string;
+}
 
 /** "searched the web twice": one phrase per kind of step, in the order first seen. */
 function activityPhrases(steps: readonly WorkStep[]): string[] {
@@ -60,39 +63,43 @@ function activityPhrases(steps: readonly WorkStep[]): string[] {
     const count = group.length;
     switch (kind) {
       case 'search_failed':
-        return `web search failed${times(count)}`;
+        return translate('chat.work.searchFailed', { count });
       case 'failed':
-        return count === 1 ? 'a step failed' : `${count} steps failed`;
+        return translate('chat.work.failed', { count });
       case 'denied':
-        return count === 1 ? 'a step was not run' : `${count} steps were not run`;
+        return translate('chat.work.denied', { count });
       case 'stopped':
         // Not "created an artifact": a call stopped mid-way made nothing.
-        return count === 1 ? 'a step was stopped' : `${count} steps were stopped`;
+        return translate('chat.work.stopped', { count });
       case 'web_search':
-        return `searched the web${times(count)}`;
+        return translate('chat.work.searched', { count });
       case 'create_artifact':
-        return `created ${counted(count, 'an artifact', 'artifacts')}`;
+        return translate('chat.work.created', { count });
       case 'update_artifact': {
         const targets = new Set(group.map((step) => step.target ?? null));
         // The same artifact revised again, or artifacts not known apart.
-        if (targets.size === 1 && !targets.has(null)) return `updated an artifact${times(count)}`;
-        return `updated ${counted(count, 'an artifact', 'artifacts')}`;
+        if (targets.size === 1 && !targets.has(null))
+          return translate('chat.work.updatedSame', { count });
+        return translate('chat.work.updated', { count });
       }
       case 'remember':
-        return `saved ${counted(count, 'a memory', 'memories')}`;
+        return translate('chat.work.remembered', { count });
       case 'forget':
-        return `removed ${counted(count, 'a memory', 'memories')}`;
+        return translate('chat.work.forgot', { count });
       default:
-        return `used ${group[0]?.label ?? 'a tool'}${times(count)}`;
+        return group[0]?.label
+          ? translate('chat.work.usedTool', { count, label: group[0].label })
+          : translate('chat.work.usedUnnamedTool', { count });
     }
   });
 }
 
-const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-const forSeconds = (seconds: number | null | undefined) =>
+/** The first letter capitalised, for a phrase that stands alone. */
+const capitalize = (text: string) => text.charAt(0).toLocaleUpperCase() + text.slice(1);
+const wholeSeconds = (seconds: number | null | undefined): number | null =>
   typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 1
-    ? ` for ${Math.round(seconds)}s`
-    : '';
+    ? Math.round(seconds)
+    : null;
 
 export function workSummary({
   reasoning,
@@ -107,15 +114,30 @@ export function workSummary({
   seconds?: number | null;
 }): string {
   const phrases = activityPhrases(steps);
-  const time = forSeconds(seconds);
-  if (phrases.length === 0) return `Thought${time}`;
+  const time = wholeSeconds(seconds);
+  const timed = time === null ? {} : { seconds: time };
+  if (phrases.length === 0)
+    return translate(time === null ? 'chat.work.thought' : 'chat.work.thoughtFor', timed);
   if (phrases.length > 1)
-    return `Worked${time} · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
+    return translate(time === null ? 'chat.work.worked' : 'chat.work.workedFor', {
+      ...timed,
+      count: steps.length,
+    });
   const [phrase = ''] = phrases;
   // The search before the reply happened before any thinking.
   if (reasoning && steps[0]?.presearch && steps.length === 1)
-    return `${capitalize(phrase)} · thought${time}`;
-  return reasoning ? `Thought${time} · ${phrase}` : capitalize(phrase);
+    return translate(
+      time === null ? 'chat.work.phraseThenThought' : 'chat.work.phraseThenThoughtFor',
+      { ...timed, phrase: capitalize(phrase) },
+    );
+  if (!reasoning) return capitalize(phrase);
+  return translate(
+    time === null ? 'chat.work.thoughtThenPhrase' : 'chat.work.thoughtForThenPhrase',
+    {
+      ...timed,
+      phrase,
+    },
+  );
 }
 
 /**
@@ -129,32 +151,59 @@ export function workActivity(
     | { type: 'reasoning' }
     | { type: 'tool'; step: WorkStep; title?: string | null }
     | { type: 'between' },
-): { label: string; brief: string } {
-  if (current.type === 'reasoning') return { label: 'Thinking…', brief: 'Thinking' };
-  if (current.type === 'between') return { label: 'Working…', brief: 'Working' };
+): WorkActivity {
+  const plain = (label: MessageKey, brief: MessageKey): WorkActivity => ({
+    label: translate(label),
+    brief: translate(brief),
+  });
+  if (current.type === 'reasoning') return plain('chat.work.thinking', 'chat.work.thinkingBrief');
+  if (current.type === 'between') return plain('chat.work.working', 'chat.work.workingBrief');
   const { step, title } = current;
   if (step.state === 'awaiting-approval')
-    return { label: 'Waiting for your approval…', brief: 'Waiting for your approval' };
+    return plain('chat.work.awaitingApproval', 'chat.work.awaitingApprovalBrief');
   if (step.state !== 'running' && step.state !== 'approved')
-    return { label: 'Working…', brief: 'Working' };
+    return plain('chat.work.working', 'chat.work.workingBrief');
   switch (step.toolId) {
     case 'web_search':
-      return { label: 'Searching the web…', brief: 'Searching the web' };
+      return plain('chat.work.searching', 'chat.work.searchingBrief');
     case 'create_artifact':
-      return {
-        label: title ? `Writing ${title}…` : 'Writing an artifact…',
-        brief: 'Writing an artifact',
-      };
+      return title
+        ? {
+            label: translate('chat.work.writingTitled', { title }),
+            brief: translate('chat.work.writingBrief'),
+          }
+        : plain('chat.work.writing', 'chat.work.writingBrief');
     case 'update_artifact':
-      return {
-        label: title ? `Revising ${title}…` : 'Revising an artifact…',
-        brief: 'Revising an artifact',
-      };
+      return title
+        ? {
+            label: translate('chat.work.revisingTitled', { title }),
+            brief: translate('chat.work.revisingBrief'),
+          }
+        : plain('chat.work.revising', 'chat.work.revisingBrief');
     case 'remember':
-      return { label: 'Saving a memory…', brief: 'Saving a memory' };
+      return plain('chat.work.saving', 'chat.work.savingBrief');
     case 'forget':
-      return { label: 'Removing a memory…', brief: 'Removing a memory' };
+      return plain('chat.work.removing', 'chat.work.removingBrief');
     default:
-      return { label: `Using ${step.label}…`, brief: `Using ${step.label}` };
+      return {
+        label: translate('chat.work.usingTool', { label: step.label }),
+        brief: translate('chat.work.usingToolBrief', { label: step.label }),
+      };
   }
+}
+
+/**
+ * The message and the title when the header names an artifact ("Writing Sales
+ * chart…"): the title is the person's or the model's text, so the header draws
+ * it in a `<bdi>` instead of using `workActivity().label`.
+ */
+export function titledActivity(
+  current: Parameters<typeof workActivity>[0],
+): { key: MessageKey; title: string } | null {
+  if (current.type !== 'tool' || !current.title) return null;
+  const { step, title } = current;
+  if (step.state !== 'running' && step.state !== 'approved') return null;
+  if (step.toolId === 'create_artifact') return { key: 'chat.work.writingTitled', title };
+  if (step.toolId === 'update_artifact') return { key: 'chat.work.revisingTitled', title };
+  return null;
 }

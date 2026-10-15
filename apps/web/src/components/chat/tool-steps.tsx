@@ -7,7 +7,6 @@ import {
   TOOL_LIMIT_REASONS,
   type ToolLimitReason,
   type ToolStepSummary,
-  toolLimitNote,
 } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { ChevronDown, Globe2, ShieldQuestion, Wrench } from 'lucide-react';
@@ -16,7 +15,9 @@ import { ArtifactToolStep } from '~/components/artifacts/artifact-tool-step';
 import { MemoryNote } from '~/components/chat/memory-note';
 import type { ToolPlace } from '~/components/chat/message-content';
 import { SearchDetails, type SearchGroundingView } from '~/components/chat/search-grounding';
+import { toolLimitText, toolStepLabel, toolSummaryNode } from '~/components/chat/tool-summary';
 import { Button } from '~/components/ui/button';
+import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 export type AnswerApproval = (approvalId: string, approved: boolean) => void | PromiseLike<void>;
@@ -38,7 +39,7 @@ export function toolLimitOf(message: UIMessage): string | null {
     | undefined;
   const reason = part?.data?.reason;
   if (!TOOL_LIMIT_REASONS.includes(reason as ToolLimitReason)) return null;
-  return toolLimitNote(
+  return toolLimitText(
     reason as ToolLimitReason,
     typeof part?.data?.steps === 'number' ? part.data.steps : undefined,
   );
@@ -53,18 +54,23 @@ const formatInput = (input: unknown) => {
 };
 
 function ResultSummary({ part, step }: { part: ToolPart; step: ToolStepSummary }) {
+  const t = useT();
   if (step.state === 'error')
     return (
       <p className="text-[var(--text-muted)]">
-        {typeof part.errorText === 'string' ? part.errorText : 'The tool failed.'}
+        {typeof part.errorText === 'string' ? part.errorText : t('chat.toolSteps.failed')}
       </p>
     );
   if (step.state === 'denied')
     return (
-      <p className="text-[var(--text-muted)]">Not run{step.reason ? `: ${step.reason}` : ''}.</p>
+      <p className="text-[var(--text-muted)]">
+        {step.reason
+          ? t('chat.toolSteps.notRunReason', { reason: step.reason })
+          : t('chat.toolSteps.notRun')}
+      </p>
     );
   if (step.state !== 'done') return null;
-  return <p className="text-[var(--text-muted)]">Finished.</p>;
+  return <p className="text-[var(--text-muted)]">{t('chat.toolSteps.finished')}</p>;
 }
 
 const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
@@ -98,7 +104,9 @@ function webSearchOf(part: ToolPart, step: ToolStepSummary): SearchGroundingView
           ]
         : [];
     }),
-    ...(step.state === 'error' ? { error: text(part.errorText) ?? 'The search failed.' } : {}),
+    ...(step.state === 'error'
+      ? { error: text(part.errorText) ?? translate('chat.toolSteps.searchFailed') }
+      : {}),
     ...(provider ? { provider } : {}),
     ...(output?.fallback === true ? { fallback: true } : {}),
   };
@@ -114,6 +122,7 @@ export function ToolStepRow({
   step: ToolStepSummary;
   focusOnMount: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const detailsId = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -139,7 +148,7 @@ export function ToolStepRow({
           className={cn('size-4 shrink-0', step.state === 'running' && 'animate-pulse')}
           aria-hidden="true"
         />
-        <span className="min-w-0 flex-1 break-words">{step.summary}</span>
+        <span className="min-w-0 flex-1 break-words">{toolSummaryNode(t, part, step)}</span>
         <ChevronDown
           className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-180')}
           aria-hidden="true"
@@ -156,13 +165,17 @@ export function ToolStepRow({
           className="mt-2 space-y-2 rounded-lg bg-black/10 px-3 py-2 text-xs text-[var(--text-secondary)]"
         >
           <div>
-            <p className="mb-1 font-medium text-[var(--text-primary)]">Inputs</p>
+            <p className="mb-1 font-medium text-[var(--text-primary)]">
+              {t('chat.toolSteps.inputs')}
+            </p>
             <pre dir="ltr" className="whitespace-pre-wrap break-words font-mono">
               {formatInput(part.input)}
             </pre>
           </div>
           <div>
-            <p className="mb-1 font-medium text-[var(--text-primary)]">Result</p>
+            <p className="mb-1 font-medium text-[var(--text-primary)]">
+              {t('chat.toolSteps.result')}
+            </p>
             <ResultSummary part={part} step={step} />
           </div>
         </div>
@@ -187,6 +200,7 @@ function ApprovalCard({
   onAnswer?: AnswerApproval;
   disabled?: boolean;
 }) {
+  const t = useT();
   const titleId = useId();
   const inputsId = useId();
   const status = useRef<HTMLParagraphElement>(null);
@@ -194,15 +208,18 @@ function ApprovalCard({
   const answered = step.state === 'approved' || step.state === 'denied';
   // `mcp__<connector>__<tool>` names its connector; built-in tools have none.
   const connector = connectorSlugOfToolId(step.toolId);
+  const label = toolStepLabel(step);
 
   // Announced after mount: live regions ignore content present when they appear.
   useEffect(() => {
-    if (!answered) setAnnouncement(`${step.label} is waiting for your approval.`);
-  }, [answered, step.label]);
+    if (!answered) setAnnouncement(t('chat.toolSteps.awaitingAnnouncement', { label }));
+  }, [answered, label, t]);
 
   const answer = (approved: boolean) => {
     if (!step.approvalId || !onAnswer) return;
-    setAnnouncement(approved ? 'Approved. Continuing the reply.' : 'Denied. Continuing the reply.');
+    setAnnouncement(
+      approved ? t('chat.toolSteps.approvedAnnouncement') : t('chat.toolSteps.deniedAnnouncement'),
+    );
     void onAnswer(step.approvalId, approved);
     queueMicrotask(() => status.current?.focus());
   };
@@ -215,20 +232,20 @@ function ApprovalCard({
     >
       <h3 id={titleId} className="flex items-center gap-2 font-medium text-[var(--text-primary)]">
         <ShieldQuestion className="size-4 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 break-words">Allow {step.label}?</span>
+        <span className="min-w-0 break-words">{t('chat.toolSteps.allow', { label })}</span>
       </h3>
       <dl className="mt-2 grid gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)] sm:grid-cols-[auto_1fr]">
-        <dt className="text-[var(--text-muted)]">Tool</dt>
+        <dt className="text-[var(--text-muted)]">{t('chat.toolSteps.tool')}</dt>
         <dd className="min-w-0 break-words">{step.toolId}</dd>
         {connector && (
           <>
-            <dt className="text-[var(--text-muted)]">Connector</dt>
+            <dt className="text-[var(--text-muted)]">{t('chat.toolSteps.connector')}</dt>
             <dd className="min-w-0 break-words">{connector}</dd>
           </>
         )}
       </dl>
       <p id={inputsId} className="mt-2 text-xs text-[var(--text-muted)]">
-        It will run with these inputs:
+        {t('chat.toolSteps.willRun')}
       </p>
       <pre
         dir="ltr"
@@ -247,7 +264,7 @@ function ApprovalCard({
             aria-describedby={titleId}
             onClick={() => answer(true)}
           >
-            Approve
+            {t('chat.toolSteps.approve')}
           </Button>
           <Button
             type="button"
@@ -257,7 +274,7 @@ function ApprovalCard({
             aria-describedby={titleId}
             onClick={() => answer(false)}
           >
-            Deny
+            {t('chat.toolSteps.deny')}
           </Button>
         </div>
       )}
@@ -270,8 +287,8 @@ function ApprovalCard({
       >
         {answered
           ? step.state === 'approved'
-            ? 'Approved. Continuing the reply…'
-            : 'Denied.'
+            ? t('chat.toolSteps.approvedStatus')
+            : t('chat.toolSteps.deniedStatus')
           : announcement}
       </p>
     </section>
@@ -326,6 +343,7 @@ export function ReplyResults({
   /** Steps whose approval was answered in this view, to keep focus with them. */
   answeredHere: Set<string>;
 }) {
+  useT(); // the limit note follows the language
   const limit = toolLimitOf(message);
   if (parts.length === 0 && !limit) return null;
   const steps = parts.map((part) => ({ part, step: summarizeToolPart(part) }));

@@ -3,6 +3,7 @@ import type { UIMessage } from 'ai';
 import { Hourglass, Square } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import { useMediaQuery } from '~/hooks/use-media-query';
+import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -22,21 +23,29 @@ export function capacityWaitOf(message: UIMessage): CapacityWaitData | null {
 /** "about 40 seconds", "about 3 minutes"; null when unknown. */
 export function waitEstimate(seconds: number | null): string | null {
   if (seconds === null) return null;
-  if (seconds < 10) return 'a few seconds';
-  if (seconds < 90) return `about ${Math.round(seconds / 5) * 5} seconds`;
-  const minutes = Math.round(seconds / 60);
-  return `about ${minutes} minute${minutes === 1 ? '' : 's'}`;
+  if (seconds < 10) return translate('chat.capacityWait.estimateFewSeconds');
+  if (seconds < 90)
+    return translate('chat.capacityWait.estimateSeconds', { count: Math.round(seconds / 5) * 5 });
+  return translate('chat.capacityWait.estimateMinutes', { count: Math.round(seconds / 60) });
 }
 
 export function capacityWaitLabel(wait: CapacityWaitData): string {
-  const model = wait.model || 'the model';
+  if (!wait.model) {
+    return wait.position === null
+      ? translate('chat.capacityWait.waitingForModel')
+      : translate('chat.capacityWait.waitingForModelQueued', { position: wait.position });
+  }
   return wait.position === null
-    ? `Waiting for ${model}`
-    : `Waiting for ${model} — you’re number ${wait.position}`;
+    ? translate('chat.capacityWait.waitingFor', { model: wait.model })
+    : translate('chat.capacityWait.waitingForQueued', {
+        model: wait.model,
+        position: wait.position,
+      });
 }
 
 /** Where the work block will be: the place in the queue, its estimate, and Stop. */
 export function CapacityWait({ wait, onStop }: { wait: CapacityWaitData; onStop?: () => void }) {
+  const t = useT();
   const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const estimate = waitEstimate(wait.estimatedWaitSeconds);
   return (
@@ -50,14 +59,20 @@ export function CapacityWait({ wait, onStop }: { wait: CapacityWaitData; onStop?
           <span className="min-w-0 break-words">{capacityWaitLabel(wait)}</span>
         </p>
         <p className="mt-0.5 ps-6 text-xs text-[var(--text-muted)]">
-          The model is busy, so messages take turns.
-          {estimate ? ` Your reply should start in ${estimate}.` : ''}
+          {estimate
+            ? t('chat.capacityWait.busyWithEstimate', { estimate })
+            : t('chat.capacityWait.busy')}
         </p>
       </div>
       {onStop && (
-        <Button variant="secondary" size="sm" onClick={onStop} aria-label="Stop waiting">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onStop}
+          aria-label={t('chat.capacityWait.stopWaiting')}
+        >
           <Square aria-hidden="true" />
-          Stop
+          {t('chat.capacityWait.stop')}
         </Button>
       )}
     </div>
@@ -65,24 +80,30 @@ export function CapacityWait({ wait, onStop }: { wait: CapacityWaitData; onStop?
 }
 
 function duration(seconds: number): string {
-  if (seconds < 90) return `${seconds} second${seconds === 1 ? '' : 's'}`;
-  const minutes = Math.round(seconds / 60);
-  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  if (seconds < 90) return translate('chat.capacityWait.durationSeconds', { count: seconds });
+  return translate('chat.capacityWait.durationMinutes', { count: Math.round(seconds / 60) });
 }
 
 /** What a finished reply says about its wait: how long, or that it ran out. */
 export function CapacityNote({ wait }: { wait: CapacityWaitData }) {
+  const t = useT();
   if (wait.state === 'admitted' && wait.waitedSeconds >= 5)
     return (
       <p role="note" className="mb-2 text-xs text-[var(--text-muted)]">
-        Waited {duration(wait.waitedSeconds)} for {wait.model || 'the model'}.
+        {wait.model
+          ? t('chat.capacityWait.waitedFor', {
+              duration: duration(wait.waitedSeconds),
+              model: wait.model,
+            })
+          : t('chat.capacityWait.waitedForModel', { duration: duration(wait.waitedSeconds) })}
       </p>
     );
   if (wait.state === 'timeout')
     return (
       <p role="note" className="mb-2 text-xs text-[var(--text-muted)]">
-        {wait.model || 'The model'} was busy for too long, so this reply did not start. Try again in
-        a few minutes.
+        {wait.model
+          ? t('chat.capacityWait.timedOut', { model: wait.model })
+          : t('chat.capacityWait.timedOutModel')}
       </p>
     );
   return null;
