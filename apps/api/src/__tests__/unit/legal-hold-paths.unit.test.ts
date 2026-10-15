@@ -187,6 +187,28 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'Instance configuration.',
   },
+  // Data classification (v0.14, #395): labels and approvals are configuration about
+  // content, never the content; every change is audited with the names at the time.
+  'services/classification/store.ts dataClass': {
+    hold: 'exempt',
+    how: 'Instance configuration: a class nothing refers to (the keys refuse otherwise), audited as data_class.delete.',
+  },
+  'services/classification/store.ts modelDataClass': {
+    hold: 'exempt',
+    how: 'Instance configuration: which classes a model is approved for, audited as model.data_classes.update.',
+  },
+  'services/classification/store.ts connectorDataClass': {
+    hold: 'exempt',
+    how: 'Instance configuration: which classes a connector carries, audited as connector.data_classes.update.',
+  },
+  'services/classification/store.ts projectDataClass': {
+    hold: 'exempt',
+    how: 'A label on a project, not its content; audited as project.data_classes.update with the names before and after.',
+  },
+  'services/classification/store.ts threadDataClass': {
+    hold: 'exempt',
+    how: 'Only a label the person added to their own conversation; the conversation and its messages are untouched, and thread.data_class.remove is audited.',
+  },
   'services/webhooks/delivery.ts webhookDelivery': {
     hold: 'exempt',
     how: 'Delivered webhook queue rows; the audit entries they carried stay.',

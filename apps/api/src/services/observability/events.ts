@@ -2,6 +2,7 @@ import {
   chatReplies,
   chatReplyDuration,
   chatReplyStart,
+  classificationDecisions,
   drainInterruptedReplies,
   jobDuration,
   jobLastSuccess,
@@ -50,6 +51,29 @@ export function observeToolCall(toolId: string, outcome: string, durationMs: num
   recordSpan('tool.call', { 'oci.tool.id': tool, 'oci.tool.outcome': outcome }, end - durationMs, {
     endTime: end,
     ...(outcome === 'error' ? { failed: 'tool call failed' } : {}),
+  });
+}
+
+const CLASSIFICATION_POINTS = new Set([
+  'send',
+  'approval',
+  'tool',
+  'compaction',
+  'web_search',
+  'embedding',
+  'rerank',
+  'share',
+]);
+const CLASSIFICATION_OUTCOMES = new Set(['allowed', 'warned', 'blocked']);
+
+/**
+ * A data classification decision was made for a conversation that carries a
+ * class. Fixed vocabularies only: never a class name, a model or a person.
+ */
+export function observeClassificationDecision(point: string, outcome: string): void {
+  classificationDecisions.inc({
+    point: CLASSIFICATION_POINTS.has(point) ? point : 'other',
+    outcome: CLASSIFICATION_OUTCOMES.has(outcome) ? outcome : 'other',
   });
 }
 

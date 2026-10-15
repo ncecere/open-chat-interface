@@ -2,6 +2,7 @@ import { ERROR_CODES } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import { AppError, validationFailed } from '../../lib/errors.js';
 import { loadEditedArtifactsSection, withEditedArtifacts } from '../artifacts/prompt.js';
+import { guardService, NO_CLASSIFICATION } from '../classification/guard.js';
 import { loadMemorySection, withMemories } from '../memory/prompt.js';
 import {
   buildGroundingContext,
@@ -79,6 +80,26 @@ async function searchOrFailure(query: string): Promise<PreSearch> {
   }
 }
 
+/** What the model and the reply say when data classification withholds the search. */
+export const SEARCH_WITHHELD_TEXT =
+  'Web search is not available for this conversation, so nothing was searched.';
+
+/**
+ * The up-front search sends the whole latest message to the search provider.
+ * A conversation that carries a class no search service is approved for does
+ * not make it: the reply says so, as for any search that could not be made.
+ */
+async function searchUnlessWithheld(context: TurnContext, query: string): Promise<PreSearch> {
+  const allowed = await guardService({
+    userId: context.user.id,
+    name: 'webSearch',
+    point: 'web_search',
+    threadId: context.thread.id,
+    known: context.classification ?? NO_CLASSIFICATION,
+  });
+  return allowed ? searchOrFailure(query) : { results: [], error: SEARCH_WITHHELD_TEXT };
+}
+
 type ModelContextOptions = {
   /** The search made for an earlier attempt at this turn, reused instead of searching again. */
   search?: PreSearch;
@@ -142,7 +163,7 @@ export async function buildModelContext(
     await Promise.all([
       inspectIncomingAttachments(input.attachmentIds, user.id, user.role),
       searchQuery
-        ? (options.search ?? searchOrFailure(searchQuery))
+        ? (options.search ?? searchUnlessWithheld(context, searchQuery))
         : Promise.resolve<PreSearch>({ results: [] }),
       buildSystemPrompt(
         user.id,

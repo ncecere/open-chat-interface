@@ -21,7 +21,7 @@ import { noteTurnSaving, retryTurnStep, turnDeadline } from '../services/chat/tu
 import { cancelActiveChatRun, resumeActiveChatRun } from '../services/chat-streams.js';
 import { chatRateLimit } from '../services/limits/rate-limit.js';
 import { requestStartedAt } from '../services/observability/request-timing.js';
-import { serializeThread } from '../services/thread-summary.js';
+import { serializeThreadWithClasses } from '../services/thread-summary.js';
 import { getOwnedThread, listConversation } from '../services/threads.js';
 
 export const chatRoutes = new Hono<AppBindings>();
@@ -182,7 +182,11 @@ chatRoutes.get('/:threadId/messages', async (c) => {
   if (query.limit === undefined && anchors === 0) {
     const { messages, replies } = await listConversation(thread.id);
     const [shown, shownReplies] = await toUIMessages(user.id, messages, replies);
-    return c.json({ thread: serializeThread(thread), messages: shown, replies: shownReplies });
+    return c.json({
+      thread: await serializeThreadWithClasses(thread),
+      messages: shown,
+      replies: shownReplies,
+    });
   }
 
   const limit = query.limit ?? CHAT_HISTORY_PAGE_SIZE;
@@ -195,5 +199,10 @@ chatRoutes.get('/:threadId/messages', async (c) => {
         : { kind: 'latest', limit };
   const { messages, replies, page } = await readConversationPage(thread.id, request);
   const [shown, shownReplies] = await toUIMessages(user.id, messages, replies);
-  return c.json({ thread: serializeThread(thread), messages: shown, replies: shownReplies, page });
+  return c.json({
+    thread: await serializeThreadWithClasses(thread),
+    messages: shown,
+    replies: shownReplies,
+    page,
+  });
 });

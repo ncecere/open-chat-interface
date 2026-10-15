@@ -32,7 +32,12 @@ vi.mock('../../db/index.js', () => ({
   },
 }));
 vi.mock('../../lib/logger.js', () => ({
-  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+  logger: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  },
 }));
 vi.mock('../../services/organization.js', () => ({
   getDefaultOrganizationId: async () => state.organizationId,
@@ -98,6 +103,7 @@ vi.mock('../../services/system-prompt.js', () => ({ buildSystemPrompt: async () 
 vi.mock('../../services/limits/rate-limit.js', () => ({
   chatRateLimit: async () => ({ allowed: true }),
   uploadRateLimit: async () => ({ allowed: true }),
+  threadCreateRateLimit: async () => ({ allowed: true }),
 }));
 vi.mock('../../services/limits/concurrency.js', () => ({
   acquireStreamSlot: async () => ({ release: async () => {} }),
@@ -391,7 +397,7 @@ describe.skipIf(!available)('live data classification: enforcement points', () =
       const labelled = await thread(ctx.alice);
       await labelThread(ctx.alice, labelled.id, student.id);
 
-      const refused = await call('POST', `/api/share/threads/${labelled.id}`, {
+      const refused = await call('POST', `/api/share-links/threads/${labelled.id}`, {
         user: ctx.alice,
         body: {},
       });
@@ -403,7 +409,10 @@ describe.skipIf(!available)('live data classification: enforcement points', () =
       expect(count).toBe(0);
 
       const plain = await thread(ctx.alice);
-      await ok(call('POST', `/api/share/threads/${plain.id}`, { user: ctx.alice, body: {} }), 201);
+      await ok(
+        call('POST', `/api/share-links/threads/${plain.id}`, { user: ctx.alice, body: {} }),
+        201,
+      );
     });
   });
 

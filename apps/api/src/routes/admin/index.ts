@@ -3,6 +3,12 @@ import { type AppBindings, requireAdmin } from '../../middleware/context.js';
 import { auditRoutes } from './audit.js';
 import { backupRoutes } from './backups.js';
 import { broadcastRoutes } from './broadcasts.js';
+import {
+  adminProjectLabelRoutes,
+  adminUserProjectRoutes,
+  classificationSettingsRoutes,
+  dataClassRoutes,
+} from './classification.js';
 import { complianceRoutes } from './compliance.js';
 import { connectorRoutes } from './connectors.js';
 import { embeddingsRoutes } from './embeddings.js';
@@ -39,10 +45,14 @@ adminRoutes.route('/roles', rolesRoutes);
 // broader `/users/:id` handler.
 adminRoutes.route('/users', overrideRoutes);
 adminRoutes.route('/users', userRoutes);
+adminRoutes.route('/users', adminUserProjectRoutes);
 adminRoutes.route('/invites', inviteRoutes);
 adminRoutes.route('/providers', providerRoutes);
 adminRoutes.route('/models', modelRoutes);
 adminRoutes.route('/connectors', connectorRoutes);
+adminRoutes.route('/data-classes', dataClassRoutes);
+adminRoutes.route('/classification', classificationSettingsRoutes);
+adminRoutes.route('/projects', adminProjectLabelRoutes);
 adminRoutes.route('/embeddings', embeddingsRoutes);
 adminRoutes.route('/reranking', rerankingRoutes);
 adminRoutes.route('/broadcasts', broadcastRoutes);

@@ -31,9 +31,11 @@ export function useClassificationSuite(state: ClassificationState) {
     const { threadRoutes } = await import('../src/routes/threads.js');
     const { projectRoutes } = await import('../src/routes/projects.js');
     const { shareLinkRoutes } = await import('../src/routes/share-links.js');
+    const { classificationRoutes } = await import('../src/routes/classification.js');
     ctx.app.route('/api/threads', threadRoutes);
     ctx.app.route('/api/projects', projectRoutes);
-    ctx.app.route('/api/share', shareLinkRoutes);
+    ctx.app.route('/api/share-links', shareLinkRoutes);
+    ctx.app.route('/api', classificationRoutes);
     const [provider] = await ctx.pool.db
       .insert(schema.provider)
       .values({ organizationId: state.organizationId, kind: 'openai-compatible', label: 'Fake' })

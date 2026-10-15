@@ -2,6 +2,7 @@ import type { UserRole } from '@oci/shared';
 import { type ToolSet, tool } from 'ai';
 import { AppError } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
+import { guardToolRun, offerTools, type TurnClassification } from '../classification/guard.js';
 import { memoryTools } from '../memory/tools.js';
 import { getSetting } from '../settings.js';
 import { ARTIFACT_TOOLS } from './artifacts.js';
@@ -42,6 +43,12 @@ export async function resolveTurnTools(turn: {
   webSearch: boolean;
   /** Temporary chats never get the memory tools. */
   temporary: boolean;
+  /**
+   * What the conversation carries (data classification, v0.14): tools it must
+   * not use are left out of the offer. Absent for a call that has no
+   * conversation to judge.
+   */
+  classification?: { modelSlug: string; classes: TurnClassification };
 }): Promise<TurnTools> {
   if (!turn.capabilities.includes('tool_calling')) return NO_TOOLS;
   const [stored, registered] = await Promise.all([getSetting('roleTools'), registeredTools()]);
@@ -68,11 +75,24 @@ export async function resolveTurnTools(turn: {
   for (const definition of ARTIFACT_TOOLS) {
     if (await definition.available(input)) offered.push(definition);
   }
-  return { definitions: offered };
+  if (!turn.classification) return { definitions: offered };
+  return {
+    definitions: await offerTools(offered, {
+      classification: turn.classification.classes,
+      modelSlug: turn.classification.modelSlug,
+    }),
+  };
 }
 
 /** A failure whose message is safe to show the person and the model. */
 export class ToolFailure extends Error {}
+
+/**
+ * What a refused call tells the model: the wording of a tool that does not
+ * exist for this conversation (tool-loop.ts), so no class name reaches the
+ * provider and the model carries on without the tool.
+ */
+export const TOOL_UNAVAILABLE_TEXT = 'This tool is not available in this conversation.';
 
 /** Message for a failed tool step: our own wording, never an internal error. */
 export function toolErrorText(error: unknown): string {
@@ -130,7 +150,7 @@ export function buildSdkTools(
           const approval: ToolApprovalAnswer | null = approved.has(options.toolCallId)
             ? 'approved'
             : null;
-          const audit = (outcome: 'ok' | 'error', resultBytes: number | null) =>
+          const audit = (outcome: 'ok' | 'error' | 'refused', resultBytes: number | null) =>
             recordToolCall({
               userId: caller.userId,
               toolId: definition.id,
@@ -140,9 +160,16 @@ export function buildSdkTools(
               outcome,
               approvalRequired: definition.kind === 'write',
               approval,
-              durationMs: Date.now() - started,
+              durationMs: outcome === 'refused' ? null : Date.now() - started,
               resultBytes,
             });
+          // Data classification: judged again now, with the labels as they are
+          // and the connector's classes counted as if already in the
+          // conversation, and before anything runs.
+          if ((await guardToolRun(definition, caller)) === 'refused') {
+            await audit('refused', null);
+            throw new ToolFailure(TOOL_UNAVAILABLE_TEXT);
+          }
           let raw: unknown;
           try {
             raw = await definition.execute(input, {

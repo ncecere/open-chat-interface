@@ -12,6 +12,7 @@ import { attachmentRoutes } from './attachments.js';
 import { authStatusRoutes } from './auth-status.js';
 import { brandingRoutes } from './branding.js';
 import { chatRoutes } from './chat.js';
+import { classificationRoutes } from './classification.js';
 import { connectorRoutes } from './connectors.js';
 import { healthRoutes } from './health.js';
 import { maintenanceRoutes } from './maintenance.js';
@@ -116,6 +117,8 @@ export function createApiRoutes() {
   api.route('/me', portabilityRoutes);
   api.route('/memory', memoryRoutes);
   api.route('/models', modelCatalogRoutes);
+  // /classification and /data-classes; each route asks for a signed-in person itself.
+  api.route('/', classificationRoutes);
   api.route('/threads', threadRoutes);
   api.route('/projects', projectRoutes);
   api.route('/chat', chatRoutes);
