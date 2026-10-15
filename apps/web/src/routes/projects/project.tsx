@@ -45,8 +45,8 @@ import { usePageTitle } from '~/lib/document-title';
 import { accessLabel, accessOf, projectControls } from '~/lib/project-access';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
-import { ProjectLabelsSection } from './project-labels';
 import { ProjectAccessSections } from './project-access-section';
+import { ProjectLabelsSection } from './project-labels';
 import { DeleteProjectSection, Section } from './project-sections';
 
 function formatBytes(bytes: number): string {
