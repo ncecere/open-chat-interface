@@ -1,0 +1,14 @@
+{
+  "language.name.ar": "العربية",
+  "language.name.en": "English",
+  "language.name.es": "Español",
+  "language.optionBeta": "{name} (beta)",
+  "settings.language.automatic": "Automático",
+  "settings.language.automaticHint": "Usa el idioma predeterminado de esta instancia o el de tu navegador.",
+  "settings.language.available": "{count, plural, one {# idioma disponible} many {# de idiomas disponibles} other {# idiomas disponibles}}",
+  "settings.language.betaNotice": "Esta traducción es un borrador automático y puede contener errores.",
+  "settings.language.description": "El idioma de los menús, los botones y los mensajes. Lo que escribes tú y lo que escribe el asistente nunca se traduce.",
+  "settings.language.saveFailed": "No se pudo guardar tu idioma. Inténtalo de nuevo.",
+  "settings.language.saved": "Idioma guardado.",
+  "settings.language.title": "Idioma"
+}

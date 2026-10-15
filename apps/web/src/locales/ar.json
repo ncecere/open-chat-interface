@@ -1,0 +1,14 @@
+{
+  "language.name.ar": "العربية",
+  "language.name.en": "English",
+  "language.name.es": "Español",
+  "language.optionBeta": "{name} (beta)",
+  "settings.language.automatic": "تلقائي",
+  "settings.language.automaticHint": "استخدم اللغة الافتراضية لهذه النسخة أو لغة متصفحك.",
+  "settings.language.available": "{count, plural, zero {لا توجد لغات متاحة} one {لغة واحدة متاحة} two {لغتان متاحتان} few {# لغات متاحة} many {# لغةً متاحة} other {# لغة متاحة}}",
+  "settings.language.betaNotice": "هذه الترجمة مسودة آلية وقد تحتوي على أخطاء.",
+  "settings.language.description": "لغة القوائم والأزرار والرسائل. لا تُترجم أبدًا الرسائل التي تكتبها أنت أو يكتبها المساعد.",
+  "settings.language.saveFailed": "تعذّر حفظ لغتك. حاول مرة أخرى.",
+  "settings.language.saved": "تم حفظ اللغة.",
+  "settings.language.title": "اللغة"
+}

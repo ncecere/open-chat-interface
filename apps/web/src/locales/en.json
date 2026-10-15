@@ -1,0 +1,14 @@
+{
+  "language.name.ar": "العربية",
+  "language.name.en": "English",
+  "language.name.es": "Español",
+  "language.optionBeta": "{name} (beta)",
+  "settings.language.automatic": "Automatic",
+  "settings.language.automaticHint": "Use this instance's default language, or the language of your browser.",
+  "settings.language.available": "{count, plural, one {# language available} other {# languages available}}",
+  "settings.language.betaNotice": "This translation is a machine-made draft and may contain mistakes.",
+  "settings.language.description": "The language of menus, buttons and messages. What you and the assistant write is never translated.",
+  "settings.language.saveFailed": "Your language could not be saved. Try again.",
+  "settings.language.saved": "Language saved.",
+  "settings.language.title": "Language"
+}
