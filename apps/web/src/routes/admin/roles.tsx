@@ -6,6 +6,7 @@ import { type PillTab, PillTabs } from '~/components/ui/pill-tabs';
 import { Spinner } from '~/components/ui/spinner';
 import { DEFAULT_ROLE_TAB, type RoleTab, validateRolesSearch } from '~/lib/admin-search';
 import { api } from '~/lib/api-client';
+import { GroupsSection } from './roles/groups-section';
 import { InstanceWideSection } from './roles/instance-wide-section';
 import { RolePanel } from './roles/role-panel';
 import { ROLE_LABELS, ROLES_QUERY_KEY } from './roles/roles-helpers';
@@ -63,6 +64,9 @@ export function AdminRolesPage() {
             </div>
           )}
         </div>
+
+        {/* Read-only; from an older server there is nothing to show (v0.14). */}
+        {roles.data?.groups && <GroupsSection groups={roles.data.groups} />}
 
         <InstanceWideSection />
 
