@@ -49,6 +49,8 @@ modelRoutes.get('/', async (c) => {
     sortOrder: model.sortOrder,
     enabled: model.enabled,
     visibleToRoles: model.visibleToRoles,
+    // Read from `model_data_class` once the table exists (migration 0052).
+    dataClassIds: [],
     createdAt: model.createdAt.toISOString(),
     updatedAt: model.updatedAt.toISOString(),
   }));

@@ -99,6 +99,13 @@ export const createConnectorSchema = connectorFields
     sharedHeaderValue: connectorHeaderValueSchema.optional(),
     oauthClientId: z.string().trim().min(1).max(500).optional(),
     oauthClientSecret: z.string().min(1).max(2000).optional(),
+    /**
+     * Classes the connector carries (v0.14, #395). With classification on, a
+     * new connector must say which classes it carries or, with `reviewed:
+     * true` and none, that it carries none (422 otherwise).
+     */
+    dataClassIds: z.array(z.string().min(1).max(200)).max(100).optional(),
+    reviewed: z.boolean().optional(),
   })
   .strict()
   .superRefine((input, ctx) => {
@@ -181,6 +188,10 @@ export const adminConnectorSchema = z.object({
   oauthScopes: z.string(),
   enabled: z.boolean(),
   allowPrivateNetwork: z.boolean(),
+  /** Data classes the connector carries (v0.14, #395). */
+  dataClassIds: z.array(z.string()),
+  /** An administrator has said what it carries (possibly nothing); false shows "Not reviewed". */
+  reviewed: z.boolean(),
   /** People connected to this OAuth connector. */
   accountCount: z.number(),
   lastContactAt: z.string().nullable(),

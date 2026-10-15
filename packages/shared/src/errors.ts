@@ -21,6 +21,13 @@ export const ERROR_CODES = {
    * Retry-After before anything is stored; send it again. Not a fault.
    */
   SERVER_RESTARTING: 'SERVER_RESTARTING',
+  /**
+   * Data classification (v0.14, #395): the conversation carries a data class
+   * the chosen model (or, for a share link or compaction, the destination) is
+   * not approved for. 403, nothing stored or sent; `details` names the missing
+   * classes and the approved models (DataClassBlockedDetails).
+   */
+  DATA_CLASS_BLOCKED: 'DATA_CLASS_BLOCKED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 

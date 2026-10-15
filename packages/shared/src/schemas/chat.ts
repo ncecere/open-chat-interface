@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAX_FILES_PER_MESSAGE, REASONING_EFFORTS } from '../constants.js';
+import { threadDataClassSchema } from './classification.js';
 
 export const threadSummarySchema = z.object({
   id: z.string(),
@@ -12,6 +13,11 @@ export const threadSummarySchema = z.object({
   branchedFromMessageId: z.string().nullable(),
   /** The project this conversation belongs to, if any. */
   projectId: z.string().nullable(),
+  /**
+   * The data classes the conversation carries (v0.14, #395), with why. Absent
+   * when classification is off; empty when nothing is labelled.
+   */
+  dataClasses: z.array(threadDataClassSchema).optional(),
   lastMessageAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

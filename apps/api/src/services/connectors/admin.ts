@@ -68,6 +68,9 @@ function serializeConnector(
     oauthScopes: row.oauthScopes,
     enabled: row.enabled,
     allowPrivateNetwork: row.allowPrivateNetwork,
+    // Read from `connector_data_class` once the table exists (migration 0052).
+    dataClassIds: [],
+    reviewed: false,
     accountCount,
     lastContactAt: row.lastContactAt?.toISOString() ?? null,
     lastErrorAt: row.lastErrorAt?.toISOString() ?? null,
