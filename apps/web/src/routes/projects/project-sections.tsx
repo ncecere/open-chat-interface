@@ -13,8 +13,10 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
+import { useProjectAccess } from '~/hooks/use-project-sharing';
 import { useDeleteProject } from '~/hooks/use-projects';
 import { apiErrorMessage } from '~/lib/api-client';
+import { sharedWithText } from '~/lib/project-access';
 import { useReadOnlyLock } from '~/lib/read-only';
 
 /** The project page's sections, apart from project.tsx to keep it under 600 lines. */
@@ -53,6 +55,11 @@ export function Section({
 export function DeleteProjectSection({ project }: { project: ProjectSummary }) {
   const [open, setOpen] = useState(false);
   const remove = useDeleteProject();
+  // Who loses access (counts only), read when the dialog opens (v0.14).
+  const access = useProjectAccess(project.id, open);
+  const shares = access.data
+    ? sharedWithText(access.data.personShares, access.data.groupShares)
+    : '';
   const navigate = useNavigate();
   // Off while read-only, with the reason, as the project's other changes (#331).
   const lock = useReadOnlyLock();
@@ -78,6 +85,8 @@ export function DeleteProjectSection({ project }: { project: ProjectSummary }) {
             <DialogTitle>Delete “{project.name}”?</DialogTitle>
             <DialogDescription>
               {deleteProjectText(project.threadCount, project.fileCount)}
+              {shares &&
+                ` It is shared with ${shares}. They lose access, and their own conversations in it are kept but leave the project.`}
             </DialogDescription>
           </DialogHeader>
           {remove.error && (

@@ -377,3 +377,40 @@ describe('when access ends', () => {
     );
   });
 });
+
+describe('deleting a project that is shared', () => {
+  it('says how many people and groups lose access and what becomes of their conversations', async () => {
+    await render('settings');
+    await click(button('Delete project'));
+    expect(api.get).toHaveBeenCalledWith('/projects/project-1/access');
+    const text = dialog()!.textContent ?? '';
+    expect(text).toContain('It is shared with 2 people and 1 group.');
+    expect(text).toContain(
+      'They lose access, and their own conversations in it are kept but leave the project.',
+    );
+    // The owner's own counts are still said.
+    expect(text).toContain('Its conversation is kept and leaves the project.');
+  });
+
+  it('says nothing about sharing for a project nobody shares', async () => {
+    accessInfo = { ...accessInfo, personShares: 0, groupShares: 0 };
+    await render('settings');
+    await click(button('Delete project'));
+    expect(dialog()!.textContent).not.toContain('shared with');
+  });
+
+  it('still lets the owner delete when the share counts could not be read', async () => {
+    const { ApiError } = await import('../../src/lib/api-client');
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (path: string) => {
+      if (path === '/projects/project-1/access') throw new ApiError(500, 'INTERNAL_ERROR', 'Boom');
+      return base(path);
+    });
+    await render('settings');
+    await click(button('Delete project'));
+    const confirm = [...dialog()!.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Delete project',
+    )!;
+    expect(confirm.disabled).toBe(false);
+  });
+});

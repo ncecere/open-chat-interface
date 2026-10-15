@@ -119,3 +119,10 @@ export function describeShareError(error: unknown, fallback: string): string {
   }
   return apiErrorMessage(error, fallback);
 }
+
+/** "2 people and 1 group", leaving out what is zero; empty when nothing is shared. Counts only: who they are is never shown. */
+export function sharedWithText(personShares: number, groupShares: number): string {
+  const people = personShares === 1 ? '1 person' : `${personShares.toLocaleString('en-US')} people`;
+  const groups = groupShares === 1 ? '1 group' : `${groupShares.toLocaleString('en-US')} groups`;
+  return [personShares > 0 && people, groupShares > 0 && groups].filter(Boolean).join(' and ');
+}

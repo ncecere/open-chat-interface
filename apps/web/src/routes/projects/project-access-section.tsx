@@ -7,23 +7,9 @@ import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { Button } from '~/components/ui/button';
 import { forgetProject, useLeaveProject, useProjectAccess } from '~/hooks/use-project-sharing';
 import { ApiError } from '~/lib/api-client';
-import { accessLabel, accessOf } from '~/lib/project-access';
+import { accessLabel, accessOf, sharedWithText } from '~/lib/project-access';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { Section } from './project-sections';
-
-function people(count: number): string {
-  return count === 1 ? '1 person' : `${count.toLocaleString('en-US')} people`;
-}
-
-function groups(count: number): string {
-  return count === 1 ? '1 group' : `${count.toLocaleString('en-US')} groups`;
-}
-
-/** "2 people and 1 group", leaving out what is zero. Counts only: who they are is never shown. */
-function sharedWith(personShares: number, groupShares: number): string {
-  const parts = [personShares > 0 && people(personShares), groupShares > 0 && groups(groupShares)];
-  return parts.filter(Boolean).join(' and ');
-}
 
 /**
  * What a viewer or editor sees under Settings instead of the owner's name,
@@ -34,7 +20,7 @@ export function ProjectAccessSections({ project }: { project: ProjectSummary }) 
   const access = accessOf(project);
   const info = useProjectAccess(project.id);
   const ownerName = info.data?.ownerName ?? project.ownerName;
-  const total = info.data ? sharedWith(info.data.personShares, info.data.groupShares) : '';
+  const total = info.data ? sharedWithText(info.data.personShares, info.data.groupShares) : '';
 
   return (
     <>
