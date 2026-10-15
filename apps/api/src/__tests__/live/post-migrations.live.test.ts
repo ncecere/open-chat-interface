@@ -196,6 +196,7 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
     expect(await recorded('0002_probe_analyze')).toBeUndefined();
 
     // Freed part-way through the retries: the next attempt succeeds.
+    const attemptsBefore = (await recorded('0001_probe_index'))?.attempts ?? 0;
     const run = runPostMigrations(live.connectionString, {
       folder,
       logger: quiet,
@@ -203,7 +204,14 @@ describe.skipIf(!available)('live PostgreSQL post-deploy steps', () => {
       maxAttempts: 10,
       retryDelayMs: 100,
     });
-    await sleep(500);
+    // Released once this run has started a second attempt (the row counts attempts as they start), so
+    // the first one has timed out on the lock however long the run took to get going. A fixed sleep
+    // here assumed the first attempt was made within 500 ms, which a slow runner does not keep to.
+    const deadline = Date.now() + 30_000;
+    while (((await recorded('0001_probe_index'))?.attempts ?? 0) < attemptsBefore + 2) {
+      if (Date.now() > deadline) throw new Error('The run never made a second attempt');
+      await sleep(25);
+    }
     await writer.release();
     const result = await run;
     expect(result.steps.map((step) => step.outcome)).toEqual(['applied', 'applied']);
