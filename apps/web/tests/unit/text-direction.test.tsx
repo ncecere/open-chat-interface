@@ -92,7 +92,8 @@ describe('a reply with right-to-left text', () => {
     expect(block).not.toBeNull();
     expect(block.hasAttribute('dir')).toBe(false);
     expect(block.querySelector('[dir]')).toBeNull();
-    expect(container.querySelector('pre')?.closest('[dir]')).toBeNull();
+    // Not <html>: the test setup activates English, which sets <html lang dir>.
+    expect(container.querySelector('pre')?.closest('[dir]:not(html)')).toBeNull();
     expect(container.querySelector('code')?.hasAttribute('dir')).toBe(false);
   });
 

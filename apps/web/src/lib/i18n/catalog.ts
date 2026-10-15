@@ -1,4 +1,7 @@
-import en from '~/locales/en.json';
+// A TYPE-ONLY import: it types the keys and puts nothing in the bundle. The
+// catalogs themselves, English included, are dynamic imports (`~/locales`), so
+// the strings are never part of the initial JavaScript.
+import type en from '~/locales/en.json';
 
 /** A loaded catalog: flat keys to ICU-subset messages. */
 export type Catalog = Readonly<Record<string, string>>;
@@ -8,6 +11,3 @@ export type Catalog = Readonly<Record<string, string>>;
  * locale loader in `locales/index.ts` that lacks one (`pnpm typecheck`).
  */
 export type MessageKey = keyof typeof en;
-
-/** English is the source: always complete, always loaded, the fallback for every key. */
-export const sourceCatalog: Catalog = en;

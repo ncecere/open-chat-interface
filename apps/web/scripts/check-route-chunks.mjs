@@ -16,9 +16,14 @@ const manifest = json('.vite/manifest.json');
 if (!manifest['index.html']?.isEntry) throw new Error('Missing application entry in Vite manifest');
 const deferred =
   /(?:^|\/)src\/(?:routes\/(?:admin|settings)\/|components\/(?:admin\/admin-layout|settings\/settings-layout)\.tsx$)/;
+// Message catalogs, English included, are chunks of their own that the app
+// fetches before its first render (v0.14, #397). In the initial JavaScript they
+// would grow with every string that gets translated.
+const catalog = /(?:^|\/)src\/locales\/[^/]+\.json$/;
 const visited = new Set();
 const files = new Set();
 const violations = new Set();
+const catalogs = new Set();
 function visit(key) {
   if (visited.has(key)) return;
   visited.add(key);
@@ -33,7 +38,9 @@ function visit(key) {
     if (!Array.isArray(map.sources) || !map.sources.length)
       throw new Error(`Missing source mappings: ${chunk.file}`);
     for (const source of map.sources) {
-      if (deferred.test(source.replaceAll('\\', '/'))) violations.add(source);
+      const path = source.replaceAll('\\', '/');
+      if (deferred.test(path)) violations.add(source);
+      if (catalog.test(path)) catalogs.add(source);
     }
   }
   // Deliberately do not traverse dynamicImports: they are deferred downloads.
@@ -43,6 +50,10 @@ visit('index.html');
 if (violations.size)
   throw new Error(
     `Deferred route code leaked into initial JavaScript:\n${[...violations].join('\n')}`,
+  );
+if (catalogs.size)
+  throw new Error(
+    `Message catalog in the initial JavaScript (load it with a dynamic import, and type keys with \`import type\`; docs/dev/translations.md):\n${[...catalogs].join('\n')}`,
   );
 let bytes = 0;
 let gzipBytes = 0;

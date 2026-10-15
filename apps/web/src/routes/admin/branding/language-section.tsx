@@ -17,8 +17,8 @@ import { Field } from '~/components/ui/field';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { translate } from '~/lib/i18n';
 import { LOCALES } from '~/locales';
-import en from '~/locales/en.json';
 
 /**
  * Admin → Branding → Language (v0.14, #397): the language people get who have
@@ -36,7 +36,9 @@ import en from '~/locales/en.json';
 const NOT_CHOSEN = '';
 
 function describe(tag: SupportedLocale): string {
-  const name = en[`language.name.${tag}`];
+  // The same in every catalog (a language's name in itself), so it reads right
+  // in the English admin console whatever language the person reads elsewhere.
+  const name = translate(`language.name.${tag}`);
   return LOCALES[tag].beta ? `${name} (beta)` : name;
 }
 

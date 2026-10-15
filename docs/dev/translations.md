@@ -18,7 +18,7 @@ or reordered.
 
 | Tag | State | Direction |
 | --- | --- | --- |
-| `en` | The source. Always complete, always loaded (it is in the base bundle). | left to right |
+| `en` | The source. Always complete, and always loaded (as a lazy chunk, next to any other language, as its fallback). | left to right |
 | `es` | **Beta**: machine-drafted, not reviewed by a native reader. | left to right |
 | `ar` | **Beta**: machine-drafted, not reviewed by a native reader. | right to left |
 | `en-XA`, `ar-XB` | Pseudo-locales, generated from `en.json` when chosen (nothing to commit). Offered only outside production builds, or in a production build made with `VITE_OCI_PSEUDO_LOCALES=1`. | left to right, right to left |
@@ -48,8 +48,9 @@ function Greeting({ name, count }: { name: string; count: number }) {
 toast.success(translate('settings.language.saved'));
 ```
 
-`t(key, params)` types `key` from `apps/web/src/locales/en.json`, so a
-misspelt key fails `pnpm typecheck`. A key missing from the current language
+`t(key, params)` types `key` from `apps/web/src/locales/en.json` (through a
+type-only import, `import type en from './en.json'`: no strings reach the
+bundle through it), so a misspelt key fails `pnpm typecheck`. A key missing from the current language
 falls back to English, and a key missing everywhere shows the key; neither
 throws, and neither does a message that does not parse (the English message is
 used). Parameters are inserted as text and never read as message syntax, so
@@ -90,6 +91,36 @@ longer enables is skipped without any error and the saved choice is kept.
 settings are known, loads the catalog with a dynamic import, switches in one
 step, and sets `<html lang dir>`. The language shown last time is remembered
 in `localStorage` (`oci.locale`) so a reload does not flash English.
+
+### Loading
+
+**Every catalog, English included, is a dynamic import**: a chunk of its own,
+never part of the initial JavaScript, however many strings it holds. So that
+nothing is painted as keys, `main.tsx` awaits `activateLocale(initialLocale())`
+before the first `render` (one small request; nothing is shown meanwhile), and
+`I18nProvider` renders nothing until a catalog is loaded, as a net for any
+other entry point. A language is always fetched together with English (the
+fallback for a key it lacks). A catalog that cannot be fetched (offline, a
+stale chunk after a deploy) never throws: the first load falls back to
+English, a later switch keeps the language already showing, and if English is
+unreachable too `translate()` returns the key. `translate()` works anywhere
+once `activateLocale` has resolved; before that it returns the key.
+
+The loaded catalogs live in a map on `globalThis` (`__ociI18nCatalogs`), so a
+re-evaluated copy of `lib/i18n/state.ts` (hot reload, `vi.resetModules()`)
+finds them instead of showing keys.
+
+### In unit tests
+
+`tests/unit/setup.ts` (the vitest `setupFiles` in `vite.config.ts`) awaits
+`activateLocale('en')` before each test file, so **`useT()` and `translate()`
+return the real English strings in any test, with nothing to await and no
+provider to mount**. Assert on the English text. A test of another language
+awaits `activateLocale('es')` itself (and `activateLocale('en')` in
+`beforeEach`/`afterEach` if it must not leak). `<html lang dir>` is set by it,
+so a test that looks for "no `dir` on this element" must say
+`:not(html)`. A test of the loader itself (a cold start, a failed fetch) is
+`tests/unit/i18n-loading.test.tsx`.
 
 ## Adding a language
 
@@ -179,10 +210,12 @@ and Arabic mixed with English in one message reads in order.
 
 ## Size
 
-The framework adds well under 8 kB gzip to the first load. `en.json` is part
-of the base bundle (it is the source and the fallback), the other catalogs
-load on demand. `apps/web/scripts/bundle-budget.json` holds the initial
-JavaScript to what v0.13.1 weighed plus 8,192 gzip bytes, checked by
-`check-route-chunks.mjs` at the end of `pnpm build`. English strings count: if
-the budget is reached, split the catalog by area and load the parts with the
-route, instead of raising it.
+The framework adds well under 8 kB gzip to the first load, and **no string is
+in the initial JavaScript**: `en`, `es` and `ar` are each a chunk of their own
+(about a thousand strings once the areas are converted would not fit the
+budget), fetched before the first render. `check-route-chunks.mjs` (the end of
+`pnpm build`) fails when a `locales/*.json` file shows up in the entry or in
+`initial-shared`, which is what a value import of a catalog does, and
+`apps/web/scripts/bundle-budget.json` still holds the initial JavaScript to what
+v0.13.1 weighed plus its allowance. Never `import en from '~/locales/en.json'`
+in `src`; use `t()`, `translate()`, or `import type` for the type.
