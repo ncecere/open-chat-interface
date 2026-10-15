@@ -14,6 +14,7 @@ import {
   THEME_MODES,
   USER_ROLES,
 } from '../constants.js';
+import { languageSettingsSchema, localeSchema } from '../locales.js';
 import { DEFAULT_MAX_TOOL_STEPS, MAX_TOOL_STEPS, MIN_TOOL_STEPS } from '../tools.js';
 import { patchSchema } from './patch.js';
 
@@ -118,6 +119,12 @@ export const instanceSettingsSchema = z.object({
   loginMessage: z.string().nullable(),
   defaultTheme: z.enum(THEME_MODES),
   colorTheme: z.enum(COLOR_THEMES),
+  /**
+   * The language people get who have not chosen one, and the languages they
+   * may choose from (v0.14). Absent from an older API's response, which reads
+   * as English only.
+   */
+  language: languageSettingsSchema.optional(),
   registrationMode: z.enum(REGISTRATION_MODES),
   emailVerificationRequired: z.boolean(),
   localAuthEnabled: z.boolean(),
@@ -229,6 +236,15 @@ export const updateInstanceSettingsSchema = patchSchema(instanceSettingsSchema)
       .trim()
       .regex(HEX_COLOR_PATTERN, 'Use a hex colour such as #3366ff.')
       .nullable()
+      .optional(),
+    // Either part may be sent alone; English is always enabled (the server
+    // adds it) and the default must be one of the enabled languages.
+    language: z
+      .object({
+        default: localeSchema.nullable().optional(),
+        enabled: z.array(localeSchema).min(1).max(20).optional(),
+      })
+      .strict()
       .optional(),
     // `memory` arrived in v0.9: a client that does not know it must not
     // switch it off by leaving it out of the (otherwise whole) object.
