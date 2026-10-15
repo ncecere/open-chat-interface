@@ -177,11 +177,6 @@
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
     },
     {
-      "file": "apps/web/src/routes/settings/sharing.tsx",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
       "file": "apps/web/src/routes/share/public-share.tsx",
       "count": 1,
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
