@@ -21,7 +21,10 @@ export type SummaryModel = Pick<
   | 'maxOutputTokens'
   | 'capabilities'
   | 'supportedEfforts'
->;
+> & {
+  /** For the refusal's wording (data classification); the slug stands in when absent. */
+  displayName?: string;
+};
 
 /** Upper bound for one summary, in tokens. */
 const MAX_SUMMARY_TOKENS = 4096;

@@ -214,6 +214,18 @@ export default defineConfig({
         'src/services/reranking/usage.ts': { statements: 95, branches: 95, functions: 100 },
         'src/services/project-search/rerank.ts': { statements: 95, branches: 95, functions: 100 },
         'src/routes/admin/reranking.ts': { statements: 95, branches: 95, functions: 100 },
+        // v0.14 data classification (#395): the decision that keeps labelled content from
+        // models and services not approved for it, the guard every enforcement point asks,
+        // the store that holds the labels, and the routes that set them.
+        'src/services/classification/resolve.ts': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+        },
+        'src/services/classification/guard.ts': { statements: 100, branches: 100, functions: 100 },
+        'src/services/classification/store.ts': { statements: 92, branches: 85, functions: 100 },
+        'src/routes/classification.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/routes/admin/classification.ts': { statements: 95, branches: 90, functions: 100 },
         // v0.11 three-phase migrations: the batch/cursor transaction and its lease,
         // throttles, administrator controls and the upgrade preflight.
         'src/services/migrations/background-runner.ts': {

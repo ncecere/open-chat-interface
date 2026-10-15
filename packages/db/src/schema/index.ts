@@ -1,6 +1,7 @@
 export * from './artifact.js';
 export * from './auth.js';
 export * from './chat.js';
+export * from './classification.js';
 export * from './compaction.js';
 export * from './compliance.js';
 export * from './connector.js';

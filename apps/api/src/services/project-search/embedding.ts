@@ -1,7 +1,10 @@
 import { setTimeout as sleep } from 'node:timers/promises';
+import { eq, schema } from '@oci/db';
 import { loadEnv } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
+import { classificationSettings } from '../classification/config.js';
+import { guardService } from '../classification/guard.js';
 import { embeddingsSettings } from '../embeddings/config.js';
 import { type Embedder, embedValues } from '../embeddings/embed.js';
 import {
@@ -76,6 +79,7 @@ async function embedFilePassages(
 ): Promise<{ stored: number; error: unknown }> {
   const [first] = passages;
   if (!first) return { stored: 0, error: null };
+  if (!(await mayEmbedFile(first))) return { stored: 0, error: null };
   const store = vectorStore();
   let stored = 0;
   let tokens = 0;
@@ -118,6 +122,35 @@ async function embedFilePassages(
   return { stored, error: failure };
 }
 
+/**
+ * Data classification (v0.14): in `block`, only the classes the embeddings
+ * provider is approved for may be embedded, and files of a project that carries
+ * any other are left out of what is read. Existing vectors stay (they are in
+ * our database); a later label does not recall past calls. Undefined means no
+ * filter: classification off, or `warn`, which never withholds.
+ */
+async function approvedClassFilter(): Promise<{ approvedClassIds?: readonly string[] }> {
+  const settings = await classificationSettings();
+  return settings.mode === 'block' ? { approvedClassIds: settings.services.embeddings } : {};
+}
+
+/** The check again at the file, for a label added since the passages were read. */
+async function mayEmbedFile(passage: PendingPassage): Promise<boolean> {
+  if ((await classificationSettings()).mode === 'off') return true;
+  const [row] = await db
+    .select({ projectId: schema.attachment.projectId })
+    .from(schema.attachment)
+    .where(eq(schema.attachment.id, passage.attachmentId))
+    .limit(1);
+  if (!row?.projectId) return true;
+  return guardService({
+    userId: passage.userId,
+    name: 'embeddings',
+    point: 'embedding',
+    projectId: row.projectId,
+  });
+}
+
 function groupByFile(passages: PendingPassage[]): PendingPassage[][] {
   return batchByFile(passages, Number.MAX_SAFE_INTEGER);
 }
@@ -145,7 +178,10 @@ export async function embedPendingProjectPassages(limit = EMBED_PASSAGES_PER_RUN
   const current = await currentGenerationReady();
   if (!current) return 0;
   const embedder = await generationEmbedder(current);
-  const pending = await vectorStore().pendingPassages(current, { limit });
+  const pending = await vectorStore().pendingPassages(current, {
+    limit,
+    ...(await approvedClassFilter()),
+  });
   let stored = 0;
   let consecutiveFailures = 0;
   let files = 0;
@@ -220,7 +256,11 @@ export async function fillGeneration(
   while (await mayGoOn()) {
     const room = Math.min(FILL_PAGE, (options.limit ?? Number.POSITIVE_INFINITY) - stored);
     if (room <= 0) break;
-    const page = await store.pendingPassages(generation, { limit: room, after });
+    const page = await store.pendingPassages(generation, {
+      limit: room,
+      after,
+      ...(await approvedClassFilter()),
+    });
     if (page.length === 0) break;
     const last = page.at(-1)!;
     after = { attachmentId: last.attachmentId, ordinal: last.ordinal };
@@ -274,6 +314,7 @@ export async function embedUploadedProjectFile(attachmentId: string): Promise<vo
         const passages = await store.pendingPassages(generation, {
           limit: UPLOAD_EMBED_PASSAGES,
           attachmentId,
+          ...(await approvedClassFilter()),
         });
         const result = await embedFilePassages(embedder, generation, passages);
         if (result.error) {

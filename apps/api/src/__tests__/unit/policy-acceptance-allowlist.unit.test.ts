@@ -151,6 +151,7 @@ describe('acceptable use policy: every write route is refused unless allowlisted
         "DELETE /api/projects/:id/files/:fileId",
         "DELETE /api/threads/:id",
         "DELETE /api/threads/:id/compaction/failure",
+        "DELETE /api/threads/:id/data-classes/:classId",
         "DELETE /api/threads/:id/permanent",
         "DELETE /api/threads/:id/unused",
         "DELETE /api/threads/trash",
@@ -176,9 +177,11 @@ describe('acceptable use policy: every write route is refused unless allowlisted
         "POST /api/threads",
         "POST /api/threads/:id/branches",
         "POST /api/threads/:id/compact",
+        "POST /api/threads/:id/data-classes",
         "POST /api/threads/:id/forks",
         "POST /api/threads/:id/restore",
         "PUT /api/memory/settings",
+        "PUT /api/projects/:id/data-classes",
       ]
     `);
     for (const write of refused) {

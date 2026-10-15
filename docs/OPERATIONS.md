@@ -1514,6 +1514,45 @@ one-use check on recovery codes. So:
 - A database backup carries the encrypted values, which only the matching
   `AUTH_SECRET` opens: back the secret up with the database.
 
+#### Data classification (migration 0052, #395)
+
+Migration 0052 adds the tables for data classes, approvals and labels
+(`data_class`, `model_data_class`, `connector_data_class`, `project_data_class`,
+`thread_data_class`, `thread_connector_use`), one nullable column
+(`connector.data_classes_reviewed_at`) and four triggers: a conversation that
+leaves a project, a project that is deleted and a connector that is deleted keep
+the labels they gave (as `kept` labels), and a fork or an edit copies its
+parent's labels and connector uses. It is additive, takes only a brief lock on
+`thread`, `project` and `connector` (within the migrator's lock timeout and
+retries) and rewrites nothing. The feature is **off** by default and nothing
+changes until an administrator sets a mode
+([Data classification](admin/data-classification.md)).
+
+How the upgrade gets there, in the three phases of an [upgrade](#upgrade):
+
+1. **`migrate`:** migration 0052, as above. The previous release (v0.13) keeps
+   working: it does not know the tables, and the triggers keep labels consistent
+   for what it forks, moves and deletes.
+2. **`migrate --post` (after every replica runs 0.14):** schedules the
+   background migration `0.14.thread-connector-use`.
+3. **Background:** `0.14.thread-connector-use` reads stored messages in batches
+   of 2,000, with a short pause between them, and records which connectors each
+   conversation used before 0.14 (including tool runs by a v0.13 replica during
+   the upgrade). It respects the usual throttle and can be paused or resumed on
+   **System health → Background migrations**. Until it has finished, a decision
+   also reads the conversation's own messages (one conversation at a time), so
+   nothing waits for it.
+
+**During a rolling upgrade, and after a rollback to v0.13, classification is not
+enforced.** A v0.13 replica does not check labels, does not record connector use
+and ignores the `classification` setting. For that reason **Warn and Block
+cannot be turned on until `migrate --post` has scheduled the backfill** (the
+setting is refused with a 409 and an explanation). If you turn the mode on and
+then roll back to v0.13, the mode is ignored by v0.13 and applies again when you
+return to v0.14; labels set meanwhile are kept.
+
+Rolling back to v0.13 leaves the new tables and triggers in place and harmless.
+
 ## Shutting down and draining
 
 From v0.11 an API replica drains when it is stopped, so replacing replicas

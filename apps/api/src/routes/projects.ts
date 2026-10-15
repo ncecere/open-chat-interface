@@ -2,6 +2,7 @@ import {
   createProjectSchema,
   DEFAULT_MAX_FILE_BYTES,
   DEFAULT_MAX_FILES_PER_MESSAGE,
+  setDataClassIdsSchema,
   updateProjectSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
@@ -10,6 +11,10 @@ import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
 import { assertAttachmentUseAllowed } from '../services/attachments/index.js';
+import { recordAudit } from '../services/audit.js';
+import { loadClasses } from '../services/classification/resolve.js';
+import { namesOf, setProjectClasses } from '../services/classification/store.js';
+import { toClassificationClass } from '../services/classification/view.js';
 import { uploadRateLimit } from '../services/limits/rate-limit.js';
 import {
   assertProjectsAllowed,
@@ -87,6 +92,34 @@ projectRoutes.patch('/:id', async (c) => {
   const user = currentUser(c);
   const patch = await parseBody(c, updateProjectSchema);
   return c.json({ project: await updateProject(c.req.param('id'), user.id, patch) });
+});
+
+/**
+ * The project's data classes (v0.14, #395): the whole list is replaced, and
+ * every conversation in the project carries them. A label an administrator
+ * set is locked: leaving it out answers 409.
+ */
+projectRoutes.put('/:id/data-classes', async (c) => {
+  const user = currentUser(c);
+  const input = await parseBody(c, setDataClassIdsSchema);
+  const projectId = c.req.param('id');
+  const result = await setProjectClasses(projectId, input.classIds, {
+    userId: user.id,
+    asAdmin: false,
+  });
+  await recordAudit({
+    actorUserId: user.id,
+    actorEmail: user.email,
+    action: 'project.data_classes.update',
+    targetType: 'project',
+    targetId: projectId,
+    metadata: {
+      by: 'owner',
+      before: await namesOf(result.before),
+      after: await namesOf(result.after),
+    },
+  });
+  return c.json({ classes: (await loadClasses({ projectId })).map(toClassificationClass) });
 });
 
 /** Conversations are detached and kept; files are deleted and their storage released; 409 while the owner is on legal hold. */

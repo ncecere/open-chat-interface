@@ -1,13 +1,17 @@
 import {
   createConnectorSchema,
+  setConnectorDataClassesSchema,
   updateConnectorSchema,
   updateConnectorToolSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
+import { validationFailed } from '../../lib/errors.js';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody } from '../../middleware/validate.js';
 import { recordAudit } from '../../services/audit.js';
 import { auditedAddress, failedReason } from '../../services/audit-test-details.js';
+import { classificationMode } from '../../services/classification/config.js';
+import { namesOf, setConnectorClasses } from '../../services/classification/store.js';
 import {
   createConnector,
   deleteConnector,
@@ -41,7 +45,26 @@ connectorRoutes.post('/', async (c) => {
       addUrlIssue(ctx, body.url, { allowPrivateNetwork: body.allowPrivateNetwork }),
     ),
   );
+  // With classification on, a new connector must say what it carries, or that
+  // it carries nothing: an unlabelled connector is unaffected by decision, so
+  // forgetting to label it would fail open (#395).
+  if (
+    (await classificationMode()) !== 'off' &&
+    input.dataClassIds === undefined &&
+    input.reviewed !== true
+  )
+    throw validationFailed(
+      'Say which data classes this connector carries, or that it carries none.',
+      [
+        {
+          path: ['dataClassIds'],
+          message: 'Choose the classes it carries, or confirm that it carries no classified data.',
+        },
+      ],
+    );
   const created = await createConnector(input);
+  if (input.dataClassIds !== undefined || input.reviewed)
+    await setConnectorClasses(created.id, input.dataClassIds ?? [], input.reviewed ?? false);
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
@@ -117,6 +140,32 @@ connectorRoutes.patch('/:id', async (c) => {
       changes: diffUpdate(existing, result.row, CONNECTOR_AUDITED_FIELDS),
       ...result.credentials,
       accountsRemoved: result.accountsRemoved,
+    },
+  });
+  return c.json(await getAdminConnector(existing.id));
+});
+
+/**
+ * What the connector carries (v0.14, #395): the whole list is replaced, and
+ * `reviewed` says someone looked, even if it carries nothing. Conversations that
+ * used it earlier take the new classes at once (they are read at decision time).
+ */
+connectorRoutes.put('/:id/data-classes', async (c) => {
+  const actor = currentUser(c);
+  const existing = await loadConnectorOrThrow(c.req.param('id'));
+  const input = await parseBody(c, setConnectorDataClassesSchema);
+  const result = await setConnectorClasses(existing.id, input.classIds, input.reviewed);
+  await recordAudit({
+    actorUserId: actor.id,
+    actorEmail: actor.email,
+    action: 'connector.data_classes.update',
+    targetType: 'connector',
+    targetId: existing.id,
+    metadata: {
+      slug: existing.slug,
+      before: await namesOf(result.before),
+      after: await namesOf(result.after),
+      reviewed: result.reviewed,
     },
   });
   return c.json(await getAdminConnector(existing.id));

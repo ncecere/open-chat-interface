@@ -5,6 +5,7 @@ import { notFound, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
 import { recordAudit } from '../services/audit.js';
+import { listNames, shareReadable } from '../services/classification/guard.js';
 import {
   assertShareLinkManagementAllowed,
   createShareLink,
@@ -24,7 +25,10 @@ const createShareLinkSchema = z
   })
   .strict();
 
-function serializeOwnerLink(link: Awaited<ReturnType<typeof listShareLinks>>[number]) {
+function serializeOwnerLink(
+  link: Awaited<ReturnType<typeof listShareLinks>>[number],
+  paused = false,
+) {
   return {
     id: link.id,
     slug: link.slug,
@@ -34,6 +38,8 @@ function serializeOwnerLink(link: Awaited<ReturnType<typeof listShareLinks>>[num
     expiresAt: link.expiresAt?.toISOString() ?? null,
     revokedAt: link.revokedAt?.toISOString() ?? null,
     createdAt: link.createdAt.toISOString(),
+    /** Not readable while the conversation carries a data class (v0.14); it returns when the label goes. */
+    paused,
   };
 }
 
@@ -52,7 +58,8 @@ shareLinkRoutes.get('/threads/:threadId', requireAuth, async (c) => {
 
   const threadId = idSchema.parse(c.req.param('threadId'));
   const links = await listShareLinks(threadId, user.id);
-  return c.json({ links: links.map(serializeOwnerLink) });
+  const paused = links.length > 0 && !(await shareReadable(threadId));
+  return c.json({ links: links.map((link) => serializeOwnerLink(link, paused)) });
 });
 
 shareLinkRoutes.post('/threads/:threadId', requireAuth, async (c) => {
@@ -66,11 +73,25 @@ shareLinkRoutes.post('/threads/:threadId', requireAuth, async (c) => {
     throw validationFailed('Expiration must be a valid date');
   }
 
-  const link = await createShareLink(threadId, user.id, {
-    upToMessageId: input.upToMessageId,
-    expiresAt,
-  });
-  return c.json({ link: serializeOwnerLink(link) }, 201);
+  let warned: string[] = [];
+  const link = await createShareLink(
+    threadId,
+    user.id,
+    { upToMessageId: input.upToMessageId, expiresAt },
+    // `warn`: allowed, and the person is told what `block` would have refused.
+    (decision) => {
+      warned = decision.outcome === 'warn' ? decision.missing.map((entry) => entry.name) : [];
+    },
+  );
+  return c.json(
+    {
+      link: serializeOwnerLink(link),
+      ...(warned.length && {
+        notice: `This conversation carries ${listNames(warned)}, and anyone with the link can read it.`,
+      }),
+    },
+    201,
+  );
 });
 
 /**

@@ -117,6 +117,7 @@ export async function streamResponse(
             role: turn.user.role,
             threadId: thread.id,
             messageId: assistantMessage.id,
+            modelSlug: resolved.slug,
           },
           turn.continuation?.approved,
         )
@@ -242,6 +243,8 @@ export async function streamResponse(
           writer.write({ type: 'data-context-window', data: { limited: true } });
         if (searchGroundingPart) writer.write(searchGroundingPart);
         if (turn.projectSearchPart) writer.write(turn.projectSearchPart);
+        // A continued reply already carries the notice it opened with.
+        if (turn.classificationPart && !turn.continuation) writer.write(turn.classificationPart);
         for (const source of sourceParts) writer.write(source);
         if (!current && capacity?.kind === 'waiting') {
           const waited = await waitForCapacity(capacity, {

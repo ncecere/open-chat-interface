@@ -69,6 +69,8 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'features') return { attachments: state.attachments, temporaryChat: true };
     if (key === 'storage') return { maxFilesPerMessage: 10 };
     if (key === 'roleFeatures') return state.roleFeatures;
+    // Data classification is off (v0.14): the default, nothing carried.
+    if (key === 'classification') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

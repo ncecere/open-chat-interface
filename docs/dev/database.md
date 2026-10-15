@@ -635,6 +635,54 @@ recomputes every stored vector, and the search switch moved to that migration,
 exactly as `0.13` did. Do not edit migration 0047, and do not change
 `fold.ts` alone: the unit test fails when they differ.
 
+## Data classification
+
+Data classification (#395, `SPEC-data-classification.md`, migration 0052) is
+join tables, not arrays: a deleted class cannot leave a dangling id, and "which
+models are approved for X" and "is X in use" are indexed lookups. Names live only
+in `data_class`; every other table holds ids, so a rename is one row.
+
+| Table | Holds | Deleting a class |
+|---|---|---|
+| `data_class` | the names, `retired_at` | only when nothing refers to it |
+| `model_data_class` | approvals | cascades |
+| `connector_data_class` | what a connector carries | restricted |
+| `project_data_class` | project labels, `locked` by an administrator | restricted |
+| `thread_data_class` | `person` and `kept` labels, `origin` | restricted |
+| `thread_connector_use` | the sticky fact that a conversation used a connector | n/a |
+
+A connector's classes are read **at decision time**, not copied when its tools
+run, so classifying a connector later reaches the conversations that used it
+earlier. Because that depends on the use being recorded, OCI writes
+`thread_connector_use` before every connector tool runs, in every mode.
+
+**Triggers, so every writer is covered** (the previous release included, as in
+0048): `thread_keep_project_classes` (BEFORE UPDATE OF `project_id`) and
+`project_keep_classes_on_delete` (BEFORE DELETE) freeze a project's labels onto
+its conversations as `kept` rows, and `connector_keep_classes_on_delete` does
+the same for a connector's classes onto the conversations that used it;
+`thread_copy_parent_classes` (AFTER INSERT, parent set) copies a fork's or an
+edit's labels and uses. The project delete trigger is BEFORE on purpose: the
+cascade to `project_data_class` and the `SET NULL` on `thread.project_id` are
+AFTER triggers with no guaranteed order between them
+(`classification-triggers.live.test.ts` proves the trigger works on its own).
+Tests that stand for a v0.13 replica write these rows through raw SQL.
+
+The background migration `0.14.thread-connector-use`
+(`packages/db/src/background/thread-connector-use.ts`) finds uses from before
+0052 in stored messages (`tool-mcp__<slug>__…` or a `dynamic-tool` part named
+`mcp__<slug>__…`), in `message` key order. It follows the usual rules: idempotent
+(`on conflict do nothing`), cursor by key. Code during the gap
+(`services/classification/resolve.ts`): while `isBackgroundMigrationDone` is
+false, a decision also scans **that conversation's** messages for connector tool
+parts, so nothing waits for the migration. A slug reused after its connector was
+deleted over-labels, which is the safe direction.
+
+The `classification` instance setting is
+`{ mode, services: { webSearch, embeddings, reranking } }`; a v0.13 replica
+ignores the unknown key. Setting a mode other than `off` is refused until the
+migration is scheduled (`migrate --post`, after every replica runs 0.14).
+
 ## Migrations under several replicas
 
 A private client pins advisory-lock acquisition, journal reads and DDL inside one

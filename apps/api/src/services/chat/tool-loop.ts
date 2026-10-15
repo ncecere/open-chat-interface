@@ -21,7 +21,12 @@ import { logger } from '../../lib/logger.js';
 import { allowanceExhausted } from '../quota/index.js';
 import { getSetting } from '../settings.js';
 import { recordToolCall } from '../tools/audit.js';
-import { ToolFailure, type TurnTools, toolDefinition } from '../tools/registry.js';
+import {
+  TOOL_UNAVAILABLE_TEXT,
+  ToolFailure,
+  type TurnTools,
+  toolDefinition,
+} from '../tools/registry.js';
 import { contextBudget, messageCost, textCost } from './context-budget.js';
 
 /** The administrator's step limit, clamped to the allowed range. */
@@ -51,9 +56,9 @@ export function toolStreamErrorText(error: unknown): string {
     // The SDK reports a call it could not parse as its error message.
     const invalid = /^(?:AI_InvalidToolInputError: )?Invalid input for tool ([\w.-]+):/.exec(error);
     if (invalid?.[1]) return invalidInputText(invalid[1], issuesInText(error));
-    return 'This tool is not available in this conversation.';
+    return TOOL_UNAVAILABLE_TEXT;
   }
-  if (NoSuchToolError.isInstance(error)) return 'This tool is not available in this conversation.';
+  if (NoSuchToolError.isInstance(error)) return TOOL_UNAVAILABLE_TEXT;
   return 'An error occurred.';
 }
 

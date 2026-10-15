@@ -206,7 +206,13 @@ describe.skipIf(!available)('live user memory', () => {
       const { rememberTool, forgetTool } = await import('../../services/memory/tools.js');
       const chat = await thread(owner, true);
       const kept = await seedMemory('Keep me');
-      const caller = { userId: owner, role: 'user' as const, threadId: chat.id, messageId: 'm' };
+      const caller = {
+        userId: owner,
+        role: 'user' as const,
+        threadId: chat.id,
+        messageId: 'm',
+        modelSlug: 'tool-model',
+      };
       const options = { signal: new AbortController().signal, caller };
       await expect(rememberTool.execute({ content: 'Leaked' }, options)).rejects.toMatchObject({
         status: 403,

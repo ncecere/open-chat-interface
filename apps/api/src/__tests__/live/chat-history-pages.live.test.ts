@@ -35,6 +35,8 @@ vi.mock('../../services/settings.js', () => ({
     if (key === 'features')
       return { attachments: true, temporaryChat: true, shareLinks: true, branching: true };
     if (key === 'roleFeatures') return { roles: { user: { branching: true } } };
+    // Data classification is off (v0.14): the default, nothing carried.
+    if (key === 'classification') return {};
     throw new Error(`Unexpected setting: ${key}`);
   },
 }));

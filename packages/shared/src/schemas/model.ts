@@ -91,6 +91,8 @@ export const adminModelSchema = catalogModelSchema.extend({
   outputPriceMicros: z.number().int().nonnegative().nullable(),
   enabled: z.boolean(),
   visibleToRoles: z.array(z.enum(USER_ROLES)),
+  /** Data classes the model is approved for (v0.14, #395); none means none. */
+  dataClassIds: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

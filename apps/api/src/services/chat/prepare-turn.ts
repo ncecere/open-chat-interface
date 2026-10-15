@@ -1,4 +1,4 @@
-import { DEFAULT_MAX_TOOL_STEPS } from '@oci/shared';
+import { type DataClassificationPartData, DEFAULT_MAX_TOOL_STEPS } from '@oci/shared';
 import type { UIMessage } from 'ai';
 import type { SearchResult } from '../search/index.js';
 import type { CompactionCheck } from './compaction-queue.js';
@@ -46,6 +46,11 @@ export type PreparedTurn = TurnContext & {
       provider?: string;
       fallback?: boolean;
     };
+  } | null;
+  /** Set when `warn` let this turn through to a model not approved for what it carries (v0.14). */
+  classificationPart?: {
+    type: 'data-classification';
+    data: DataClassificationPartData;
   } | null;
   /** Set when project files were searched or left out; names, counts and short excerpts. */
   projectSearchPart?: ProjectSearchPart | null;
@@ -113,6 +118,9 @@ export async function prepareTurn(context: TurnContext, run: AcquiredRun): Promi
     sourceParts: model.sourceParts,
     searchGroundingPart: model.searchGroundingPart,
     projectSearchPart: model.projectSearchPart,
+    classificationPart: context.classification?.warning
+      ? { type: 'data-classification', data: context.classification.warning }
+      : null,
     recoverOverflow,
     compactionCheck: model.compactionCheck,
   };

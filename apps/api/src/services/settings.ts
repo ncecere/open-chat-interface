@@ -1,6 +1,8 @@
 import { and, eq, schema } from '@oci/db';
 import {
   type CapacityLimits,
+  type ClassificationMode,
+  type ClassificationService,
   COLOR_THEMES,
   type ColorTheme,
   MFA_DEFAULT_GRACE_DAYS,
@@ -34,7 +36,8 @@ export type SettingKey =
   | 'backups'
   | 'compliance'
   | 'providerCapacity'
-  | 'maintenance';
+  | 'maintenance'
+  | 'classification';
 
 export interface BrandingSettings {
   appName: string;
@@ -387,6 +390,17 @@ export interface StoredMaintenanceSettings {
   keepRunningJobs?: string[];
 }
 
+/**
+ * Data classification (v0.14, #395). Sparse: nothing saved means `off` with no
+ * approvals. A v0.13 replica ignores the key. Normalised by
+ * services/classification/config.ts.
+ */
+export interface StoredClassificationSettings {
+  mode?: ClassificationMode;
+  /** Class ids each outside service may receive; absent means none. */
+  services?: Partial<Record<ClassificationService, string[]>>;
+}
+
 interface SettingsMap {
   branding: BrandingSettings;
   auth: AuthSettings;
@@ -405,6 +419,7 @@ interface SettingsMap {
   compliance: StoredComplianceSettings;
   providerCapacity: StoredProviderCapacitySettings;
   maintenance: StoredMaintenanceSettings;
+  classification: StoredClassificationSettings;
 }
 
 /**

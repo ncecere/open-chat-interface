@@ -3,6 +3,7 @@ import { chunkSearchFolded } from './chunk-search-folded.js';
 import { messageSearchFolded } from './message-search-folded.js';
 import { secretReencryptionMigrations } from './reencrypt-secrets.js';
 import { TEST_BACKGROUND_MIGRATIONS } from './test-definitions.js';
+import { threadConnectorUse } from './thread-connector-use.js';
 import type { BackgroundMigrationDefinition } from './types.js';
 import { usageRollupBackfill } from './usage-rollups.js';
 
@@ -21,6 +22,7 @@ export {
   setSecretCodec,
 } from './reencrypt-secrets.js';
 export { rewriteMessagesInPlace } from './test-definitions.js';
+export { THREAD_CONNECTOR_USE, threadConnectorUse } from './thread-connector-use.js';
 export type {
   BackgroundBatchInput,
   BackgroundBatchResult,
@@ -49,6 +51,9 @@ const RELEASE_BACKGROUND_MIGRATIONS: readonly BackgroundMigrationDefinition[] = 
   messageSearchFolded,
   // 0.13: the same for project file passages (#362).
   chunkSearchFolded,
+  // 0.14: connector tools used before 0052 (or on a v0.13 replica in the upgrade
+  // window) become thread_connector_use rows, for data classification (#395).
+  threadConnectorUse,
 ];
 
 /** Test-only definitions enabled by name, comma-separated. */

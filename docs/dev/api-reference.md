@@ -7,7 +7,7 @@ Every route the API registers, grouped by the file that defines it.
 Administrative routes require the `admin` role; an `auditor` may call the
 read-only ones. See [identity and access](../admin/identity.md).
 
-Generated from 44 route files.
+Generated from 46 route files.
 
 ## `routes/admin/audit.ts`
 
@@ -37,6 +37,20 @@ Generated from 44 route files.
 | DELETE | `/api/admin/broadcasts/:id` | — |
 | POST | `/api/admin/broadcasts/:id/reshow` | Clears everyone's dismissals, so an updated announcement is shown again. |
 
+## `routes/admin/classification.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/classification` | — |
+| PATCH | `/api/admin/classification` | — |
+| GET | `/api/admin/data-classes` | Every class, retired ones included, with where each is used. |
+| POST | `/api/admin/data-classes` | — |
+| PATCH | `/api/admin/data-classes/:id` | A rename keeps the id, so every label and approval follows; the audit entry names both. |
+| DELETE | `/api/admin/data-classes/:id` | Only a class nothing refers to; 409 with counts otherwise. |
+| POST | `/api/admin/data-classes/:id/retire` | Hides the class from pickers and refuses new labels; existing labels and approvals still count. |
+| PUT | `/api/admin/projects/:id/data-classes` | — |
+| GET | `/api/admin/users/:id/projects` | — |
+
 ## `routes/admin/compliance.ts`
 
 | Method | Path | Purpose |
@@ -58,6 +72,7 @@ Generated from 44 route files.
 | GET | `/api/admin/connectors/:id` | Returns one connector with its tools. |
 | PATCH | `/api/admin/connectors/:id` | Changes a connector; only sent fields change. |
 | DELETE | `/api/admin/connectors/:id` | Deletes a connector with its tools, everyone's connections and its role allows. |
+| PUT | `/api/admin/connectors/:id/data-classes` | What the connector carries (v0.14, #395): the whole list is replaced, and `reviewed` says someone looked, even if it carries nothing. |
 | POST | `/api/admin/connectors/:id/refresh` | Lists the server's tools and stores them; new tools start disabled, vanished ones are marked missing. |
 | POST | `/api/admin/connectors/:id/test` | Checks that the server answers the MCP handshake and lists its tools. |
 | PATCH | `/api/admin/connectors/:id/tools/:toolId` | Switches one connector tool on or off, or changes its kind. |
@@ -129,6 +144,7 @@ Generated from 44 route files.
 | PATCH | `/api/admin/models/:id` | — |
 | DELETE | `/api/admin/models/:id` | — |
 | PUT | `/api/admin/models/:id/capacity` | A model's own provider capacity limits (v0.11), within its provider's. |
+| PUT | `/api/admin/models/:id/data-classes` | The data classes the model is approved for (v0.14, #395): the whole list is replaced. |
 
 ## `routes/admin/overrides.ts`
 
@@ -152,6 +168,7 @@ Generated from 44 route files.
 | POST | `/api/admin/policies` | Creates the next version. |
 | PATCH | `/api/admin/policies/:id` | Rewords a draft. |
 | DELETE | `/api/admin/policies/:id` | Deletes a draft. |
+| GET | `/api/admin/policies/:id/acceptances` | Who accepted one version and when, with their email, for administrators and auditors (#373): the latest 200, and the counts of accounts that exist and of accounts deleted since. |
 | POST | `/api/admin/policies/:id/publish` | — |
 
 ## `routes/admin/providers.ts`
@@ -184,6 +201,7 @@ Generated from 44 route files.
 | POST | `/api/admin/reports` | — |
 | PATCH | `/api/admin/reports/:id` | — |
 | DELETE | `/api/admin/reports/:id` | — |
+| POST | `/api/admin/reports/:id/send` | Sends one report now, whether or not it is due (#352): what an administrator uses after a failure, instead of waiting for a retry or deleting and recreating the report. |
 | POST | `/api/admin/reports/run` | Sends every due report immediately. |
 
 ## `routes/admin/reranking.ts`
@@ -275,9 +293,9 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/artifacts` | `GET /api/artifacts?threadId=…`: every artifact of one conversation, oldest first. Each has a `kind` (`html`, `svg`, `mermaid`, `markdown` or `code`) and a `language`: a code artifact's (`python`, `bash`, ...), null for the other kinds (#298). |
+| GET | `/api/artifacts` | `GET /api/artifacts?threadId=…`: every artifact of one conversation, oldest first. |
 | GET | `/api/artifacts/:id` | The artifact, its versions (newest first) and the current version's content. |
-| GET | `/api/artifacts/:id/export` | Downloads a Markdown artifact (the current version, or `?version=`) as DOCX, PDF, XLSX or PPTX. Other kinds, code included, are refused with 422. |
+| GET | `/api/artifacts/:id/export` | Downloads a Markdown artifact (the current version, or `?version=`) as DOCX, PDF, XLSX or PPTX. |
 | POST | `/api/artifacts/:id/versions` | A person's edit of a Markdown document, saved as a new version. |
 | GET | `/api/artifacts/:id/versions/:version` | — |
 
@@ -285,11 +303,11 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. `unsent` marks a chat file not sent with any message. `conversation` (`id`, `title`) is the conversation a chat file was sent in, `null` for a project file or an unsent upload: a fork or an edit has a row, and so a line, of its own for each file it shows (#358). |
+| GET | `/api/attachments` | Chat files and project files (labelled with their project), newest first, at most 500. |
 | POST | `/api/attachments` | — |
-| DELETE | `/api/attachments/:id` | Moves a chat file to the trash. The `data-attachment` part of the message that shows it is kept and marked `removed: true` (with `filename`, `mimeType` and `sizeBytes` filled in from the row), not filtered out, so the conversation, the model's "no longer available" notice, the Markdown export and the full export's message JSON still have it after the row is purged (#378). Only the message of that row is marked: a fork's or an edit's copy is its own row (#358). Parts of files deleted before this change were already dropped and are not recovered. |
-| DELETE | `/api/attachments/:id/unsent` | Discards an upload the composer leaves unsent (moves it to the trash, as `DELETE /api/attachments/:id` does). A file sent with a message meanwhile is kept. Returns `removed`. |
-| GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. Each conversation that shows a file has its own attachment id for it (#358), so the id in a message's `data-attachment` part is the one to open. |
+| DELETE | `/api/attachments/:id` | — |
+| GET | `/api/attachments/:id/content` | Files are streamed through the API so ownership is always enforced. |
+| DELETE | `/api/attachments/:id/unsent` | Discards an upload the composer is leaving behind unsent (#297): New Chat, or another conversation, with files attached and not sent. |
 | GET | `/api/attachments/usage` | Consumption and the role's allowance, for the storage meter in settings. |
 
 ## `routes/auth-status.ts`
@@ -297,7 +315,7 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/auth/accept-invite` | — |
-| POST | `/api/auth/accept-invite/validate` | Whether an invitation link can be used: `emailLocked`, and `email`, the address it is for (null when it is for none). |
+| POST | `/api/auth/accept-invite/validate` | — |
 | GET | `/api/auth/status` | Public bootstrap payload for the login screen: which auth methods exist and how the instance is branded. |
 
 ## `routes/branding.ts`
@@ -312,9 +330,16 @@ Generated from 44 route files.
 | --- | --- | --- |
 | POST | `/api/chat` | — |
 | POST | `/api/chat/:threadId/approvals` | Answers a reply's open tool approvals and continues the same assistant message under the durable claim, streaming like a new reply. |
-| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. A `data-attachment` part whose file can no longer be opened (deleted, expired or gone) carries `available: false` in its `data`, so the page shows it as removed (computed on read from the row, #359; a part stored with `removed: true` is marked too, #378). The same in `GET /api/threads/:id`. |
+| GET | `/api/chat/:threadId/messages` | Returns stored messages in the AI SDK UI format for hydration: the active conversation, plus `replies`, every reply to the latest turn (oldest first) when it was retried, so the reader can switch between them. |
 | GET | `/api/chat/:threadId/stream` | Replays the active SSE stream after authenticating the thread owner. |
 | DELETE | `/api/chat/:threadId/stream` | Explicit stop request; also reaches a producer running in another API process via Redis. |
+
+## `routes/classification.ts`
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/classification` | — |
+| GET | `/api/data-classes` | The classes that can still be added as a label. |
 
 ## `routes/connectors.ts`
 
@@ -337,7 +362,6 @@ Generated from 44 route files.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET/POST | `/api/auth/*` | Better Auth owns every other /api/auth/* path; sign-in, sign-up, password reset and verification are limited per client address and per account (RATE_LIMIT_AUTH_PER_MINUTE: 429 with Retry-After). |
-| ALL | `/api/auth/admin/*` | Answers 404: Better Auth's admin endpoints are closed. Accounts are managed under /api/admin/users, which audits every change, sends webhooks, and checks legal holds and the last administrator. |
 
 ## `routes/maintenance.ts`
 
@@ -357,7 +381,7 @@ Generated from 44 route files.
 | POST | `/api/me/onboarding/accept-policy` | — |
 | POST | `/api/me/onboarding/complete` | — |
 | POST | `/api/me/onboarding/skip` | — |
-| PATCH | `/api/me/preferences` | Saves the person's preferences. A body with no field to change is refused with 422 naming the fields. |
+| PATCH | `/api/me/preferences` | Saves the person's preferences. |
 | GET | `/api/me/sessions` | Settings → Account → Devices: where this person is signed in, this device first. |
 | DELETE | `/api/me/sessions/:id` | Signs out one other device (404 for anyone else's or an unknown session). |
 | POST | `/api/me/sessions/revoke-others` | Signs out every other device. |
@@ -387,7 +411,7 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/me/export` | Downloads every conversation, its JSON record, and attached files as one ZIP, streamed as it is written. Each conversation, forks and edits included, lists the files its messages show and has its own folder of them under `attachments/` (#364). |
+| GET | `/api/me/export` | Downloads every conversation, its JSON record, and attached files as one ZIP, streamed as it is written. |
 | GET | `/api/me/imports` | The person's imports and their progress, newest first. |
 | POST | `/api/me/imports` | Accepts a ChatGPT or Claude export (`.zip`, or the `conversations.json` inside it) and queues it for background processing. |
 | DELETE | `/api/me/imports/:id` | Removes a queued or finished import and its stored upload; 409 while it is running. |
@@ -401,6 +425,7 @@ Generated from 44 route files.
 | GET | `/api/projects/:id` | One of the person's projects; 404 for anyone else's. |
 | PATCH | `/api/projects/:id` | Renames a project or changes its instructions; only the sent fields change. |
 | DELETE | `/api/projects/:id` | Conversations are detached and kept; files are deleted and their storage released; 409 while the owner is on legal hold. |
+| PUT | `/api/projects/:id/data-classes` | The project's data classes (v0.14, #395): the whole list is replaced, and every conversation in the project carries them. |
 | GET | `/api/projects/:id/files` | The project's files, oldest first. |
 | POST | `/api/projects/:id/files` | Uploads through the same validation and storage path as chat attachments, so it also needs attachments to be allowed for the role and the instance, shares the upload rate limit, and counts against the storage allowance. |
 | DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright, releasing its storage at once; 409 while the owner is on legal hold. |
@@ -421,15 +446,17 @@ Generated from 44 route files.
 | --- | --- | --- |
 | GET | `/api/threads` | Live conversations, pinned first then newest, at most 200; `view=sidebar` leaves out unpinned project conversations. |
 | POST | `/api/threads` | Starts a conversation, or answers 429 with Retry-After when the person starts them faster than their role's messages per minute or already has ten unused untitled ones from the last minute (v0.10.2). |
-| GET | `/api/threads/:id` | The conversation and its stored messages; a file that can no longer be opened is marked `available: false` in its `data-attachment` part, as in `GET /api/chat/:threadId/messages` (#359). |
+| GET | `/api/threads/:id` | — |
 | PATCH | `/api/threads/:id` | Renames (title, trimmed, 1–200 characters), pins, archives or moves a conversation; only the sent fields change. |
 | DELETE | `/api/threads/:id` | Moves the thread to the trash rather than destroying it. |
-| POST | `/api/threads/:id/branches` | Copies the conversation before `messageId` (a question) into a new one ending with `text` as the revised question, titled from that text. The revised question keeps the original's files, or only those listed in `attachmentIds` (each must be one of the original's; others are refused with 422). Returns `thread` and `message`, the revised question (`id`, `modelSlug`, `effort`). Each kept file gets an attachment row of its own in the new conversation, on the same stored object, so deleting the original never removes it (#358). |
+| POST | `/api/threads/:id/branches` | — |
 | POST | `/api/threads/:id/compact` | "Summarise earlier messages now": queues a background summary of the earlier turns, optionally with instructions for it, using the given model (the composer's) or the latest reply's, and returns 202 at once with the same body as GET. |
 | GET | `/api/threads/:id/compaction` | The compaction in use (its summary and where the verbatim messages start), whether a background summary is queued or being made (`pending`), and the last failure of a summary the person asked for (`failure`, v0.10). |
 | DELETE | `/api/threads/:id/compaction/failure` | Dismisses the report of a failed summary (v0.10) and returns the state as GET does. |
-| GET | `/api/threads/:id/export` | Downloads one conversation as Markdown, dated in `?timeZone=` (an IANA zone, such as the browser's; UTC when absent or unknown). |
-| POST | `/api/threads/:id/forks` | Copies the conversation through `messageId` into a new one titled "Fork of …"; returns `thread` and `message`, the copy of the message forked at (`id`, `role`, `modelSlug`, `effort`). Files, like artifacts, are copied: each file in the copied questions gets an attachment row of its own, counted in the person's storage (a fork is never refused for lack of allowance), on the same stored object (#358). |
+| POST | `/api/threads/:id/data-classes` | Labels the person's own conversation with a data class (v0.14, #395). |
+| DELETE | `/api/threads/:id/data-classes/:classId` | Removes a label the person added. |
+| GET | `/api/threads/:id/export` | Downloads one conversation as Markdown. |
+| POST | `/api/threads/:id/forks` | — |
 | PATCH | `/api/threads/:id/messages/:messageId/active` | Chooses which reply to the latest turn is active: the one shown, sent to the model as context, exported and shared. |
 | GET | `/api/threads/:id/messages/:messageId/export` | Downloads one assistant reply on the active path as DOCX, PDF, XLSX or PPTX. |
 | DELETE | `/api/threads/:id/permanent` | Destroys a trashed thread now, without waiting out the grace window. |

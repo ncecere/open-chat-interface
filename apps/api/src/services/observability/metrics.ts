@@ -237,6 +237,18 @@ export const chatReplyDuration = register(
 export const toolCalls = register(
   new Counter('oci_tool_calls_total', 'Tool calls by tool id and outcome.', ['tool', 'outcome']),
 );
+/**
+ * Data classification decisions (v0.14): counted only for a conversation that
+ * carries at least one class. No class label: names may be sensitive and the
+ * set is open-ended.
+ */
+export const classificationDecisions = register(
+  new Counter(
+    'oci_classification_decisions_total',
+    'Data classification decisions by point and outcome.',
+    ['point', 'outcome'],
+  ),
+);
 export const toolCallDuration = register(
   new Histogram(
     'oci_tool_call_duration_seconds',

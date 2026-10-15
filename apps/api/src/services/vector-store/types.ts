@@ -171,7 +171,18 @@ export interface VectorStore {
    */
   pendingPassages(
     generation: Generation,
-    options: { limit: number; attachmentId?: string; after?: PassageRef },
+    options: {
+      limit: number;
+      attachmentId?: string;
+      after?: PassageRef;
+      /**
+       * Data classification (v0.14): leave out the passages of files in a
+       * project that carries a class not in this list. Absent means no filter.
+       * Applied here, not afterwards, so skipped files cannot fill a page and
+       * starve the others.
+       */
+      approvedClassIds?: readonly string[];
+    },
   ): Promise<PendingPassage[]>;
   /** Writes vectors; a passage's earlier vector in this generation is replaced. */
   upsert(generation: Generation, passages: PassageVector[]): Promise<void>;

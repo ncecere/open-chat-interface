@@ -365,6 +365,13 @@
       "when": 1790539200031,
       "tag": "0051_session_auth_method_passkeys",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1790539200032,
+      "tag": "0052_data_classification",
+      "breakpoints": true
     }
   ]
 }

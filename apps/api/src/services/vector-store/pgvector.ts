@@ -354,7 +354,12 @@ export class PgvectorStore implements VectorStore {
 
   async pendingPassages(
     generation: Generation,
-    options: { limit: number; attachmentId?: string; after?: PassageRef },
+    options: {
+      limit: number;
+      attachmentId?: string;
+      after?: PassageRef;
+      approvedClassIds?: readonly string[];
+    },
   ): Promise<PendingPassage[]> {
     if ((await this.readySchema(generation)) === null) return [];
     const after = options.after;
@@ -376,6 +381,23 @@ export class PgvectorStore implements VectorStore {
       where e.attachment_id is null
         and ${LIVE_FILE}
         and (f.retry_at is null or f.retry_at <= now())
+        ${
+          // A project carrying a class the embeddings provider is not approved for.
+          options.approvedClassIds
+            ? sql`and not exists (
+                select 1 from project_data_class pdc
+                where pdc.project_id = a.project_id
+                  and pdc.data_class_id <> all(${
+                    options.approvedClassIds.length
+                      ? sql`array[${sql.join(
+                          options.approvedClassIds.map((id) => sql`${id}`),
+                          sql`, `,
+                        )}]::text[]`
+                      : sql`array[]::text[]`
+                  })
+              )`
+            : sql``
+        }
         ${options.attachmentId ? sql`and c.attachment_id = ${options.attachmentId}` : sql``}
         ${after ? sql`and (c.attachment_id, c.ordinal) > (${after.attachmentId}, ${after.ordinal}::int)` : sql``}
       ${

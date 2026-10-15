@@ -46,6 +46,8 @@ export {
   secretReencryptionMigrations,
   setSecretCodec,
   TEST_BACKGROUND_MIGRATIONS_ENV,
+  THREAD_CONNECTOR_USE,
+  threadConnectorUse,
   usageRollupBackfill,
 } from './background/index.js';
 export * from './client.js';
