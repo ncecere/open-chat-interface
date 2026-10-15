@@ -24,6 +24,7 @@ import {
 import { recordAudit } from '../services/audit.js';
 import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
 import { userConnectors } from '../services/connectors/people.js';
+import { countManagedGroups } from '../services/groups/membership.js';
 import { listAvailableModels } from '../services/models.js';
 import {
   acceptPolicy,
@@ -106,6 +107,7 @@ meRoutes.get('/', async (c) => {
     memoryEntries,
     connectors,
     shareLinks,
+    managedGroups,
   ] = await Promise.all([
     loadPreferences(user.id),
     getSetting('features'),
@@ -117,6 +119,7 @@ meRoutes.get('/', async (c) => {
     memoryEntryCount(user.id),
     userConnectors(user),
     activeShareLinkCount(user.id),
+    countManagedGroups(user.id),
   ]);
   const { reasoningEfforts, ...effective } = combineFeatures(features, search, own);
   const instanceEffort: ReasoningEffort = chat.defaultEffort ?? 'instant';
@@ -148,9 +151,15 @@ meRoutes.get('/', async (c) => {
     /**
      * v0.9.1: what Settings needs to hide sections with nothing in them
      * without fetching each section on every settings page. `shareLinks`
-     * (v0.10) counts links not yet revoked.
+     * (v0.10) counts links not yet revoked. `managedGroups` (v0.14) is how
+     * many groups the person manages: Settings → Groups shows for managers only.
      */
-    settingsSummary: { memoryEntries, connectors: connectors.length, shareLinks },
+    settingsSummary: {
+      memoryEntries,
+      connectors: connectors.length,
+      shareLinks,
+      managedGroups,
+    },
     // Instance switches narrowed by the role's own. Web search is advertised
     // only when a search would actually run.
     features: { ...features, ...effective },

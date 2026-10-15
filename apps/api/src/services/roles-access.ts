@@ -1,6 +1,13 @@
-import { and, count, eq, schema } from '@oci/db';
-import { type RoleAccess, type RolesAccess, USER_ROLES, type UserRole } from '@oci/shared';
+import { and, asc, count, eq, inArray, schema, sql } from '@oci/db';
+import {
+  type RoleAccess,
+  type RolesAccess,
+  type RolesAccessGroup,
+  USER_ROLES,
+  type UserRole,
+} from '@oci/shared';
 import { db } from '../db/index.js';
+import { memberCounts } from './groups/membership.js';
 import { getConfigSources, getRateLimitSettings } from './lifecycle/settings.js';
 import { getDefaultOrganizationId } from './organization.js';
 import { combineFeatures, resolveRoleFeatures } from './role-features.js';
@@ -107,5 +114,56 @@ export async function getRolesAccess(): Promise<RolesAccess> {
     };
   });
 
-  return { roles };
+  return { roles, groups: await getGroupsAccess(organizationId) };
+}
+
+/**
+ * The Groups section of the page (v0.14): what each group adds on top of a role,
+ * read-only. Groups only add; per-role counts above stay role-only on purpose.
+ */
+async function getGroupsAccess(organizationId: string): Promise<RolesAccessGroup[]> {
+  const groups = await db
+    .select({ id: schema.group.id, name: schema.group.name })
+    .from(schema.group)
+    .where(eq(schema.group.organizationId, organizationId))
+    .orderBy(asc(sql`lower(${schema.group.name})`), asc(schema.group.id));
+  if (groups.length === 0) return [];
+  const ids = groups.map((group) => group.id);
+  const [counts, budgets, models] = await Promise.all([
+    memberCounts(ids),
+    db
+      .select({
+        groupId: schema.quotaPolicyGroup.groupId,
+        id: schema.quotaPolicy.id,
+        name: schema.quotaPolicy.name,
+        enabled: schema.quotaPolicy.enabled,
+      })
+      .from(schema.quotaPolicyGroup)
+      .innerJoin(schema.quotaPolicy, eq(schema.quotaPolicyGroup.policyId, schema.quotaPolicy.id))
+      .where(inArray(schema.quotaPolicyGroup.groupId, ids))
+      .orderBy(asc(sql`lower(${schema.quotaPolicy.name})`)),
+    db
+      .select({
+        groupId: schema.modelGroupAccess.groupId,
+        id: schema.model.id,
+        displayName: schema.model.displayName,
+        enabled: schema.model.enabled,
+      })
+      .from(schema.modelGroupAccess)
+      .innerJoin(schema.model, eq(schema.modelGroupAccess.modelId, schema.model.id))
+      .where(inArray(schema.modelGroupAccess.groupId, ids))
+      .orderBy(asc(schema.model.sortOrder), asc(schema.model.displayName)),
+  ]);
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    memberCount: counts.get(group.id)?.members ?? 0,
+    managerCount: counts.get(group.id)?.managers ?? 0,
+    budgets: budgets
+      .filter((row) => row.groupId === group.id)
+      .map(({ groupId: _groupId, ...budget }) => budget),
+    models: models
+      .filter((row) => row.groupId === group.id)
+      .map(({ groupId: _groupId, ...model }) => model),
+  }));
 }

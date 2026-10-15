@@ -267,6 +267,53 @@ describe.skipIf(!available)('live: administering groups', () => {
     });
   });
 
+  describe('legal hold', () => {
+    it('does not stop a person on hold being removed from a group, nor the group being deleted: membership is configuration', async () => {
+      const held = await person(live.db, organizationId);
+      await live.db.insert(schema.legalHold).values({
+        organizationId,
+        userId: held.id,
+        userEmail: held.email,
+        reason: 'Matter 2026-41',
+      });
+      const group = await groupNamed(live.db, organizationId, 'Held people');
+      await addMember(live.db, group.id, held.id);
+      expect(
+        (await call(admin, 'DELETE', `/admin/groups/${group.id}/members/${held.id}`)).status,
+      ).toBe(200);
+      await addMember(live.db, group.id, held.id);
+      expect((await call(admin, 'DELETE', `/admin/groups/${group.id}`)).status).toBe(200);
+      // The person, and the hold on them, are untouched.
+      expect(
+        await live.db.select().from(schema.legalHold).where(eq(schema.legalHold.userId, held.id)),
+      ).toHaveLength(1);
+      expect(
+        await live.db.select().from(schema.user).where(eq(schema.user.id, held.id)),
+      ).toHaveLength(1);
+    });
+
+    it('lets an account on hold stay refused deletion while in a group (the trigger is unchanged)', async () => {
+      const held = await person(live.db, organizationId);
+      await live.db.insert(schema.legalHold).values({
+        organizationId,
+        userId: held.id,
+        userEmail: held.email,
+        reason: 'Matter 2026-42',
+      });
+      const group = await groupNamed(live.db, organizationId, 'Held and refused');
+      await addMember(live.db, group.id, held.id);
+      await expect(
+        live.db.execute(sql`delete from "user" where id = ${held.id}`),
+      ).rejects.toThrow();
+      expect(
+        await live.db
+          .select()
+          .from(schema.groupMember)
+          .where(eq(schema.groupMember.userId, held.id)),
+      ).toHaveLength(1);
+    });
+  });
+
   describe('at the same moment', () => {
     it('lets one of two creates with the same name win, and one of two at the cap', async () => {
       const same = await atOnce(() =>

@@ -187,6 +187,24 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
     hold: 'exempt',
     how: 'Instance configuration.',
   },
+  // Groups (v0.14): who belongs to a group, and what a group grants, are configuration. No
+  // record of anyone's conversations, files or usage is removed with them.
+  'services/groups/groups.ts group': {
+    hold: 'exempt',
+    how: 'Instance configuration: deleting a group removes its membership and grants, never a person’s records.',
+  },
+  'services/groups/membership.ts groupMember': {
+    hold: 'exempt',
+    how: 'Membership is configuration; a held person can be removed from a group (their records are untouched).',
+  },
+  'services/groups/grants.ts quotaPolicyGroup': {
+    hold: 'exempt',
+    how: 'Instance configuration: which budgets a group carries.',
+  },
+  'services/groups/grants.ts modelGroupAccess': {
+    hold: 'exempt',
+    how: 'Instance configuration: which models a group may use.',
+  },
   'services/webhooks/delivery.ts webhookDelivery': {
     hold: 'exempt',
     how: 'Delivered webhook queue rows; the audit entries they carried stay.',

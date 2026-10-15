@@ -1,6 +1,7 @@
 import {
   addGroupMembersSchema,
   createGroupSchema,
+  groupUsageQuerySchema,
   listGroupMembersQuerySchema,
   listGroupsQuerySchema,
   putGroupGrantsSchema,
@@ -26,6 +27,7 @@ import {
   listUserGroups,
   removeGroupMember,
 } from '../../services/groups/membership.js';
+import { groupUsage } from '../../services/groups/usage.js';
 
 /**
  * Administering groups (v0.14, #394). Mounted under `/api/admin`, so
@@ -96,6 +98,12 @@ groupAdminRoutes.delete('/:id/members/:userId', async (c) => {
 
 groupAdminRoutes.get('/:id/grants', async (c) => {
   return c.json(await getGroupGrants(c.req.param('id')));
+});
+
+/** Usage by the group's current members; administrators and auditors only (a manager never sees it). */
+groupAdminRoutes.get('/:id/usage', async (c) => {
+  const { days } = parseQuery(c, groupUsageQuerySchema);
+  return c.json(await groupUsage(c.req.param('id'), days));
 });
 
 /**
