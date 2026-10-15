@@ -20,7 +20,10 @@ export function SearchResultContent({ result }: { result: ThreadSearchResult }) 
   return (
     <>
       <span className="flex min-w-0 items-center gap-2">
-        <span dir="auto" className="min-w-0 flex-1 truncate font-medium text-[var(--text-primary)]">
+        <span
+          dir="auto"
+          className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium text-[var(--text-primary)]"
+        >
           <HighlightedText text={result.titleHighlight || result.thread.title} />
         </span>
         {result.thread.archived && (

@@ -26,13 +26,16 @@ function GroupRow({ group }: { group: AdminGroup }) {
         <Link
           to="/admin/groups/$groupId"
           params={{ groupId: group.id }}
-          className="block truncate font-medium text-[var(--text-primary)] underline-offset-4 hover:underline"
+          className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium text-[var(--text-primary)] underline-offset-4 hover:underline"
           title={group.name}
         >
           {group.name}
         </Link>
         {group.description && (
-          <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]" title={group.description}>
+          <p
+            className="mt-0.5 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]"
+            title={group.description}
+          >
             {group.description}
           </p>
         )}

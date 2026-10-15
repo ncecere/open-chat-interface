@@ -81,7 +81,10 @@ function AllowanceMeter({ allowance }: { allowance: UsageAllowance }) {
       <div className="flex items-baseline justify-between gap-2">
         {/* What is counted, not the policy's name, which is the
             administrator's (#93); in full on hover if the rail cuts it. */}
-        <span className="truncate text-sm text-[var(--text-secondary)]" title={label}>
+        <span
+          className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm text-[var(--text-secondary)]"
+          title={label}
+        >
           {label}
         </span>
         <span

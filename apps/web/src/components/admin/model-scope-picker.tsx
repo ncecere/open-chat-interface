@@ -146,7 +146,9 @@ export function ModelScopePicker({
                       className="size-4 shrink-0 accent-[var(--accent)]"
                     />
                     <LabLogo labId={model.labId} />
-                    <span className="min-w-0 flex-1 truncate">{model.displayName}</span>
+                    <span className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+                      {model.displayName}
+                    </span>
                     {!model.enabled && (
                       <span className="shrink-0 text-[10px] text-[var(--text-muted)] uppercase">
                         Disabled

@@ -362,7 +362,7 @@ function InviteRow({ invite, onRevoke }: { invite: ListedInvite; onRevoke: () =>
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="min-w-0 truncate font-medium text-[var(--text-primary)]">
+          <p className="min-w-0 [overflow-wrap:anywhere] font-medium text-[var(--text-primary)]">
             {invite.email ?? 'Shareable invitation'}
           </p>
           <Badge variant={STATUS_VARIANT[status]} className="capitalize">

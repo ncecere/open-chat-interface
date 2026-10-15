@@ -261,13 +261,13 @@ function ProjectItem({
         >
           <Folder className="size-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
           <span className="min-w-0">
-            <span dir="auto" className="block truncate">
+            <span dir="auto" className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
               {project.name}
             </span>
             {sharedNote && (
               <span
                 className={cn(
-                  'block truncate text-[0.6875rem]',
+                  'line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-[0.6875rem]',
                   // The current project's row is tinted; muted text on the tint is under 4.5:1.
                   active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-muted)]',
                 )}

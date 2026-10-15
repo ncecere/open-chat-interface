@@ -164,7 +164,10 @@ function ModelRow({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <LabLogo labId={model.labId} className="size-4" />
             {/* Full values on hover when a narrow screen cuts them short (#130). */}
-            <span className="min-w-0 truncate font-medium" title={model.displayName}>
+            <span
+              className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium"
+              title={model.displayName}
+            >
               {model.displayName}
             </span>
             {model.isDefault && <Badge variant="accent">default</Badge>}
@@ -174,7 +177,7 @@ function ModelRow({
             )}
           </div>
           <p
-            className="truncate text-xs text-[var(--text-muted)]"
+            className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]"
             title={`${model.providerLabel} · ${model.upstreamModelId}`}
           >
             {model.providerLabel} · {model.upstreamModelId}

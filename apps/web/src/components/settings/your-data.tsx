@@ -111,7 +111,7 @@ function ImportRow({
     <li className="flex items-start gap-3 border-[var(--border-subtle)] border-b py-3 last:border-0">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p dir="auto" className="truncate text-[var(--text-primary)] text-sm">
+          <p dir="auto" className="[overflow-wrap:anywhere] text-[var(--text-primary)] text-sm">
             {record.filename}
           </p>
           <Badge variant={STATUS_VARIANTS[record.status]}>{t(STATUS_LABELS[record.status])}</Badge>

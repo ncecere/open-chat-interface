@@ -74,7 +74,7 @@ function ReplicaList({ replicas }: { replicas: NonNullable<ReplicasHealth['repli
       {replicas.live.map((replica) => (
         <li key={replica.id} className="flex items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
-            <p className="truncate font-medium text-sm">{replica.host}</p>
+            <p className="[overflow-wrap:anywhere] font-medium text-sm">{replica.host}</p>
             <p className="text-[var(--text-muted)] text-xs">
               {ROLE_LABELS[replica.role]} · v{replica.version} · started{' '}
               {formatRelativeTime(replica.startedAt)}

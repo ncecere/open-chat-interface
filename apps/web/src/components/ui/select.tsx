@@ -32,7 +32,7 @@ export function SelectTrigger({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        'flex h-9 w-full items-center justify-between gap-2 rounded-lg px-3 text-sm',
+        'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-3 py-1 text-sm',
         'border border-[var(--border-control)] bg-[var(--bg-control)] text-[var(--text-primary)]',
         'transition-colors hover:bg-[var(--bg-control-hover)]',
         // The 2 px accent ring every other control gets from :focus-visible
@@ -48,7 +48,10 @@ export function SelectTrigger({
       )}
       {...props}
     >
-      <span className="min-w-0 truncate text-start" title={valueTitle}>
+      <span
+        className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-start"
+        title={valueTitle}
+      >
         {children}
       </span>
       <SelectPrimitive.Icon asChild>

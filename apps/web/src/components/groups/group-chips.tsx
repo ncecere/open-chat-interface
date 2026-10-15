@@ -26,7 +26,7 @@ export function GroupChips({
             to="/admin/groups/$groupId"
             params={{ groupId: group.id }}
             title={group.name}
-            className="inline-flex max-w-48 items-center truncate rounded-full border border-[var(--border-strong)] px-2 py-0.5 font-semibold text-[0.6875rem] text-[var(--text-secondary)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
+            className="inline-flex max-w-48 items-center [overflow-wrap:anywhere] rounded-full border border-[var(--border-strong)] px-2 py-0.5 font-semibold text-[0.6875rem] text-[var(--text-secondary)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
           >
             {group.name}
           </Link>

@@ -122,7 +122,10 @@ export function ThreadRow({
             : thread.title
         }
       >
-        <span dir="auto" className="min-w-0 flex-1 truncate">
+        <span
+          dir="auto"
+          className="min-w-0 flex-1 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]"
+        >
           {thread.title}
         </span>
         {projectName && (
@@ -135,7 +138,9 @@ export function ThreadRow({
           >
             <Folder className="size-3 shrink-0" aria-hidden="true" />
             <span className="sr-only">{t('shell.threadRow.inProject')} </span>
-            <span className="truncate">{projectName}</span>
+            <span className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+              {projectName}
+            </span>
           </span>
         )}
       </Link>

@@ -69,10 +69,10 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           </span>
         )}
         <span className={cn('min-w-0 flex-1', compact && 'hidden')}>
-          <span className="block truncate text-sm font-medium text-[var(--text-primary)]">
+          <span className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-sm font-medium text-[var(--text-primary)]">
             {user.name}
           </span>
-          <span className="block truncate text-xs text-[var(--text-muted)]">
+          <span className="block [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]">
             {ROLE_LABELS[user.role] ? t(ROLE_LABELS[user.role] as MessageKey) : user.role}
           </span>
         </span>

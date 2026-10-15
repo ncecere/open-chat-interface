@@ -341,7 +341,7 @@ function BackgroundRow({ migration }: { migration: BackgroundMigrationSummary })
     <li className="px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-mono text-xs">{migration.name}</p>
+          <p className="[overflow-wrap:anywhere] font-mono text-xs">{migration.name}</p>
           <p className="text-[var(--text-muted)] text-xs">
             {migration.description ?? 'Scheduled by a newer release; this release cannot run it.'}{' '}
             On {migration.table}

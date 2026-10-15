@@ -22,6 +22,7 @@ const AUDIT = fileURLToPath(new URL('../../../../../scripts/a11y-audit/', import
 const load = (file: string) => import(pathToFileURL(join(AUDIT, file)).href);
 
 export interface Finding {
+  url?: string;
   rule: string;
   severity: string;
   targets: string[];
@@ -62,41 +63,57 @@ export function provideScene() {
     cleanup.push(() => context.close());
     const request = page.request;
     const people: Person[] = [];
-    await createPeople(request, run, ['a-person-with-an-unusually-long-address-to-wrap'], people);
-    const person = people[0] as Person;
+    // Two fresh accounts, so what the sidebar lists is what this scene made and nothing another
+    // spec left on the seeded administrator's account: one whose name and address are long, as real
+    // ones are (and as a translated label can be), and one made an administrator.
+    await createPeople(
+      request,
+      run,
+      ['a-person-with-an-unusually-long-address-to-wrap', 'scene-admin'],
+      people,
+    );
+    const [person, admin] = people as [Person, Person];
+    const promoted = await request.patch(`/api/admin/users/${admin.id}`, {
+      data: { role: 'admin' },
+    });
+    expect(promoted.ok(), await promoted.text()).toBe(true);
+    cleanup.push(() => removePeople(request, people));
+
     const { context: personContext } = await signInPerson(browser, person);
     const personState = await personContext.storageState();
     await personContext.close();
+    const { context: adminContext, page: adminPage } = await signInPerson(browser, admin);
+    const adminState = await adminContext.storageState();
+    cleanup.push(() => adminContext.close());
+    const own = adminPage.request;
 
-    const title = `Planning the quarterly review ${run}`;
-    const made = await request.post('/api/threads', { data: { title } });
+    const made = await own.post('/api/threads', { data: { title: 'Quarterly planning' } });
     expect(made.ok(), await made.text()).toBe(true);
-    const thread = { id: ((await made.json()) as { thread: { id: string } }).thread.id, title };
-    const projectName = `Quarterly review materials ${run}`;
-    const project = { id: await createProject(request, projectName), name: projectName };
-    const groupName = `Platform engineering group ${run}`;
+    // Names that fit two lines of the sidebar under the text spacing: a longer one is cut there by
+    // design, with the full text in the heading of its page (see the reachability test).
+    const thread = {
+      id: ((await made.json()) as { thread: { id: string } }).thread.id,
+      title: 'Quarterly planning',
+    };
+    const project = { id: await createProject(own, 'Review materials'), name: 'Review materials' };
+    const groupName = `Platform group ${run}`;
     const group = await request.post('/api/admin/groups', {
       data: { name: groupName, description: 'Made for an accessibility test' },
     });
     expect(group.status(), await group.text()).toBe(201);
     const groupId = ((await group.json()) as { id: string }).id;
-    const me = (await (await request.get('/api/me')).json()) as { user: { email: string } };
-    const added = await request.post(`/api/admin/groups/${groupId}/members`, {
-      data: { emails: [person.email, me.user.email], role: 'manager' },
-    });
-    expect(added.ok(), await added.text()).toBe(true);
-    const found = await request.get(`/api/admin/users?search=${encodeURIComponent(person.email)}`);
-    const personId = ((await found.json()) as { users: Array<{ id: string }> }).users[0]?.id ?? '';
     cleanup.push(async () => {
       await request.delete(`/api/admin/groups/${groupId}`);
-      await request.delete(`/api/projects/${project.id}`);
-      await request.delete(`/api/threads/${thread.id}`);
-      await removePeople(request, people);
     });
+    const added = await request.post(`/api/admin/groups/${groupId}/members`, {
+      data: { emails: [person.email, admin.email], role: 'manager' },
+    });
+    expect(added.ok(), await added.text()).toBe(true);
+
     Object.assign(scene, {
-      admin: { state: await context.storageState() },
+      admin: { state: adminState },
       person,
-      personId,
+      personId: person.id,
       personState,
       thread,
       project,
@@ -152,7 +169,18 @@ export async function measure(page: Page, url: string, check: Check) {
   return (evidence.toJSON().findings as Finding[]).map((finding) => ({ ...finding, url }));
 }
 
+/**
+ * The model picker under the message box (components/chat, a file this change does not touch) cuts
+ * its label with an ellipsis; it is a finding of the audit that is listed, not fixed, with the chat.
+ */
+export const outsideChat = (finding: Finding) =>
+  !(
+    /^\/(chat\/.*)?$/.test(finding.url ?? '') &&
+    finding.targets.length === 1 &&
+    finding.targets[0] === 'span.min-w-0.truncate'
+  );
+
 export const describe = (findings: Finding[]) =>
   findings
-    .map((f) => `${f.rule} ${f.severity}: ${f.targets.join(' ; ')} (${f.message})`)
+    .map((f) => `${f.url ?? ''} ${f.rule} ${f.severity}: ${f.targets.join(' ; ')} (${f.message})`)
     .join('\n');

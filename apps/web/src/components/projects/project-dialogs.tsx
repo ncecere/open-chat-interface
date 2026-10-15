@@ -229,7 +229,9 @@ function MoveToProjectForm({
                     onChange={() => setSelected(option.value)}
                     className="size-4 accent-[var(--accent)]"
                   />
-                  <span className="min-w-0 truncate">{option.label}</span>
+                  <span className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere]">
+                    {option.label}
+                  </span>
                 </label>
               );
             })}

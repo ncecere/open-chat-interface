@@ -391,7 +391,9 @@ export function AdminPoliciesPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate font-medium">{policy.title}</p>
+                      <p className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium">
+                        {policy.title}
+                      </p>
                       <Badge variant="neutral">v{policy.version}</Badge>
                       {policy.id === current?.id ? (
                         <Badge variant="accent">in force</Badge>
