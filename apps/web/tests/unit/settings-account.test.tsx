@@ -15,6 +15,7 @@ import {
   renderAdmin,
   settle,
 } from './admin-test-utils';
+import { mfaStatus } from './mfa-fixtures';
 
 /**
  * Settings → Account (v0.9.1): the password control follows how the person
@@ -60,6 +61,8 @@ beforeEach(() => {
         features,
         signIn,
       };
+    // Two-step verification (v0.14) has its own tests (mfa-two-step.test.tsx).
+    if (path === '/me/mfa') return mfaStatus();
     if (path === '/me/sessions')
       return {
         sessions: [
