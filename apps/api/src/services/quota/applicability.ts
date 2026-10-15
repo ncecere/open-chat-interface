@@ -57,13 +57,12 @@ export async function budgetSources(userId: string, role: UserRole): Promise<Bud
       .orderBy(schema.group.name),
   ]);
   const sources: BudgetSources = {};
-  for (const row of viaRole) (sources[row.policyId] ??= []).push({ kind: 'role' });
+  const add = (policyId: string, source: BudgetSources[string][number]) => {
+    sources[policyId] = [...(sources[policyId] ?? []), source];
+  };
+  for (const row of viaRole) add(row.policyId, { kind: 'role' });
   for (const row of viaGroups) {
-    (sources[row.policyId] ??= []).push({
-      kind: 'group',
-      groupId: row.groupId,
-      groupName: row.groupName,
-    });
+    add(row.policyId, { kind: 'group', groupId: row.groupId, groupName: row.groupName });
   }
   return sources;
 }
