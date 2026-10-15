@@ -177,3 +177,15 @@ test('every measured pair is kept per theme and accent, weakest first, with how 
   );
   assert.equal(Object.keys(contrastPairs).length, 2);
 });
+
+test('a finding to review is counted apart from a failure', () => {
+  const evidence = createEvidence();
+  const base = { criteria: ['2.2.2'], check: 'motion', route: '/', context: ctx(), message: 'm' };
+  evidence.finding({ ...base, rule: 'a', severity: 'review' });
+  evidence.finding({ ...base, rule: 'b', severity: 'moderate' });
+  const entry = evidence.toJSON().criteria['2.2.2'];
+  assert.equal(entry.failures, 1);
+  assert.equal(entry.reviews, 1);
+  assert.equal(entry.routes['/'].failures, 1);
+  assert.equal(entry.routes['/'].reviews, 1);
+});

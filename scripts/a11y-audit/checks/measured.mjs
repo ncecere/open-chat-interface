@@ -266,10 +266,12 @@ async function measureChange(
       criteria: [criterion],
       check,
       rule: `${rule}-clipping`,
-      severity: 'serious',
+      // Text that was already truncated (an ellipsis on a long name) and loses more is a lesser
+      // fault than text that fitted and no longer does.
+      severity: clip.wasClipped ? 'review' : 'serious',
       route,
       context,
-      message: `With ${what}, ${clip.hiddenPx} px of content is cut off on the ${clip.axis} axis`,
+      message: `With ${what}, ${clip.hiddenPx} px of content is cut off on the ${clip.axis} axis${clip.wasClipped ? ' (it was already truncated: check the full text is available another way)' : ''}`,
       targets: [names.get(clip.id) ?? clip.id],
     });
   }

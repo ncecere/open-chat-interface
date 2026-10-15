@@ -33,6 +33,7 @@ test('text that no longer fits a box that hides its overflow is clipping', () =>
   assert.equal(clipped[0].id, 'title');
   assert.equal(clipped[0].axis, 'y');
   assert.equal(clipped[0].hiddenPx, 32);
+  assert.equal(clipped[0].wasClipped, false);
 });
 
 test('a box that could scroll or grow is not clipping', () => {
@@ -50,6 +51,7 @@ test('content that was already cut off before the override is not blamed on it',
   const found = findNewClipping(same, worse);
   assert.equal(found.length, 1);
   assert.equal(found[0].hiddenPx, 56);
+  assert.equal(found[0].wasClipped, true);
 });
 
 test('one pixel of rounding is not clipping', () => {
@@ -112,4 +114,11 @@ test('a sliver of overlap is below the tolerance', () => {
   ];
   // One pixel high by 100 wide is 100 px2, 5% of the smaller box: line-box rounding, not collision.
   assert.deepEqual(findNewOverlaps([], after), []);
+});
+
+test('a box too small to show anything (screen-reader-only text) is not clipping', () => {
+  const after = [
+    element('sr', { overflowX: 'hidden', clientWidth: 1, clientHeight: 1, scrollWidth: 300 }),
+  ];
+  assert.deepEqual(findNewClipping([], after), []);
 });

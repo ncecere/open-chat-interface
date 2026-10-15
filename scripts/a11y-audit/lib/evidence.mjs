@@ -58,11 +58,17 @@ export function createEvidence() {
     if (!criterion(id))
       throw new Error(`Unknown criterion ${id}: it is not a WCAG 2.2 A or AA criterion`);
     if (!criteria.has(id))
-      criteria.set(id, { samples: 0, failures: 0, routes: new Map(), checks: new Set() });
+      criteria.set(id, {
+        samples: 0,
+        failures: 0,
+        reviews: 0,
+        routes: new Map(),
+        checks: new Set(),
+      });
     return criteria.get(id);
   };
   const forRoute = (entry, route) => {
-    if (!entry.routes.has(route)) entry.routes.set(route, { samples: 0, failures: 0 });
+    if (!entry.routes.has(route)) entry.routes.set(route, { samples: 0, failures: 0, reviews: 0 });
     return entry.routes.get(route);
   };
 
@@ -115,9 +121,11 @@ export function createEvidence() {
       forCheck(check).occurrences += 1;
       for (const id of ids) {
         const criterionEntry = forCriterion(id);
-        criterionEntry.failures += 1;
+        // A "review" is something to look at, not a failed measurement: it is counted apart.
+        const counter = severity === 'review' ? 'reviews' : 'failures';
+        criterionEntry[counter] += 1;
         criterionEntry.checks.add(check);
-        forRoute(criterionEntry, route).failures += 1;
+        forRoute(criterionEntry, route)[counter] += 1;
       }
     },
 
@@ -163,8 +171,9 @@ export function createEvidence() {
       )) {
         const own = [...findings.values()].filter((finding) => finding.criteria.includes(id));
         criteriaOut[id] = {
-          samples: Math.max(entry.samples, entry.failures),
+          samples: Math.max(entry.samples, entry.failures + entry.reviews),
           failures: entry.failures,
+          reviews: entry.reviews,
           findingCount: own.length,
           checks: [...entry.checks].sort(),
           routes: Object.fromEntries(
@@ -172,7 +181,11 @@ export function createEvidence() {
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([route, counts]) => [
                 route,
-                { samples: Math.max(counts.samples, counts.failures), failures: counts.failures },
+                {
+                  samples: Math.max(counts.samples, counts.failures + counts.reviews),
+                  failures: counts.failures,
+                  reviews: counts.reviews,
+                },
               ]),
           ),
         };

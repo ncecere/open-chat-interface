@@ -47,11 +47,19 @@ export function findNewClipping(before, after) {
   const earlier = new Map(before.map((record) => [record.id, hiddenExtent(record)]));
   const found = [];
   for (const record of after) {
+    // Screen-reader-only text is a clipped 1px box by design: nothing sighted is lost.
+    if (record.clientWidth <= 2 || record.clientHeight <= 2) continue;
     const now = hiddenExtent(record);
     const was = earlier.get(record.id) ?? { x: 0, y: 0 };
     for (const axis of ['x', 'y']) {
       if (now[axis] > CLIP_TOLERANCE_PX && now[axis] > was[axis] + CLIP_TOLERANCE_PX) {
-        found.push({ id: record.id, axis, hiddenPx: Math.round(now[axis]) });
+        found.push({
+          id: record.id,
+          axis,
+          hiddenPx: Math.round(now[axis]),
+          // Already cut off before the override (an ellipsis on a long name): it now loses more.
+          wasClipped: was[axis] > CLIP_TOLERANCE_PX,
+        });
       }
     }
   }

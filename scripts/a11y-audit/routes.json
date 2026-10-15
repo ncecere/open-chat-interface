@@ -189,42 +189,49 @@
       "path": "/auth/accept-invite",
       "audience": "public",
       "kind": "page",
-      "note": "opened without a token: the page shows its invalid-link state"
+      "note": "opened without a token: the page shows its invalid-link state",
+      "ownDetails": true
     },
     {
       "path": "/auth/forgot-password",
       "audience": "public",
-      "kind": "page"
+      "kind": "page",
+      "ownDetails": true
     },
     {
       "path": "/auth/login",
       "audience": "public",
-      "kind": "page"
+      "kind": "page",
+      "ownDetails": true
     },
     {
       "path": "/auth/mfa-setup",
       "audience": "end-user",
       "kind": "page",
       "state": "mfa-limited",
-      "note": "only for a person whose role requires two-step verification and who has not set it up"
+      "note": "only for a person whose role requires two-step verification and who has not set it up",
+      "ownDetails": true
     },
     {
       "path": "/auth/reset-password",
       "audience": "public",
       "kind": "page",
-      "note": "opened without a token: the page shows its invalid-link state"
+      "note": "opened without a token: the page shows its invalid-link state",
+      "ownDetails": true
     },
     {
       "path": "/auth/signup",
       "audience": "public",
-      "kind": "page"
+      "kind": "page",
+      "ownDetails": true
     },
     {
       "path": "/auth/two-factor",
       "audience": "public",
       "kind": "page",
       "state": "second-step",
-      "note": "reached by signing in with a password as an enrolled account; the audit reaches it that way"
+      "note": "reached by signing in with a password as an enrolled account; the audit reaches it that way",
+      "ownDetails": true
     },
     {
       "path": "/auth/verify-email",
@@ -252,7 +259,8 @@
     {
       "path": "/settings",
       "audience": "end-user",
-      "kind": "page"
+      "kind": "page",
+      "ownDetails": true
     },
     {
       "path": "/settings/attachments",
