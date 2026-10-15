@@ -11,15 +11,17 @@ import { type AppBindings, currentUser, requireAuth } from '../middleware/contex
 import { parseBody } from '../middleware/validate.js';
 import { assertAttachmentUseAllowed } from '../services/attachments/index.js';
 import { uploadRateLimit } from '../services/limits/rate-limit.js';
+import { requireProjectAccess } from '../services/project-sharing/access.js';
 import {
   assertProjectsAllowed,
   createProject,
   deleteProject,
   deleteProjectFile,
-  getOwnedProject,
   getProjectSummary,
   listProjectFiles,
   listProjects,
+  listSharedProjects,
+  listSharedSidebarProjects,
   listSidebarProjects,
   serializeProjectFile,
   updateProject,
@@ -28,8 +30,12 @@ import {
 import { getSetting } from '../services/settings.js';
 
 /**
- * A signed-in person's own projects. Every route needs the role's `projects`
- * feature (403 otherwise); a project that is not the caller's is a 404.
+ * A signed-in person's projects: their own and, since v0.14, those shared with
+ * them. Every route needs the role's `projects` feature (403 otherwise). What a
+ * person may do follows the access matrix (SPEC-groups.md): a project they have
+ * no access to is a 404 (existence never leaks), one they can see but not change
+ * is a 403, and `GET /` keeps `projects` to the caller's own so an older web
+ * bundle never mistakes a shared project for its own.
  *
  * With the feature switched off, existing projects are kept but cannot be
  * read or changed here, and their instructions and files stop being added to
@@ -47,10 +53,16 @@ projectRoutes.use('*', async (c, next) => {
   await next();
 });
 
-/** The signed-in person's projects by name, with conversation and file counts. */
+/**
+ * The signed-in person's own projects by name, with conversation and file
+ * counts, and (`shared`, v0.14) the projects shared with them.
+ */
 projectRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  return c.json({ projects: await listProjects(user.id) });
+  return c.json({
+    projects: await listProjects(user.id),
+    shared: await listSharedProjects(user.id),
+  });
 });
 
 /**
@@ -61,7 +73,10 @@ projectRoutes.get('/', async (c) => {
  */
 projectRoutes.get('/sidebar', async (c) => {
   const user = currentUser(c);
-  return c.json({ projects: await listSidebarProjects(user.id) });
+  return c.json({
+    projects: await listSidebarProjects(user.id),
+    shared: await listSharedSidebarProjects(user.id),
+  });
 });
 
 /** Creates a project, up to the per-person limit. */
@@ -76,27 +91,27 @@ projectRoutes.post('/', async (c) => {
   return c.json({ project }, 201);
 });
 
-/** One of the person's projects; 404 for anyone else's. */
+/** A project the person owns or can read, with what they may do (`access`); 404 when they have no access. */
 projectRoutes.get('/:id', async (c) => {
   const user = currentUser(c);
   return c.json({ project: await getProjectSummary(c.req.param('id'), user.id) });
 });
 
-/** Renames a project or changes its instructions; only the sent fields change. */
+/** Renames a project (owner) or changes its instructions (owner or editor); only the sent fields change. 403 with access but too little permission. */
 projectRoutes.patch('/:id', async (c) => {
   const user = currentUser(c);
   const patch = await parseBody(c, updateProjectSchema);
   return c.json({ project: await updateProject(c.req.param('id'), user.id, patch) });
 });
 
-/** Conversations are detached and kept; files are deleted and their storage released; 409 while the owner is on legal hold. */
+/** Owner only (403 for an editor or viewer). Conversations are detached and kept; files are deleted and their storage released; 409 while the owner, or anyone who added a file, is on legal hold. */
 projectRoutes.delete('/:id', async (c) => {
   const user = currentUser(c);
   const result = await deleteProject(c.req.param('id'), user.id);
   return c.json({ ok: true, ...result });
 });
 
-/** The project's files, oldest first. */
+/** The project's files, oldest first, for anyone who can read it; each says who added it (a name, never an email). */
 projectRoutes.get('/:id/files', async (c) => {
   const user = currentUser(c);
   return c.json({ files: await listProjectFiles(c.req.param('id'), user.id) });
@@ -117,7 +132,9 @@ projectRoutes.post(
   async (c) => {
     const user = currentUser(c);
     const projectId = c.req.param('id');
-    await getOwnedProject(projectId, user.id);
+    // Owner or editor: 404 with no access, 403 for a viewer. The files, the
+    // allowance and the upload limit are the uploader's own.
+    await requireProjectAccess(projectId, user.id, 'editor');
     await assertAttachmentUseAllowed(user.role);
 
     const limit = await uploadRateLimit(user.id, user.role);
@@ -171,11 +188,18 @@ projectRoutes.post(
       );
     }
 
-    return c.json({ files: uploaded.map(serializeProjectFile) }, 201);
+    return c.json(
+      {
+        files: uploaded.map((file) =>
+          serializeProjectFile({ ...file, addedBy: user.name, addedByMe: true }),
+        ),
+      },
+      201,
+    );
   },
 );
 
-/** Removes the file outright, releasing its storage at once; 409 while the owner is on legal hold. */
+/** Removes the file outright, releasing its storage at once. Owner or editor, any file; 409 while the actor or the person who added it is on legal hold. */
 projectRoutes.delete('/:id/files/:fileId', async (c) => {
   const user = currentUser(c);
   await deleteProjectFile(c.req.param('id'), c.req.param('fileId'), user.id);

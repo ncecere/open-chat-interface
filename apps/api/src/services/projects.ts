@@ -1,8 +1,10 @@
-import { and, asc, count, desc, eq, isNull, schema, sql } from '@oci/db';
+import { and, asc, count, desc, eq, isNull, ne, schema, sql } from '@oci/db';
 import {
   type CreateProjectInput,
+  MAX_DIRECT_INBOUND_SHARES_PER_USER,
   MAX_FILES_PER_PROJECT,
   MAX_PROJECTS_PER_USER,
+  type ProjectAccessLevel,
   type ProjectFile,
   type ProjectSummary,
   SIDEBAR_PROJECT_THREAD_LIMIT,
@@ -11,23 +13,36 @@ import {
   type UserRole,
 } from '@oci/shared';
 import { db } from '../db/index.js';
-import { conflict, notFound, validationFailed } from '../lib/errors.js';
+import { conflict, forbidden, notFound, validationFailed } from '../lib/errors.js';
 import { type UploadResult, uploadAttachment } from './attachments/upload.js';
 import { recordDeletions } from './compliance/deletions.js';
 import { HELD_PROJECT_DELETION_MESSAGE, isOnLegalHold } from './compliance/holds.js';
 import { lockLifecycleOwner } from './lifecycle/owner-lock.js';
 import { indexUploadedProjectFile, projectFileIndexStatus } from './project-search/indexing.js';
+import {
+  projectAccess,
+  projectEditableBy,
+  projectReadableBy,
+  requireProjectAccess,
+} from './project-sharing/access.js';
+import { anyOnLegalHold } from './project-sharing/holds.js';
 import { assertRoleFeature } from './role-features.js';
 import { serializeThread } from './thread-summary.js';
 
 /**
  * Projects: a person's conversations grouped under shared instructions and
- * files. Every function here is scoped to the owner; another person's project
- * is reported as not found rather than forbidden, so its existence never leaks.
+ * files. Until v0.13 every function here was scoped to the owner; since v0.14
+ * a project can be shared (project_share), so each function says which it is:
+ * **owner-only** (`getOwnedProject`: rename, delete, share, transfer) or
+ * **access-aware** (`projectAccess` in project-sharing/access.ts decides:
+ * owner, editor, viewer, or none). A person with no access gets "not found"
+ * rather than "forbidden", so a project's existence never leaks; a person with
+ * access but too little permission gets 403. The owner-only checks are kept
+ * as they were; the access-aware path sits beside them, never in place of them.
  *
- * Lock order, shared by every mutation that touches a project: the owner's
- * user row (KEY SHARE, as account deletion locks it first), then the project
- * row, then threads or the storage counter. Project deletion cascades into
+ * Lock order, shared by every mutation that touches a project: the acting
+ * person's user row (KEY SHARE, as account deletion locks it first), then the
+ * project row, then threads, then the storage counters by user id. Project deletion cascades into
  * threads (detaching them) and files (whose delete triggers update the
  * storage counter), so taking the project lock before either keeps moves,
  * uploads and deletion from deadlocking each other.
@@ -59,6 +74,18 @@ const threadCountSql = sql<number>`(
     and "project_thread"."temporary" = false
 )::int`;
 
+// The same count for a person who may not own the project (v0.14): the
+// conversations are always the caller's own, so a shared project's count never
+// includes anyone else's. For the owner it is the count above.
+const threadCountFor = (userId: string) => sql<number>`(
+  select count(*) from "thread" as "project_thread"
+  where "project_thread"."project_id" = "project"."id"
+    and "project_thread"."user_id" = ${userId}
+    and "project_thread"."deleted_at" is null
+    and "project_thread"."archived" = false
+    and "project_thread"."temporary" = false
+)::int`;
+
 const summaryColumns = {
   id: schema.project.id,
   name: schema.project.name,
@@ -79,8 +106,14 @@ type SummaryRow = {
   threadCount: number;
 };
 
-function serializeProject(row: SummaryRow): ProjectSummary {
+function serializeProject(
+  row: SummaryRow,
+  access: ProjectAccessLevel = 'owner',
+  ownerName?: string,
+): ProjectSummary {
   return {
+    access,
+    ...(access !== 'owner' && ownerName !== undefined ? { ownerName } : {}),
     id: row.id,
     name: row.name,
     instructions: row.instructions,
@@ -101,6 +134,9 @@ export function serializeProjectFile(row: {
   chunkCount?: number | null;
   /** Only the start of the file was split into passages. */
   truncated?: boolean | null;
+  /** v0.14: the uploader's display name (null once their account is gone) and whether it is the caller. */
+  addedBy?: string | null;
+  addedByMe?: boolean;
 }): ProjectFile {
   return {
     id: row.id,
@@ -111,6 +147,8 @@ export function serializeProjectFile(row: {
     thumbnailUrl: null,
     createdAt: typeof row.createdAt === 'string' ? row.createdAt : row.createdAt.toISOString(),
     index: projectFileIndexStatus(row.chunkCount, row.truncated ?? false),
+    ...(row.addedBy !== undefined ? { addedBy: row.addedBy } : {}),
+    ...(row.addedByMe !== undefined ? { addedByMe: row.addedByMe } : {}),
   };
 }
 
@@ -121,7 +159,35 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
     .where(eq(schema.project.userId, userId))
     .orderBy(sql`lower(${schema.project.name})`, asc(schema.project.createdAt))
     .limit(MAX_PROJECTS_PER_USER);
-  return rows.map(serializeProject);
+  return rows.map((row) => serializeProject(row));
+}
+
+/**
+ * Projects other people have shared with the person, directly or through a
+ * group (v0.14), by name, at most MAX_DIRECT_INBOUND_SHARES_PER_USER. Never
+ * includes the person's own projects: `listProjects` is the owner's list, and
+ * the two stay apart so an older web bundle never mistakes a shared project
+ * for its own. Counts of conversations are the person's own.
+ */
+export async function listSharedProjects(userId: string): Promise<ProjectSummary[]> {
+  const rows = await db
+    .select({
+      ...summaryColumns,
+      threadCount: threadCountFor(userId),
+      ownerName: sql<string>`(select "project_owner"."name" from "user" as "project_owner" where "project_owner"."id" = "project"."user_id")`,
+      editor: sql<boolean>`exists (
+        select 1 from "project_share" as "ps_list"
+        where "ps_list"."project_id" = "project"."id" and "ps_list"."permission" = 'editor'
+          and ("ps_list"."subject_user_id" = ${userId}
+            or "ps_list"."subject_group_id" in (
+              select "gm_list"."group_id" from "group_member" as "gm_list"
+              where "gm_list"."user_id" = ${userId})))`,
+    })
+    .from(schema.project)
+    .where(and(ne(schema.project.userId, userId), projectReadableBy(sql`"project"."id"`, userId)))
+    .orderBy(sql`lower(${schema.project.name})`, asc(schema.project.createdAt))
+    .limit(MAX_DIRECT_INBOUND_SHARES_PER_USER);
+  return rows.map((row) => serializeProject(row, row.editor ? 'editor' : 'viewer', row.ownerName));
 }
 
 /**
@@ -139,12 +205,45 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
  * out exactly as listThreads leaves them out.
  */
 export async function listSidebarProjects(userId: string): Promise<SidebarProject[]> {
+  return sidebarTree(userId, { shared: false });
+}
+
+/**
+ * The sidebar's "Shared with me" (v0.14): the projects other people shared with
+ * the person (directly or through a group), shaped as the sidebar's own tree.
+ * The conversation count and the recent conversations are the person's own, never
+ * the owner's or anyone else's.
+ */
+export async function listSharedSidebarProjects(userId: string): Promise<SidebarProject[]> {
+  return sidebarTree(userId, { shared: true });
+}
+
+async function sidebarTree(
+  userId: string,
+  options: { shared: boolean },
+): Promise<SidebarProject[]> {
+  // Owned: the v0.13 condition, unchanged. Shared: not the person's own, and readable by them.
+  const inScope = options.shared
+    ? and(ne(schema.project.userId, userId), projectReadableBy(sql`"project"."id"`, userId))
+    : eq(schema.project.userId, userId);
   const projects = await db
-    .select({ id: schema.project.id, name: schema.project.name, threadCount: threadCountSql })
+    .select({
+      id: schema.project.id,
+      name: schema.project.name,
+      threadCount: options.shared ? threadCountFor(userId) : threadCountSql,
+      ownerName: sql<string>`(select "project_owner"."name" from "user" as "project_owner" where "project_owner"."id" = "project"."user_id")`,
+      editor: sql<boolean>`exists (
+        select 1 from "project_share" as "ps_side"
+        where "ps_side"."project_id" = "project"."id" and "ps_side"."permission" = 'editor'
+          and ("ps_side"."subject_user_id" = ${userId}
+            or "ps_side"."subject_group_id" in (
+              select "gm_side"."group_id" from "group_member" as "gm_side"
+              where "gm_side"."user_id" = ${userId})))`,
+    })
     .from(schema.project)
-    .where(eq(schema.project.userId, userId))
+    .where(inScope)
     .orderBy(sql`lower(${schema.project.name})`, asc(schema.project.createdAt))
-    .limit(MAX_PROJECTS_PER_USER);
+    .limit(options.shared ? MAX_DIRECT_INBOUND_SHARES_PER_USER : MAX_PROJECTS_PER_USER);
   if (projects.length === 0) return [];
 
   // Only the ids go through the join, so project instructions are not
@@ -152,7 +251,7 @@ export async function listSidebarProjects(userId: string): Promise<SidebarProjec
   const owned = db
     .select({ id: schema.project.id })
     .from(schema.project)
-    .where(eq(schema.project.userId, userId))
+    .where(inScope)
     .as('owned');
   const recent = db
     .select()
@@ -188,10 +287,28 @@ export async function listSidebarProjects(userId: string): Promise<SidebarProjec
     name: project.name,
     threadCount: Number(project.threadCount),
     recentThreads: byProject.get(project.id) ?? [],
+    access: options.shared ? (project.editor ? 'editor' : 'viewer') : 'owner',
+    ...(options.shared ? { ownerName: project.ownerName } : {}),
   }));
 }
 
-/** The owner's project, or 404. */
+/**
+ * Why an owner-only operation found no project for this person: they have access
+ * but not the permission (403), or they have none and the project does not exist
+ * as far as they know (404).
+ */
+export async function refusalFor(
+  executor: Parameters<typeof projectAccess>[0],
+  projectId: string,
+  userId: string,
+) {
+  const level = await projectAccess(executor, projectId, userId);
+  return level
+    ? forbidden('Only the owner of a project can do that.')
+    : notFound('Project not found');
+}
+
+/** The owner's project, or 404. Owner-only on purpose: rename, delete, share and transfer use it. */
 export async function getOwnedProject(projectId: string, userId: string) {
   const [row] = await db
     .select()
@@ -202,14 +319,24 @@ export async function getOwnedProject(projectId: string, userId: string) {
   return row;
 }
 
+/**
+ * One project as the caller sees it: access-aware (v0.14). The summary says what
+ * the caller may do (`access`) and, for a shared project, the owner's display
+ * name (never an email). The conversation count is the caller's own.
+ */
 export async function getProjectSummary(projectId: string, userId: string) {
+  const access = await requireProjectAccess(projectId, userId, 'viewer');
   const [row] = await db
-    .select(summaryColumns)
+    .select({
+      ...summaryColumns,
+      threadCount: access === 'owner' ? threadCountSql : threadCountFor(userId),
+      ownerName: sql<string>`(select "project_owner"."name" from "user" as "project_owner" where "project_owner"."id" = "project"."user_id")`,
+    })
     .from(schema.project)
-    .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, userId)))
+    .where(and(eq(schema.project.id, projectId), projectReadableBy(projectId, userId)))
     .limit(1);
   if (!row) throw notFound('Project not found');
-  return serializeProject(row);
+  return serializeProject(row, access, row.ownerName);
 }
 
 export async function createProject(params: {
@@ -248,18 +375,34 @@ export async function createProject(params: {
     if (!created) throw new Error('Failed to create project');
     return created;
   });
-  return serializeProject({ ...row, fileCount: 0, threadCount: 0 });
+  return serializeProject({ ...row, fileCount: 0, threadCount: 0 }, 'owner');
 }
 
+/**
+ * Renames a project or changes its instructions. Access-aware (v0.14): the owner
+ * may change either; an editor changes the instructions only (403 when the
+ * request names the name, even beside instructions); a viewer neither. Last
+ * write wins. The update's own WHERE repeats the rule, so a share removed
+ * between the check and the write changes nothing.
+ */
 export async function updateProject(
   projectId: string,
   userId: string,
   patch: UpdateProjectInput,
 ): Promise<ProjectSummary> {
+  await requireProjectAccess(projectId, userId, patch.name !== undefined ? 'owner' : 'editor');
   const [updated] = await db
     .update(schema.project)
     .set(patch)
-    .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, userId)))
+    .where(
+      and(
+        eq(schema.project.id, projectId),
+        // Owner-only for a rename: the v0.13 condition, unchanged.
+        patch.name !== undefined
+          ? eq(schema.project.userId, userId)
+          : projectEditableBy(projectId, userId),
+      ),
+    )
     .returning({ id: schema.project.id });
   if (!updated) throw notFound('Project not found');
   return getProjectSummary(projectId, userId);
@@ -285,8 +428,25 @@ export async function deleteProject(
       .from(schema.project)
       .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, userId)))
       .for('update');
-    if (!project) throw notFound('Project not found');
+    // Owner-only: an editor or viewer has access but not this permission (403);
+    // anyone else is told the project does not exist.
+    if (!project) throw await refusalFor(tx, projectId, userId);
     if (await isOnLegalHold(userId, tx)) throw conflict(HELD_PROJECT_DELETION_MESSAGE);
+
+    // The files go with the project, including the ones other people added
+    // (editors): refused too while any of them is on hold (v0.14).
+    const uploaders = await tx
+      .selectDistinct({ userId: schema.attachment.userId })
+      .from(schema.attachment)
+      .where(eq(schema.attachment.projectId, projectId));
+    if (
+      await anyOnLegalHold(
+        uploaders.map((row) => row.userId),
+        tx,
+      )
+    ) {
+      throw conflict(HELD_PROJECT_DELETION_MESSAGE, { reason: 'legal_hold' });
+    }
 
     const [threads] = await tx
       .select({ value: count() })
@@ -317,8 +477,14 @@ export async function deleteProject(
   });
 }
 
+/**
+ * Every ready file of the project, oldest first, for anyone who can read it
+ * (v0.14). Each says who added it by display name, never by email. The WHERE
+ * repeats the access rule, so the list is empty rather than wrong if access
+ * ends between the check and the read.
+ */
 export async function listProjectFiles(projectId: string, userId: string) {
-  await getOwnedProject(projectId, userId);
+  await requireProjectAccess(projectId, userId, 'viewer');
   const rows = await db
     .select({
       id: schema.attachment.id,
@@ -328,22 +494,31 @@ export async function listProjectFiles(projectId: string, userId: string) {
       createdAt: schema.attachment.createdAt,
       chunkCount: schema.projectFileIndex.chunkCount,
       truncated: schema.projectFileIndex.truncated,
+      uploaderId: schema.attachment.userId,
+      uploaderName: schema.user.name,
     })
     .from(schema.attachment)
     .leftJoin(
       schema.projectFileIndex,
       eq(schema.projectFileIndex.attachmentId, schema.attachment.id),
     )
+    .leftJoin(schema.user, eq(schema.user.id, schema.attachment.userId))
     .where(
       and(
         eq(schema.attachment.projectId, projectId),
-        eq(schema.attachment.userId, userId),
+        projectReadableBy(projectId, userId),
         eq(schema.attachment.uploadPending, false),
         isNull(schema.attachment.deletedAt),
       ),
     )
     .orderBy(asc(schema.attachment.createdAt), asc(schema.attachment.id));
-  return rows.map(serializeProjectFile);
+  return rows.map((row) =>
+    serializeProjectFile({
+      ...row,
+      addedBy: row.uploaderName ?? null,
+      addedByMe: row.uploaderId === userId,
+    }),
+  );
 }
 
 /**
@@ -388,7 +563,13 @@ export async function uploadProjectFile(params: {
  * Removes a project file outright rather than to the trash: a project file
  * has no conversation to restore it with. The attachment delete triggers
  * release the counted storage and queue the object for the storage reaper.
- * Being permanent, it is refused while the owner is on legal hold (409).
+ * Being permanent, it is refused while the actor or the person who added the
+ * file is on legal hold (409).
+ *
+ * Owner or editor (v0.14); an editor may remove a file anyone added. The
+ * permission is checked under the project row lock, so a share removed a moment
+ * ago cannot be used, and the deletion is recorded against the uploader, whose
+ * data it was.
  */
 export async function deleteProjectFile(
   projectId: string,
@@ -400,17 +581,35 @@ export async function deleteProjectFile(
     const [project] = await tx
       .select({ id: schema.project.id })
       .from(schema.project)
-      .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, userId)))
+      .where(eq(schema.project.id, projectId))
       .for('update');
     if (!project) throw notFound('Project not found');
-    if (await isOnLegalHold(userId, tx)) throw conflict(HELD_PROJECT_DELETION_MESSAGE);
+    await requireProjectAccess(projectId, userId, 'editor', tx);
+    const [file] = await tx
+      .select({
+        id: schema.attachment.id,
+        userId: schema.attachment.userId,
+        sizeBytes: schema.attachment.sizeBytes,
+      })
+      .from(schema.attachment)
+      .where(
+        and(
+          eq(schema.attachment.id, fileId),
+          eq(schema.attachment.projectId, projectId),
+          eq(schema.attachment.uploadPending, false),
+        ),
+      )
+      .for('update');
+    if (!file) throw notFound('File not found');
+    if (await anyOnLegalHold([userId, file.userId], tx)) {
+      throw conflict(HELD_PROJECT_DELETION_MESSAGE, { reason: 'legal_hold' });
+    }
     const deleted = await tx
       .delete(schema.attachment)
       .where(
         and(
           eq(schema.attachment.id, fileId),
           eq(schema.attachment.projectId, projectId),
-          eq(schema.attachment.userId, userId),
           eq(schema.attachment.uploadPending, false),
         ),
       )
@@ -421,7 +620,7 @@ export async function deleteProjectFile(
         action: 'attachment.delete',
         actorUserId: userId,
         id: fileId,
-        ownerUserId: userId,
+        ownerUserId: file.userId,
         reason: 'user',
         details: { projectId, sizeBytes: deleted[0]!.sizeBytes },
       },
@@ -430,9 +629,10 @@ export async function deleteProjectFile(
 }
 
 /**
- * Puts a conversation into one of the owner's projects, or takes it out with
- * `null`. Temporary chats stay out of projects: they are deliberately kept out
- * of history.
+ * Puts one of the person's conversations into a project they can read (owner,
+ * editor or viewer; v0.14), or takes it out with `null`. The conversation stays
+ * the person's own: nobody else reads it. Temporary chats stay out of projects:
+ * they are deliberately kept out of history.
  */
 export async function moveThreadToProject(
   threadId: string,
@@ -442,11 +642,12 @@ export async function moveThreadToProject(
   return db.transaction(async (tx) => {
     if (!(await lockLifecycleOwner(tx, userId))) throw notFound('Thread not found');
     if (projectId) {
-      // Project before thread, matching deletion's lock order.
+      // Project before thread, matching deletion's lock order. A project the
+      // person cannot read is reported as missing, never joined.
       const [project] = await tx
         .select({ id: schema.project.id })
         .from(schema.project)
-        .where(and(eq(schema.project.id, projectId), eq(schema.project.userId, userId)))
+        .where(and(eq(schema.project.id, projectId), projectReadableBy(projectId, userId)))
         .for('key share');
       if (!project) throw notFound('Project not found');
     }

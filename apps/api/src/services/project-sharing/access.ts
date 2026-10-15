@@ -141,3 +141,17 @@ export async function requireProjectAccess(
   }
   return level;
 }
+
+/**
+ * The project id to copy onto a new conversation (a fork or an edit of one in a
+ * project): the same project while the person can still read it, otherwise null,
+ * so a copy never points at a project its owner cannot see (invariant I-2).
+ */
+export async function projectIdWhileReadable(
+  executor: AccessExecutor,
+  projectId: string | null,
+  userId: string,
+): Promise<string | null> {
+  if (!projectId) return null;
+  return (await projectAccess(executor, projectId, userId)) ? projectId : null;
+}

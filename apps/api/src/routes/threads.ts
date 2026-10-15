@@ -44,11 +44,8 @@ import {
 } from '../services/lifecycle/trash.js';
 import { chatRateLimit, threadCreateRateLimit } from '../services/limits/rate-limit.js';
 import { resolveModelForRole } from '../services/models.js';
-import {
-  assertProjectsAllowed,
-  getOwnedProject,
-  moveThreadToProject,
-} from '../services/projects.js';
+import { requireProjectAccess } from '../services/project-sharing/access.js';
+import { assertProjectsAllowed, moveThreadToProject } from '../services/projects.js';
 import { activateReply } from '../services/replies.js';
 import { roleFeatures } from '../services/role-features.js';
 import { decodeThreadHistoryCursor, listThreadHistory } from '../services/thread-history.js';
@@ -78,7 +75,7 @@ const listQuerySchema = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
-  /** Only conversations in this project (the caller's own). */
+  /** Only the caller's own conversations in this project (any project they can read). */
   projectId: z.string().min(1).max(200).optional(),
   /**
    * `sidebar` (v0.9.1): the sidebar's general list, which leaves out
@@ -136,7 +133,8 @@ threadRoutes.get('/', async (c) => {
   }
   if (projectId) {
     await assertProjectsAllowed(user.role);
-    await getOwnedProject(projectId, user.id);
+    // Any access level lists the person's own conversations in it; none is a 404.
+    await requireProjectAccess(projectId, user.id, 'viewer');
   }
   // A role without projects has no project tree in its sidebar, so its
   // project conversations stay in the general list rather than vanish.
