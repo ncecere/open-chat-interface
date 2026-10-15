@@ -127,6 +127,14 @@ interface Classification {
   models: Array<{ slug: string; status: string; missing: Array<{ name: string }> }>;
 }
 
+/** A response body as these tests read it. */
+interface Body {
+  error: { message: string; details: unknown };
+  classes: Array<{ locked: boolean }>;
+  links: Array<{ paused: boolean }>;
+}
+const body = async (response: Response) => (await response.json()) as Body;
+
 describe.skipIf(!available)('live data classification: the API', () => {
   const suite = useClassificationSuite(state as ClassificationState);
   const {
@@ -224,7 +232,7 @@ describe.skipIf(!available)('live data classification: the API', () => {
       // Nothing is deleted while anything refers to it, and there is no force.
       const refused = await call('DELETE', `/api/admin/data-classes/${created.id}`);
       expect(refused.status).toBe(409);
-      expect((await refused.json()).error.details).toEqual({
+      expect((await body(refused)).error.details).toEqual({
         connectors: 1,
         projects: 1,
         threads: 1,
@@ -471,7 +479,7 @@ describe.skipIf(!available)('live data classification: the API', () => {
       });
       const refused = await removeLabel(chat.id, student.id);
       expect(refused.status).toBe(409);
-      expect((await refused.json()).error.message).toContain('stays');
+      expect((await body(refused)).error.message).toContain('stays');
     });
   });
 
@@ -481,14 +489,14 @@ describe.skipIf(!available)('live data classification: the API', () => {
       const chat = await thread(ctx.alice);
       const first = await labelThread(ctx.alice, chat.id, student.id);
       expect(first.status).toBe(201);
-      expect((await first.json()).classes).toEqual([
+      expect((await body(first)).classes).toEqual([
         expect.objectContaining({ name: 'Student records', reasons: ['person'], removable: true }),
       ]);
       expect((await labelThread(ctx.alice, chat.id, student.id)).status).toBe(200);
       expect(await auditsOf('thread.data_class.add')).toHaveLength(1);
       const removed = await removeLabel(chat.id, student.id);
       expect(removed.status).toBe(200);
-      expect((await removed.json()).classes).toEqual([]);
+      expect((await body(removed)).classes).toEqual([]);
       expect((await auditsOf('thread.data_class.remove'))[0]?.metadata).toEqual({
         classId: student.id,
         name: 'Student records',
@@ -574,7 +582,7 @@ describe.skipIf(!available)('live data classification: the API', () => {
         body: { classIds: [student.id, health.id] },
       });
       expect(kept.status).toBe(200);
-      expect((await kept.json()).classes.every((entry: { locked: boolean }) => entry.locked)).toBe(
+      expect((await body(kept)).classes.every((entry: { locked: boolean }) => entry.locked)).toBe(
         true,
       );
       // An administrator may remove them.
@@ -762,11 +770,8 @@ describe.skipIf(!available)('live data classification: the API', () => {
         destination: 'share',
       });
       expect(
-        (
-          await call('GET', `/api/share-links/threads/${chat.id}`, { user: ctx.alice }).then((r) =>
-            r.json(),
-          )
-        ).links[0].paused,
+        (await body(await call('GET', `/api/share-links/threads/${chat.id}`, { user: ctx.alice })))
+          .links[0]?.paused,
       ).toBe(false);
     });
 

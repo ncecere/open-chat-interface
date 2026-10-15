@@ -21,6 +21,7 @@ import {
   statementCost,
   tablesCreated,
   tablesTouched,
+  threadConnectorUse,
   UnfinishedRequirementsError,
   usageRollupBackfill,
 } from '@oci/db';
@@ -291,6 +292,7 @@ describe('background migrations', () => {
       attachmentOwnRows,
       messageSearchFolded,
       chunkSearchFolded,
+      threadConnectorUse,
     ];
     expect(backgroundMigrations({})).toEqual(release);
     expect(

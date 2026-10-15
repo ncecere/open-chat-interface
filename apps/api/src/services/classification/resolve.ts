@@ -1,4 +1,4 @@
-import { sql } from '@oci/db';
+import { sql, THREAD_CONNECTOR_USE } from '@oci/db';
 import {
   CLASSIFICATION_REASONS,
   type ClassificationMode,
@@ -14,7 +14,7 @@ import { isBackgroundMigrationDone } from '../migrations/readiness.js';
 import { classificationSettings } from './config.js';
 
 /** The background migration that finds connector use from before 0052 (packages/db). */
-export const THREAD_CONNECTOR_USE_MIGRATION = '0.14.thread-connector-use';
+export const THREAD_CONNECTOR_USE_MIGRATION = THREAD_CONNECTOR_USE;
 
 /** Where the content would go. */
 export type Destination =
