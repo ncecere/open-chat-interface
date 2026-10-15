@@ -15,6 +15,7 @@ import { chatRoutes } from './chat.js';
 import { connectorRoutes } from './connectors.js';
 import { healthRoutes } from './health.js';
 import { maintenanceRoutes } from './maintenance.js';
+import { manifestRoutes } from './manifest.js';
 import { meRoutes } from './me.js';
 import { memoryRoutes } from './memory.js';
 import { modelCatalogRoutes } from './models.js';
@@ -42,6 +43,8 @@ export function createApiRoutes() {
   api.route('/auth', authStatusRoutes);
   // Unauthenticated: the sign-in page renders the logo before anyone signs in.
   api.route('/branding', brandingRoutes);
+  // Unauthenticated: the browser reads it anonymously to offer installing (#400).
+  api.route('/manifest.webmanifest', manifestRoutes);
 
   // Sign-in, sign-up, password reset and verification: RATE_LIMIT_AUTH_PER_MINUTE.
   api.use('/auth/*', authRateLimitMiddleware);
