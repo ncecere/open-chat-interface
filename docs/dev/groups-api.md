@@ -26,7 +26,7 @@ all enforced, most restrictive wins, nothing summed. Grants are written only fro
 | `MAX_GROUPS_PER_PERSON` | 50 | 409 `person_group_limit`, `details.emails` lists who |
 | `MAX_EMAILS_PER_ADD` | 200 | 422 validation (the schema) |
 | `MAX_SHARES_PER_PROJECT` / `MAX_INBOUND_SHARES_PER_PERSON` | 50 / 100 | project sharing |
-| `PERSON_LOOKUPS_PER_MINUTE` | 30 | 429 on adding by email (one count per request) |
+| `PERSON_LOOKUPS_PER_MINUTE` | 30 | 429 (`Retry-After`) on a manager adding by email, one count per request; administrators are not limited |
 
 Limits are checked in the same transaction as the write with the parent row locked; the message states the number.
 A request that would break a limit changes nothing.

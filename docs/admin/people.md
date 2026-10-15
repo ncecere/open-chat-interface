@@ -60,6 +60,9 @@ filtered to their address.
 Conversation **titles only**. An administrator managing an account has no reason
 to read its contents, and this page does not make that easy.
 
+The groups they are in, and their role in each, are listed here too
+([Groups](groups.md)).
+
 A person on [legal hold](compliance.md#legal-hold) is marked **Legal hold** here
 and in the list, with the reason on this page. Their account cannot be deleted
 until the hold is lifted.
@@ -137,8 +140,9 @@ What this person is held to right now, computed by the same code that enforces
 it:
 
 - **Budgets** — each usage budget that applies, with what has been used, what
-  remains, a progress bar, and when it resets. If no budget applies to their
-  role, their usage over the last 24 hours is shown instead.
+  remains, a progress bar, and when it resets, and where it comes from: their
+  role, or a [group](groups.md) they are in. If no budget applies to them,
+  their usage over the last 24 hours is shown instead.
 - **Storage** — bytes and files held against their role's allowance, and the
   largest upload allowed. Files in the trash are listed separately and do not
   count.

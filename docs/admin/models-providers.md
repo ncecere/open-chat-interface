@@ -49,7 +49,10 @@ anything.
   worse than leaving them blank**: somebody will attach a PDF to a model that
   cannot read one and get a reply that never mentions it.
 - **Visible to roles** — which roles see it. This is how an expensive model is
-  kept to the people who need it.
+  kept to the people who need it. A [group](groups.md#models) can also be granted
+  the model, which makes it visible to the group's members whatever their role;
+  the groups granted it are shown here, read-only. A group never hides a model
+  from a role that can see it.
 - **Context window** — the tokens the model accepts, input and output together,
   used to budget provider input. Set it in **Edit model** (whole tokens, up to
   10,000,000; thousands separators are fine). Blank means unknown, and OCI then

@@ -11,6 +11,7 @@ PostgreSQL, with Drizzle. Schema in `packages/db/src/schema/`, migrations in
 | `chat.ts` | threads, messages, attachments, share links |
 | `provider.ts` | providers and the model catalogue |
 | `usage.ts` | usage events, quotas, audit log |
+| `groups.ts` | groups, their members, and the budgets and models they grant (migration 0053) |
 | `lifecycle.ts` | retention, storage policies, jobs, saved views, reports |
 | `organization.ts` | the organisation and its settings |
 
@@ -483,6 +484,37 @@ fills a new column first), the feature checks `isPostStepDone` /
 `isBackgroundMigrationDone` and keeps the old query until then, and the old
 index is dropped by a post-deploy step of the next release. Searches never
 go without an index meanwhile.
+
+## Groups
+
+Migration 0053 adds `group`, `group_member`, `quota_policy_group` and
+`model_group_access` (`schema/groups.ts`); the API is listed in
+[groups-api.md](groups-api.md). `group` is a reserved word: raw SQL must quote it
+(Drizzle does). A group only adds: a person's budgets are the policies attached
+to their role **or** to any of their groups (`quota/applicability.ts`, two
+`EXISTS` so a budget reached twice is one row), and a model is visible by role or
+by group (`services/models.ts`). Neither is cached: membership is read on every
+call, so removal takes effect on the next request.
+
+**Rules the code and tests keep**
+
+- Every foreign key is `ON DELETE CASCADE` (`SET NULL` for "created by" and
+  "added by"), never `RESTRICT`, so a previous-release replica deleting a user,
+  model or budget is never blocked by rows it cannot see.
+- Grants are written only from the group (`PUT /api/admin/groups/:id/grants`),
+  never through the budget or model forms, whose bodies a client may send
+  without a group field. Refused while a replica of an earlier minor release is
+  live (`services/groups/upgrade-guard.ts`).
+- The caps (500 groups, 5,000 members and 20 managers a group, 50 groups a
+  person) are counted in the transaction that writes, after locking the parent.
+
+**Lock order** for a group change: the organization row (creating a group only),
+the group row, then the people's `user` rows in id order (`FOR NO KEY UPDATE`: it
+serialises two groups adding the same person without blocking foreign-key checks
+against the account), then, for what project sharing reconciles, project rows,
+thread rows and `storage_usage` rows by user id
+(`services/groups/access-changes.ts` is where it hooks in). Deleting a group does
+not touch a person's records, so none of these paths checks a legal hold.
 
 ## Encrypted secrets
 

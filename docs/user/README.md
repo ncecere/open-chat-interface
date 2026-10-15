@@ -31,6 +31,8 @@ way regardless of which model you pick.
 13. [Limits](limits.md) — what a usage warning means and what to do about it.
 14. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
     or Claude.
+15. [Groups](groups.md) — what a group is, and managing one if you are a group
+    manager.
 
 ## The parts of the screen
 

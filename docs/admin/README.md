@@ -19,6 +19,8 @@ resolves it. [First run](first-run.md) walks through it.
 3. [Identity and access](identity.md) — roles, local accounts, OIDC, group
    role mapping.
 4. [People](people.md) — users, roles, bans, limits, invitations, bulk actions.
+   [Groups](groups.md) — sets of people with their own budgets and models, and
+   managers who maintain who belongs.
 5. [Models and providers](models-providers.md) — credentials, the catalogue, the
    default model.
 6. [Governance](governance.md) — roles and access, usage budgets, retention,
@@ -59,7 +61,8 @@ Pages are grouped by task. **Overview** sits above the groups.
 | --- | --- |
 | Users | Accounts, roles, bans, sessions, limits, bulk actions |
 | Invitations | Invite links when registration is closed |
-| Roles & access | Everything that shapes one role: limits, storage, budgets, models, features |
+| Roles & access | Everything that shapes one role: limits, storage, budgets, models, features, and the groups that add to them |
+| [Groups](groups.md) | Sets of people with their own budgets and models, and delegated managers |
 
 **Models**
 
