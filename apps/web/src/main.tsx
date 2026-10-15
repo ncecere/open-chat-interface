@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 import { DocumentBranding } from '~/components/brand/document-branding';
+import { listenForInstallPrompt } from '~/lib/install-prompt';
 import { clearReadOnlyRefusalsWhenLifted } from '~/lib/read-only-refusals';
 import { InstanceThemeSync } from '~/providers/instance-theme-sync';
 import { ThemeProvider } from '~/providers/theme-provider';
@@ -18,6 +19,9 @@ const queryClient = new QueryClient({
 
 // A change refused while read-only stops saying so once it is off (#308).
 clearReadOnlyRefusalsWhenLifted(queryClient);
+
+// The browser offers installing once, early; keep it for Settings (#400).
+listenForInstallPrompt();
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Root element not found');
