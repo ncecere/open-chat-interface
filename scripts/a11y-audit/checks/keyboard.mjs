@@ -52,15 +52,23 @@ function snapshotFocus() {
     boxShadow: computed.boxShadow,
   });
   const own = drawn(style);
-  // A control may hand its indicator to a container that draws it while the control has focus.
-  let delegated = null;
+  // A control may hand its indicator to something that draws it while the control has focus: a
+  // container, its label, or a neighbouring element (a visually hidden native input behind a
+  // styled one is how a custom radio or switch is usually built).
+  const candidates = [...(element.labels ?? [])];
+  if (element.previousElementSibling) candidates.push(element.previousElementSibling);
+  if (element.nextElementSibling) candidates.push(element.nextElementSibling);
   for (
     let node = element.parentElement, depth = 0;
     node && depth < 4;
     node = node.parentElement, depth += 1
   ) {
-    if (!node.matches(':focus-within')) continue;
-    const container = drawn(getComputedStyle(node));
+    if (node.matches(':focus-within') || node.matches(':has(:focus-visible)'))
+      candidates.push(node);
+  }
+  let delegated = null;
+  for (const candidate of candidates) {
+    const container = drawn(getComputedStyle(candidate));
     if (
       (container.outlineStyle !== 'none' && container.outlineWidth > 0) ||
       container.boxShadow !== 'none'
@@ -90,7 +98,9 @@ function snapshotFocus() {
   let coveredBy = null;
   for (const [x, y] of points) {
     const top = document.elementsFromPoint(x, y)[0];
-    if (top && !element.contains(top) && !top.contains(element)) {
+    // The control's own label sits over a visually hidden input: that is the control, not a cover.
+    const isOwnLabel = [...(element.labels ?? [])].some((label) => label.contains(top));
+    if (top && !element.contains(top) && !top.contains(element) && !isOwnLabel) {
       covered += 1;
       coveredBy ??= [
         top.tagName.toLowerCase(),
