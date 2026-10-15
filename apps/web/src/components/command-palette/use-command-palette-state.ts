@@ -9,6 +9,7 @@ import {
   useThreadSearch,
 } from '~/hooks/use-thread-search';
 import { useCreateThread } from '~/hooks/use-threads';
+import { useT } from '~/lib/i18n';
 import { stripHighlights } from '~/lib/search-highlight';
 import type { CommandPaletteProps, PaletteGroup, PaletteItem } from './types';
 import { usePaletteActions } from './use-palette-actions';
@@ -35,6 +36,7 @@ export function useCommandPaletteState({
   sidebarOpen,
   onSidebarOpenChange,
 }: CommandPaletteProps) {
+  const t = useT();
   const navigate = useNavigate();
   const createThread = useCreateThread();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -79,11 +81,11 @@ export function useCommandPaletteState({
     if (normalizedQuery && searchIsSettled && !threadsAreStale && threads.length > 0) {
       nextGroups.push({
         id: 'threads',
-        label: 'Conversations',
+        label: t('palette.group.conversations'),
         items: threads.map((result) => ({
           id: `thread-${result.thread.id}`,
           label: stripHighlights(result.titleHighlight) || result.thread.title,
-          keywords: 'thread conversation',
+          keywords: t('palette.keywords.thread'),
           icon: MessageSquareText,
           content: createElement(SearchResultContent, { result }),
           keepFocusOnClose: result.matches.length > 0,
@@ -101,11 +103,11 @@ export function useCommandPaletteState({
       const prompt = query.trim();
       nextGroups.push({
         id: 'query-action',
-        label: 'Actions',
+        label: t('palette.group.actions'),
         items: [
           {
             id: 'new-chat-with-query',
-            label: `New chat with query: “${prompt}”`,
+            label: t('palette.action.newChatWithQuery', { query: prompt }),
             keywords: prompt,
             icon: Plus,
             onSelect: async () => {
@@ -138,6 +140,7 @@ export function useCommandPaletteState({
     normalizedQuery,
     query,
     searchIsSettled,
+    t,
     threads,
     threadsAreStale,
   ]);
@@ -210,7 +213,7 @@ export function useCommandPaletteState({
   const threadAnnouncement = !normalizedQuery
     ? ''
     : threadSearchFailed
-      ? 'Conversation search failed.'
+      ? t('palette.searchFailed')
       : showThreadProgress
         ? ''
         : searchResultsAnnouncement(threads.length);

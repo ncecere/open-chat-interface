@@ -1,4 +1,10 @@
 {
   "description": "Text that stays a literal inside a migrated directory, each with the reason: a brand mark, a code sample, a symbol. file and text must match exactly; an entry that no longer matches fails the check.",
-  "entries": []
+  "entries": [
+    {
+      "file": "apps/web/src/components/command-palette/command-palette.tsx",
+      "text": "ESC",
+      "reason": "A key name on a keycap, which stays as printed on the key (shown in dir=ltr); its description, 'Navigate', is translated."
+    }
+  ]
 }

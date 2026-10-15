@@ -2,6 +2,7 @@ import { THREAD_SEARCH_DEFAULT_LIMIT, type ThreadSearchResult } from '@oci/share
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api } from '~/lib/api-client';
+import { translate } from '~/lib/i18n';
 
 /** Delay before a typed query is sent, so each keystroke is not a request. */
 export const SEARCH_DEBOUNCE_MS = 180;
@@ -46,6 +47,5 @@ export function searchResultTarget(result: ThreadSearchResult) {
 }
 
 export function searchResultsAnnouncement(count: number): string {
-  if (count === 0) return 'No conversations matched.';
-  return count === 1 ? '1 conversation found.' : `${count} conversations found.`;
+  return translate('shell.search.found', { count });
 }
