@@ -11,6 +11,7 @@ import { useAuthStatus } from '~/hooks/use-auth-status';
 import { useCreateThread } from '~/hooks/use-threads';
 import { useConfirmRemovedConversation } from '~/hooks/use-unused-conversation';
 import { focusComposerSoon } from '~/lib/focus-after-navigation';
+import { useT } from '~/lib/i18n';
 import { ariaKeyShortcuts } from '~/lib/keyboard-shortcuts';
 import { loopTab } from '~/lib/tab-loop';
 import { cn } from '~/lib/utils';
@@ -25,6 +26,7 @@ interface SidebarProps {
 export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
   // Read here rather than threaded through the shell: the header needs the
   // logo and short name too, and the status query is already cached.
+  const t = useT();
   const { data: status } = useAuthStatus();
   const branding = status?.branding;
   const [search, setSearch] = useState('');
@@ -56,7 +58,9 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
     <aside
       role={mobile ? 'dialog' : undefined}
       aria-modal={mobile ? true : undefined}
-      aria-label={mobile ? 'Conversation sidebar' : undefined}
+      aria-label={mobile ? t('shell.sidebar.drawerLabel') : undefined}
+      // What the shell looks the drawer up by: its name changes with the language.
+      data-sidebar-drawer={mobile ? '' : undefined}
       aria-hidden={!open ? true : undefined}
       inert={!open ? true : undefined}
       // As a modal, Tab and Shift+Tab stay in it (#191).
@@ -75,7 +79,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           variant="ghost"
           size="icon-sm"
           onClick={onToggle}
-          aria-label="Close sidebar"
+          aria-label={t('shell.sidebar.close')}
           aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
         >
           <PanelLeft className="rtl:-scale-x-100" />
@@ -100,7 +104,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           disabled={createThread.isPending}
           aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
         >
-          New Chat
+          {t('shell.sidebar.newChat')}
         </Button>
       </div>
 
@@ -115,8 +119,8 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
               setSearch('');
             }
           }}
-          placeholder="Search your conversations..."
-          aria-label="Search your conversations"
+          placeholder={t('shell.sidebar.searchPlaceholder')}
+          aria-label={t('shell.sidebar.searchLabel')}
           dir="auto"
           aria-describedby="thread-search-hint"
           className="h-11 w-full bg-transparent ps-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
@@ -124,7 +128,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       </div>
 
       <p id="thread-search-hint" className="sr-only">
-        Searches titles and message text. Results appear below.
+        {t('shell.sidebar.searchHint')}
       </p>
 
       <div className="mx-3 h-px bg-[var(--border-subtle)]" />
@@ -153,7 +157,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           onClick={handleNewChat}
           aria-keyshortcuts={ariaKeyShortcuts('new-chat')}
         >
-          New Chat
+          {t('shell.sidebar.newChat')}
         </Button>
         <UserMenu compact />
       </div>

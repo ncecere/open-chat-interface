@@ -2,7 +2,7 @@ import type { MutationObserver, QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { ApiError } from '~/lib/api-client';
 import {
-  READ_ONLY_MESSAGE_START,
+  readOnlyMessageStarts,
   readOnlyStatus,
   subscribeReadOnlyStatus,
   useReadOnlyStatus,
@@ -20,7 +20,9 @@ import {
 export function isReadOnlyRefusal(error: unknown): boolean {
   if (error instanceof ApiError && error.code === 'READ_ONLY') return true;
   const text = typeof error === 'string' ? error : (error as Error | null)?.message;
-  return typeof text === 'string' && text.startsWith(READ_ONLY_MESSAGE_START);
+  return (
+    typeof text === 'string' && readOnlyMessageStarts().some((start) => text.startsWith(start))
+  );
 }
 
 /**

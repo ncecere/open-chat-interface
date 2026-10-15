@@ -13,6 +13,7 @@ import {
   useSidebarProjects,
   useSidebarSharedProjects,
 } from '~/hooks/use-projects';
+import { useT } from '~/lib/i18n';
 import { accessLabel } from '~/lib/project-access';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
@@ -37,6 +38,7 @@ export function SidebarProjects() {
  * keeps it closed for that visit.
  */
 function ProjectsSection() {
+  const t = useT();
   const { data: projects, isLoading, isError, refetch } = useSidebarProjects();
   // Loads again by itself after an outage, rather than saying "could not be
   // loaded" until the page is reloaded (#233).
@@ -69,12 +71,12 @@ function ProjectsSection() {
           id="sidebar-projects-heading"
           className="min-w-0 flex-1 px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]"
         >
-          Projects
+          {t('shell.sidebarProjects.heading')}
         </h2>
         <Link
           to="/projects"
-          aria-label="All projects"
-          title="All projects"
+          aria-label={t('shell.sidebarProjects.all')}
+          title={t('shell.sidebarProjects.all')}
           className="flex size-6 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] [&_svg]:size-3.5"
         >
           <LayoutList aria-hidden="true" />
@@ -82,8 +84,8 @@ function ProjectsSection() {
         <Button
           type="button"
           variant="ghost"
-          aria-label="New project"
-          title="New project"
+          aria-label={t('shell.sidebarProjects.new')}
+          title={t('shell.sidebarProjects.new')}
           locked={lock.title}
           onClick={() => setCreating(true)}
           className="size-6 rounded px-0 text-[var(--text-muted)] [&_svg]:size-3.5"
@@ -94,7 +96,7 @@ function ProjectsSection() {
 
       {isLoading ? null : isError ? (
         <p className="px-2.5 py-1 text-xs text-[var(--text-muted)]">
-          Projects could not be loaded.
+          {t('shell.sidebarProjects.loadFailed')}
         </p>
       ) : (projects?.length ?? 0) === 0 ? (
         <Button
@@ -104,10 +106,10 @@ function ProjectsSection() {
           onClick={() => setCreating(true)}
           className="h-auto w-full justify-start whitespace-normal rounded-lg px-2.5 py-2 text-start text-xs text-[var(--text-muted)]"
         >
-          Create a project to group conversations with shared instructions and files.
+          {t('shell.sidebarProjects.empty')}
         </Button>
       ) : (
-        <ul className="flex flex-col gap-0.5" aria-label="Projects">
+        <ul className="flex flex-col gap-0.5" aria-label={t('shell.sidebarProjects.heading')}>
           {projects?.map((project) => (
             <ProjectItem
               key={project.id}
@@ -128,9 +130,9 @@ function ProjectsSection() {
             id="sidebar-shared-heading"
             className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]"
           >
-            Shared with me
+            {t('shell.sidebarProjects.shared')}
           </h3>
-          <ul className="flex flex-col gap-0.5" aria-label="Shared with me">
+          <ul className="flex flex-col gap-0.5" aria-label={t('shell.sidebarProjects.shared')}>
             {shared?.map((project) => (
               <ProjectItem
                 key={project.id}
@@ -205,6 +207,7 @@ function ProjectItem({
   openThreadId: string | undefined;
   open: OpenConversation | undefined;
 }) {
+  const t = useT();
   const listId = `sidebar-project-${project.id}`;
   // Who owns a project shared with the person, and what they may do in it.
   const sharedNote =
@@ -228,8 +231,12 @@ function ProjectItem({
           type="button"
           aria-expanded={expanded}
           aria-controls={listId}
-          aria-label={`Conversations in ${project.name}`}
-          title={expanded ? 'Hide conversations' : 'Show conversations'}
+          aria-label={t('shell.sidebarProjects.conversationsIn', { name: project.name })}
+          title={t(
+            expanded
+              ? 'shell.sidebarProjects.hideConversations'
+              : 'shell.sidebarProjects.showConversations',
+          )}
           onClick={onToggle}
           // 24px is the WCAG 2.2 minimum target; the row's link fills the rest.
           className="ms-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -276,7 +283,10 @@ function ProjectItem({
         {expanded && (
           <div className="ms-4 border-s border-[var(--border-subtle)] ps-1.5">
             {rows.length > 0 && (
-              <ul aria-label={`Conversations in ${project.name}`} className="flex flex-col gap-0.5">
+              <ul
+                aria-label={t('shell.sidebarProjects.conversationsIn', { name: project.name })}
+                className="flex flex-col gap-0.5"
+              >
                 {rows.map((thread) => (
                   <li key={thread.id}>
                     <ThreadRow thread={thread} active={thread.id === openThreadId} />
@@ -291,12 +301,17 @@ function ProjectItem({
                 search={{ tab: 'conversations' }}
                 className="block rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
               >
-                Show all ({project.threadCount})
-                <span className="sr-only"> conversations in {project.name}</span>
+                {t('shell.sidebarProjects.showAll', { count: project.threadCount })}
+                <span className="sr-only">
+                  {' '}
+                  {t('shell.sidebarProjects.showAllHidden', { name: project.name })}
+                </span>
               </Link>
             ) : (
               rows.length === 0 && (
-                <p className="px-2.5 py-1.5 text-xs text-[var(--text-muted)]">No conversations</p>
+                <p className="px-2.5 py-1.5 text-xs text-[var(--text-muted)]">
+                  {t('shell.sidebarProjects.noConversations')}
+                </p>
               )
             )}
           </div>

@@ -2,7 +2,7 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ComponentProps, ReactNode, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';
-import { useLocale } from '~/lib/i18n';
+import { useLocale, useT } from '~/lib/i18n';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 import { useFieldDescribedBy } from './field-hint';
@@ -221,6 +221,7 @@ export function Select({
   /** A note about the field, such as why it is disabled. */
   'aria-describedby'?: string;
 }) {
+  const t = useT();
   // Described by the hint of the Field it is in, too (#295).
   const describedBy = useFieldDescribedBy(ariaDescribedBy);
   // The popup's listbox is named like the field (#114): by its aria-label, or
@@ -245,7 +246,7 @@ export function Select({
         aria-describedby={describedBy}
         valueTitle={options.find((option) => option.value === value)?.label}
       >
-        <SelectValue placeholder={placeholder ?? 'Select an option'} />
+        <SelectValue placeholder={placeholder ?? t('ui.select.placeholder')} />
       </SelectTrigger>
       <SelectContent {...held.contentProps} aria-label={ariaLabel ?? labelText}>
         {options.map((option) => (
@@ -284,6 +285,7 @@ export function GroupedSelect({
   'aria-label'?: string;
   'aria-describedby'?: string;
 }) {
+  const t = useT();
   // The popup's listbox is named like the field (#114): by its aria-label, or
   // else by the <label> pointing at it, read when the popup opens.
   const [labelText, setLabelText] = useState<string | undefined>(undefined);
@@ -310,7 +312,7 @@ export function GroupedSelect({
           groups.flatMap((group) => group.options).find((option) => option.value === value)?.label
         }
       >
-        <SelectValue placeholder={placeholder ?? 'Select an option'} />
+        <SelectValue placeholder={placeholder ?? t('ui.select.placeholder')} />
       </SelectTrigger>
       <SelectContent {...held.contentProps} aria-label={ariaLabel ?? labelText}>
         {groups.map((group) => (

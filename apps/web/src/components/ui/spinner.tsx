@@ -1,4 +1,5 @@
 import { Loader2 } from 'lucide-react';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 export function Spinner({ className }: { className?: string }) {
@@ -6,10 +7,11 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 export function FullPageSpinner() {
+  const t = useT();
   return (
     <div
       role="status"
-      aria-label="Loading page"
+      aria-label={t('ui.spinner.loadingPage')}
       className="flex h-full w-full items-center justify-center"
     >
       <Spinner className="size-6" />

@@ -37,7 +37,9 @@ function GlobalShortcuts({ onToggleSidebar }: { onToggleSidebar: () => void }) {
  * and an inset rounded main panel below it.
  */
 const DOCKED_SIDEBAR = '(min-width: 1024px)';
-const DRAWER = 'aside[aria-label="Conversation sidebar"]';
+const DRAWER = 'aside[data-sidebar-drawer]';
+/** The top bar's Open sidebar button, found by attribute: its name follows the language. */
+const OPEN_SIDEBAR = '[data-open-sidebar]';
 
 export function AppShell({ children }: { children: ReactNode }) {
   // A drawer below 1024px, as on phones: docked at 768 it left the chat 512px,
@@ -85,7 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (event.key !== 'Escape') return;
       setSidebarOpen(false);
       requestAnimationFrame(() => {
-        document.querySelector<HTMLElement>('[aria-label="Open sidebar"]')?.focus();
+        document.querySelector<HTMLElement>(OPEN_SIDEBAR)?.focus();
       });
     };
     window.addEventListener('keydown', closeOnEscape);
@@ -97,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!mobile) return;
     // Back to "Open sidebar" once the page behind is no longer inert, unless
     // the page has already taken focus (a navigation from the drawer, #242).
-    focusWhenReady(() => document.querySelector<HTMLElement>('[aria-label="Open sidebar"]'), {
+    focusWhenReady(() => document.querySelector<HTMLElement>(OPEN_SIDEBAR), {
       until: () => {
         const active = document.activeElement;
         return Boolean(active && active !== document.body && !active.closest(DRAWER));

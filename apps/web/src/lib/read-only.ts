@@ -1,5 +1,7 @@
 import { INACTIVE_READ_ONLY_STATUS, type ReadOnlyStatus } from '@oci/shared';
 import { useSyncExternalStore } from 'react';
+import { getFormatLocale } from './i18n/format';
+import { translate } from './i18n/state';
 import { TIME_OF_DAY } from './utils';
 
 /**
@@ -106,7 +108,9 @@ export function formatReadOnlyTime(iso: string, now = new Date()): string {
   const date = new Date(iso);
   const sameDay = date.toDateString() === now.toDateString();
   const sameYear = date.getFullYear() === now.getFullYear();
-  return date.toLocaleString(undefined, {
+  // The language the app is showing, not the browser's: the formatter's styles
+  // have no weekday, day and zone name together, so it is built here.
+  return date.toLocaleString(getFormatLocale(), {
     ...(sameDay ? {} : { weekday: 'short', day: 'numeric', month: 'short' }),
     ...(sameYear ? {} : { year: 'numeric' }),
     ...TIME_OF_DAY,
@@ -114,14 +118,31 @@ export function formatReadOnlyTime(iso: string, now = new Date()): string {
   });
 }
 
-/** How every refusal's text (`readOnlyMessage`) begins. */
+/** How every refusal's text (`readOnlyMessage`) begins, in English. */
 export const READ_ONLY_MESSAGE_START = 'Read-only for maintenance';
+
+/**
+ * How every refusal's text begins in the language being shown: whoever wrote
+ * the refusal may have been showing another, so callers also test the English.
+ */
+export function readOnlyMessageStarts(): string[] {
+  return [READ_ONLY_MESSAGE_START, translate('shell.readOnly.short')];
+}
+
+/** The administrator's reason as a sentence of its own, with the space that joins it to what comes before. */
+function reasonSentence(status: ReadOnlyStatus): string {
+  return status.reason ? ` ${status.reason.trim().replace(/([^.!?])$/, '$1.')}` : '';
+}
 
 /** One sentence for people: why changes are paused, and until when if known. */
 export function readOnlyMessage(status: ReadOnlyStatus, now = new Date()): string {
-  const until = status.until ? ` until about ${formatReadOnlyTime(status.until, now)}` : '';
-  const reason = status.reason ? ` ${status.reason.trim().replace(/([^.!?])$/, '$1.')}` : '';
-  return `${READ_ONLY_MESSAGE_START}${until}: you can read, search and export, but changes can’t be saved.${reason}`;
+  const reason = reasonSentence(status);
+  return status.until
+    ? translate('shell.readOnly.messageUntil', {
+        time: formatReadOnlyTime(status.until, now),
+        reason,
+      })
+    : translate('shell.readOnly.message', { reason });
 }
 
 /**
@@ -129,16 +150,20 @@ export function readOnlyMessage(status: ReadOnlyStatus, now = new Date()): strin
  * no email goes out; say so rather than "a link has been sent" (#138).
  */
 export function passwordResetPausedMessage(status: ReadOnlyStatus, now = new Date()): string {
-  const until = status.until ? ` until about ${formatReadOnlyTime(status.until, now)}` : '';
-  const reason = status.reason ? ` ${status.reason.trim().replace(/([^.!?])$/, '$1.')}` : '';
-  return `Password resets are paused for maintenance${until}, and no reset email has been sent.${reason} Try again once maintenance is over.`;
+  const reason = reasonSentence(status);
+  return status.until
+    ? translate('shell.readOnly.passwordResetUntil', {
+        time: formatReadOnlyTime(status.until, now),
+        reason,
+      })
+    : translate('shell.readOnly.passwordReset', { reason });
 }
 
 /** Short reason for a disabled control's tooltip. */
 export function readOnlyShortReason(status: ReadOnlyStatus, now = new Date()): string {
   return status.until
-    ? `Read-only for maintenance until about ${formatReadOnlyTime(status.until, now)}`
-    : 'Read-only for maintenance';
+    ? translate('shell.readOnly.shortUntil', { time: formatReadOnlyTime(status.until, now) })
+    : translate('shell.readOnly.short');
 }
 
 /**

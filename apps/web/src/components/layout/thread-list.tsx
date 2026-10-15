@@ -12,8 +12,18 @@ import {
 } from '~/hooks/use-projects';
 import { useArchiveThread, useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
+import { type MessageKey, useT } from '~/lib/i18n';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
+
+type GroupId = 'pinned' | 'today' | 'yesterday' | 'older';
+
+const GROUP_LABELS: Record<GroupId, MessageKey> = {
+  pinned: 'shell.threadList.pinned',
+  today: 'shell.threadList.today',
+  yesterday: 'shell.threadList.yesterday',
+  older: 'shell.threadList.older',
+};
 
 /** Groups by local calendar date, matching the reference's Today/Yesterday buckets. */
 function groupThreads(threads: ThreadSummary[]) {
@@ -21,11 +31,11 @@ function groupThreads(threads: ThreadSummary[]) {
   today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const groups: { label: string; threads: ThreadSummary[] }[] = [
-    { label: 'Pinned', threads: [] },
-    { label: 'Today', threads: [] },
-    { label: 'Yesterday', threads: [] },
-    { label: 'Older', threads: [] },
+  const groups: { id: GroupId; threads: ThreadSummary[] }[] = [
+    { id: 'pinned', threads: [] },
+    { id: 'today', threads: [] },
+    { id: 'yesterday', threads: [] },
+    { id: 'older', threads: [] },
   ];
 
   for (const thread of threads) {
@@ -53,6 +63,7 @@ export function ThreadRow({
   /** Shown lightly after the title of a pinned project conversation. */
   projectName?: string;
 }) {
+  const t = useT();
   const update = useUpdateThread({ reportErrors: true });
   const archive = useArchiveThread();
   const [renaming, setRenaming] = useState(false);
@@ -75,8 +86,8 @@ export function ThreadRow({
           params={{ threadId: thread.parentThreadId }}
           // Each row's controls are named for the row, as memory's are, so a
           // screen reader's list of buttons is not N copies of one name (#111).
-          aria-label={`Go to parent conversation of: ${thread.title}`}
-          title="Go to parent conversation"
+          aria-label={t('shell.threadRow.parent', { title: thread.title })}
+          title={t('shell.threadRow.parentTitle')}
           // 24 × 24, the WCAG 2.2 target floor; it was the 14 px icon plus
           // padding, 22 × 22, right against the row's link (#193).
           className="ms-1.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
@@ -89,7 +100,11 @@ export function ThreadRow({
         params={{ threadId: thread.id }}
         aria-current={active ? 'page' : undefined}
         className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]"
-        title={projectName ? `${thread.title} (${projectName})` : thread.title}
+        title={
+          projectName
+            ? t('shell.threadRow.titleInProject', { title: thread.title, project: projectName })
+            : thread.title
+        }
       >
         <span dir="auto" className="min-w-0 flex-1 truncate">
           {thread.title}
@@ -103,7 +118,7 @@ export function ThreadRow({
             )}
           >
             <Folder className="size-3 shrink-0" aria-hidden="true" />
-            <span className="sr-only">, in project </span>
+            <span className="sr-only">{t('shell.threadRow.inProject')} </span>
             <span className="truncate">{projectName}</span>
           </span>
         )}
@@ -120,7 +135,9 @@ export function ThreadRow({
       >
         <button
           type="button"
-          aria-label={`${thread.pinned ? 'Unpin' : 'Pin'} conversation: ${thread.title}`}
+          aria-label={t(thread.pinned ? 'shell.threadRow.unpin' : 'shell.threadRow.pin', {
+            title: thread.title,
+          })}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={() => update.mutate({ id: thread.id, pinned: !thread.pinned })}
@@ -130,7 +147,7 @@ export function ThreadRow({
         </button>
         <button
           type="button"
-          aria-label={`Rename conversation: ${thread.title}`}
+          aria-label={t('shell.threadRow.rename', { title: thread.title })}
           aria-haspopup="dialog"
           disabled={readOnly.active}
           title={lockedTitle}
@@ -141,7 +158,7 @@ export function ThreadRow({
         </button>
         <button
           type="button"
-          aria-label={`Archive conversation: ${thread.title}`}
+          aria-label={t('shell.threadRow.archive', { title: thread.title })}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={(event) => {
@@ -173,6 +190,7 @@ export function ThreadRow({
  * (SidebarProjects).
  */
 export function ThreadList() {
+  const t = useT();
   const { data: threads, isLoading, isError, refetch } = useSidebarThreads();
   // A refresh that failed while the server was unreachable (the end of a new
   // chat's first reply during an outage) is tried again by itself, as the
@@ -201,7 +219,7 @@ export function ThreadList() {
       return null;
     return (
       <p className="px-2 py-8 text-center text-xs text-[var(--text-muted)]">
-        Your conversations will appear here.
+        {t('shell.threadList.empty')}
       </p>
     );
   }
@@ -209,11 +227,11 @@ export function ThreadList() {
   return (
     <div className="flex flex-col gap-4">
       {groupThreads(threads).map((group) => {
-        const isPinned = group.label === 'Pinned';
+        const isPinned = group.id === 'pinned';
         const visible = !isPinned || pinnedOpen;
 
         return (
-          <div key={group.label}>
+          <div key={group.id}>
             {/* Every group is a heading, as Projects is, so heading navigation
                 reaches each day; they were paragraphs, and Pinned a bare
                 button (#198). Pinned's disclosure sits inside its heading. */}
@@ -232,12 +250,12 @@ export function ThreadList() {
                     className={cn('size-3 transition-transform', !pinnedOpen && '-rotate-90')}
                     aria-hidden="true"
                   />
-                  Pinned
+                  {t(GROUP_LABELS.pinned)}
                 </button>
               </h2>
             ) : (
               <h2 className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]">
-                {group.label}
+                {t(GROUP_LABELS[group.id])}
               </h2>
             )}
             {visible && (
