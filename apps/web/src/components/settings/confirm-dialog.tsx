@@ -38,7 +38,8 @@ export function SettingsConfirmDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  title: string;
+  /** A node, so a file's or a project's name in it can be isolated with `<bdi>`. */
+  title: ReactNode;
   description: ReactNode;
   confirmLabel: string;
   /** Shown on the confirm button while the action runs; "Working…" when omitted. */

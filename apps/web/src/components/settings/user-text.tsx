@@ -15,6 +15,29 @@ import type { MessageKey, MessageParams, Translate } from '~/lib/i18n';
 const START = '\u0001';
 const END = '\u0002';
 
+/**
+ * A translated sentence with an element inside it (a link to a project, a
+ * link to a conversation): `nodes` holds the elements by placeholder name. One
+ * message, so a language can put the element anywhere. The element is
+ * responsible for its own text direction (`dir="auto"` on a link to user text).
+ */
+export function tWithNodes(
+  t: Translate,
+  key: MessageKey,
+  params: MessageParams,
+  nodes: Record<string, ReactNode>,
+): ReactNode {
+  const marked: MessageParams = { ...params };
+  for (const name of Object.keys(nodes)) marked[name] = `${START}${name}${END}`;
+  const parts = t(key, marked).split(new RegExp(`${START}(\\w+)${END}`));
+  return parts.map((part, index) => {
+    // biome-ignore lint/suspicious/noArrayIndexKey: fixed pieces of one message
+    if (index % 2 === 0) return part === '' ? null : <Fragment key={index}>{part}</Fragment>;
+    // biome-ignore lint/suspicious/noArrayIndexKey: fixed pieces of one message
+    return <Fragment key={index}>{nodes[part]}</Fragment>;
+  });
+}
+
 export function tWithUserText(
   t: Translate,
   key: MessageKey,
