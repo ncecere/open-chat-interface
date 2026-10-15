@@ -395,6 +395,10 @@ function ThreadConversation({
                 history={history.controls}
                 anchorId={targetId}
                 streaming={session.streaming}
+                // Shown below as an alert: a reply that ended with one is not "complete".
+                replyFailed={Boolean(
+                  session.error || session.notice || session.recovery.error || replies.error,
+                )}
                 // With tool calling the model decides whether to search, and its
                 // search shows as a tool step instead.
                 searching={

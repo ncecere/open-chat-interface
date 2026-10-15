@@ -2,18 +2,21 @@
 // @vitest-environment-options {"settings":{"disableIframePageLoading":true,"handleDisabledFileLoadingAsSuccess":true}}
 import { act, type ReactNode } from 'react';
 import type { Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PublicArtifactsProvider } from '../../src/components/artifacts/artifacts-provider';
 import {
   clampPanelWidth,
+  defaultPanelWidth,
   maxPanelWidth,
+  PANEL_BUTTON_STEP,
   PANEL_KEY_STEP,
   PANEL_MIN_WIDTH,
   PANEL_WIDTH_STORAGE_KEY,
   widthForKey,
 } from '../../src/components/artifacts/panel-resize';
 import { CreatedArtifactCards } from '../../src/components/artifacts/reply-content';
-import { button, cleanup, click, dialog } from './admin-test-utils';
+import { activateLocale } from '../../src/lib/i18n/state';
+import { button, cleanup, click, dialog, findButton } from './admin-test-utils';
 import {
   conversation,
   fullScreenPanel,
@@ -22,6 +25,7 @@ import {
   pressCancelableEscape,
   resetArtifactTest,
 } from './artifacts.fixtures';
+import { preloadCatalogs } from './i18n-test-utils';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), download: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({
@@ -45,10 +49,13 @@ vi.mock('../../src/lib/artifact-sandbox', async (importOriginal) => ({
 }));
 
 let root: Root | undefined;
+beforeAll(preloadCatalogs);
 beforeEach(() => resetArtifactTest(api));
 afterEach(async () => {
   if (root) await cleanup(root);
   root = undefined;
+  document.documentElement.removeAttribute('dir');
+  await activateLocale('en');
   vi.restoreAllMocks();
 });
 
@@ -243,6 +250,128 @@ describe('resizing the docked panel', () => {
     });
     expect(panel().style.width).toBe('');
     expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBeNull();
+  });
+
+  describe('without dragging (WCAG 2.5.7)', () => {
+    const wider = () => findButton('Make panel wider');
+    const narrower = () => findButton('Make panel narrower');
+    const width = () => Number(separator()!.getAttribute('aria-valuenow'));
+    const off = (control: HTMLButtonElement | undefined) =>
+      control?.disabled === true || control?.getAttribute('aria-disabled') === 'true';
+
+    it('has Wider and Narrower buttons that set the width and stop at the limits', async () => {
+      mockViewport(1280);
+      await mount(conversation());
+      await click(button('Open artifact: Chart'));
+      const start = defaultPanelWidth(window.innerWidth);
+      const max = maxPanelWidth(window.innerWidth);
+      expect(wider()).toBeDefined();
+      expect(narrower()).toBeDefined();
+      // Real buttons in the header, in the tab order, not the separator's drag.
+      expect(wider()?.tagName).toBe('BUTTON');
+      expect(wider()?.getAttribute('tabindex')).toBeNull();
+      expect(wider()?.closest('[data-panel-header]')).not.toBeNull();
+      expect(width()).toBe(start);
+      expect(panel().style.width).toBe('');
+
+      await click(wider()!);
+      // The separator says the new width, so it is announced where the width is read.
+      expect(width()).toBe(start + PANEL_BUTTON_STEP);
+      expect(panel().style.width).toBe(`${start + PANEL_BUTTON_STEP}px`);
+      expect(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBe(String(start + PANEL_BUTTON_STEP));
+      await click(narrower()!);
+      await click(narrower()!);
+      expect(width()).toBe(start - PANEL_BUTTON_STEP);
+
+      // Held down to the narrowest: it stops, and Narrower is off.
+      for (let press = 0; press < 20 && !off(narrower()); press++) await click(narrower()!);
+      expect(width()).toBe(PANEL_MIN_WIDTH);
+      expect(off(narrower())).toBe(true);
+      expect(off(wider())).toBe(false);
+      await click(narrower()!);
+      expect(width()).toBe(PANEL_MIN_WIDTH);
+
+      for (let press = 0; press < 40 && !off(wider()); press++) await click(wider()!);
+      expect(width()).toBe(max);
+      expect(off(wider())).toBe(true);
+      expect(off(narrower())).toBe(false);
+      await click(wider()!);
+      expect(width()).toBe(max);
+      expect(panel().style.width).toBe(`${max}px`);
+    });
+
+    it('agrees with the separator: the same width by key, button or reset', async () => {
+      mockViewport(1280);
+      await mount(conversation());
+      await click(button('Open artifact: Chart'));
+      const handle = separator()!;
+      await key(handle, 'Home');
+      await click(wider()!);
+      expect(width()).toBe(PANEL_MIN_WIDTH + PANEL_BUTTON_STEP);
+      await key(handle, 'ArrowLeft');
+      expect(width()).toBe(PANEL_MIN_WIDTH + PANEL_BUTTON_STEP + PANEL_KEY_STEP);
+      await key(handle, 'Enter');
+      expect(width()).toBe(defaultPanelWidth(window.innerWidth));
+      expect(panel().style.width).toBe('');
+    });
+
+    it('keeps focus on a button that reaches its limit, so Enter can be held', async () => {
+      mockViewport(1280);
+      localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(PANEL_MIN_WIDTH + PANEL_BUTTON_STEP));
+      await mount(conversation());
+      await click(button('Open artifact: Chart'));
+      const control = narrower()!;
+      control.focus();
+      await click(control);
+      expect(width()).toBe(PANEL_MIN_WIDTH);
+      expect(off(control)).toBe(true);
+      expect(document.activeElement).toBe(control);
+    });
+
+    it('widens the same way in right-to-left, in the language of the page', async () => {
+      mockViewport(1280);
+      await activateLocale('ar');
+      document.documentElement.setAttribute('dir', 'rtl');
+      await mount(conversation());
+      await click(button('فتح العنصر: Chart'));
+      const start = width();
+      const widen = findButton('توسيع اللوحة');
+      const narrow = findButton('تضييق اللوحة');
+      expect(widen).toBeDefined();
+      expect(narrow).toBeDefined();
+      // Wider is wider: the width grows, whichever edge the panel is docked to.
+      await click(widen!);
+      expect(width()).toBe(start + PANEL_BUTTON_STEP);
+      await click(narrow!);
+      expect(width()).toBe(start);
+      // And the buttons carry no arrow that would point the wrong way once mirrored.
+      const symmetric = (control: HTMLElement) =>
+        control.querySelector('svg')?.getAttribute('class')?.includes('chevrons-') ?? false;
+      expect(symmetric(widen!)).toBe(true);
+      expect(symmetric(narrow!)).toBe(true);
+    });
+
+    it('is not offered where the panel cannot be resized: full screen and the phone dialog', async () => {
+      mockViewport(1280);
+      await mount(conversation());
+      await click(button('Open artifact: Chart'));
+      expect(wider()).toBeDefined();
+      await click(button('Full screen'));
+      expect(wider()).toBeUndefined();
+      expect(narrower()).toBeUndefined();
+      await click(button('Exit full screen'));
+      expect(wider()).toBeDefined();
+      await click(button('Close'));
+
+      await cleanup(root!);
+      root = undefined;
+      mockViewport(390);
+      await mount(conversation());
+      await click(button('Open artifact: Chart'));
+      expect(dialog()).not.toBeNull();
+      expect(wider()).toBeUndefined();
+      expect(narrower()).toBeUndefined();
+    });
   });
 
   it('is absent in full screen and in the phone dialog', async () => {

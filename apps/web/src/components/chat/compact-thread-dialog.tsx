@@ -57,7 +57,7 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
         onClick={() => setOpen(true)}
         className="relative"
       >
-        <FoldVertical className={cn(pending && 'animate-pulse')} />
+        <FoldVertical className={cn(pending && 'animate-pulse motion-reduce:animate-none')} />
         {pending && (
           <span
             aria-hidden="true"

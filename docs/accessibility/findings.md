@@ -113,6 +113,14 @@ part of a criterion (the report says which), and nobody used a screen reader.
 - **Suggested fix:** a polite live region (an `sr-only` status that already exists in the message list
   for history loading) that says "Assistant is replying" when a reply starts and "Reply complete" (or
   the first sentence) when it ends; not the streamed tokens.
+- **Status: fixed** in `795edca3`. The message list holds its own always-present polite status
+  (`data-reply-status`, apart from the history-loading one) that says "The assistant is replying." when
+  a reply starts and "Reply complete." or "Reply stopped." when it ends, after 600 ms with nothing
+  streaming so a lost connection that recovers is one announcement, not two. It never says the streamed
+  words. A failed reply is left to its existing alert. Re-run against the stand-in model: before,
+  `liveRegionAnnouncements` 0 and `reply-not-announced`; after, the two texts above and no finding.
+  `reply-announcement.test.tsx` covers the states. The finding stays in `evidence.json` until the final
+  audit regenerates it.
 
 ## D7. The artifact panel can only be resized by dragging, or by keyboard (2.5.7, moderate)
 
@@ -126,6 +134,12 @@ part of a criterion (the report says which), and nobody used a screen reader.
   keyboard does not serve a person who uses a pointer and cannot drag, and a double-click only resets.
 - **Suggested fix:** two buttons in the panel header ("Wider", "Narrower") or a width menu
   (Narrow, Default, Wide) that call the same `onResize`.
+- **Status: fixed** in `07e47a9c`. The docked panel's header has "Make panel wider" and "Make panel
+  narrower" buttons that call the handle's `onResize` in 64 px steps, disabled at the limits, absent in
+  full screen and in the phone dialog, with the result read from the separator's `aria-valuenow`. They
+  work the same in right-to-left (a width, not a direction). Covered by `artifacts-docked.test.tsx` and
+  the `artifact-panel-resize` end-to-end spec. The inspection for 2.5.7 in
+  [inspections.md](inspections.md#257) still describes the build audited; repeat it with the final audit.
 
 ## Observations that are not failures of level A or AA
 
@@ -137,6 +151,8 @@ part of a criterion (the report says which), and nobody used a screen reader.
   `motion-reduce` guard, unlike `reply-work.tsx` and `capacity-wait.tsx`. They are loading indicators
   of a second or two, so 2.2.2 does not clearly apply, and 2.3.3 is level AAA; a one-line
   `motion-reduce:animate-none` each would make it consistent. Severity: minor.
+  **Fixed** in `d16c07be`: each now has `motion-reduce:animate-none`, with unit tests on the class and an
+  end-to-end check of the computed animation of the waiting dots.
 - **The "Need help?" card gives no way to contact anyone** (`components/settings/settings-layout.tsx`):
   it says the administrator can reset passwords. Not a WCAG failure (3.2.6 is about where a mechanism
   is, not whether it is useful), but a person who needs help is not shown how.

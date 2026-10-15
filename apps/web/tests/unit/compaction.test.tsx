@@ -220,6 +220,10 @@ describe('Summarise earlier messages now', () => {
     expect(control()?.title).toBe(COMPACTION_PENDING_TEXT);
     expect(control()?.hasAttribute('data-compaction-pending')).toBe(true);
     expect(status()).toBe(COMPACTION_PENDING_TEXT);
+    // The pulsing icon stops for a person who asked for reduced motion (consistency with reply-work).
+    expect(control()?.querySelector('svg')?.getAttribute('class')).toContain(
+      'motion-reduce:animate-none',
+    );
 
     // Done in the background: the next check shows the summary.
     api.get.mockResolvedValue({ compaction, pending: false });

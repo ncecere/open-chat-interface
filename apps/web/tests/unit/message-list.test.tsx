@@ -171,7 +171,8 @@ describe('memoized transcript correctness', () => {
     ).toBe(true);
     const reasoning: UIMessage = { ...empty, parts: [{ type: 'reasoning', text: 'Let me think' }] };
     await render({ messages: [reasoning], streaming: true, onRetry });
-    expect(container.querySelector('[role="status"]')).toBeNull();
+    // The waiting dots are gone (the reply status, always present, is not them).
+    expect(container.querySelector('[role="status"][aria-label]')).toBeNull();
     expect(container.textContent).toContain('Let me think');
     expect(container.querySelector('[aria-label="Retry"]')).toBeNull();
     const answered: UIMessage = {
@@ -183,6 +184,17 @@ describe('memoized transcript correctness', () => {
     await render({ messages: [answered], streaming: false, onRetry });
     await click('Retry');
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it('stops the waiting dots bouncing for a person who asked for reduced motion', async () => {
+    await render({
+      messages: [{ id: 'live', role: 'assistant', parts: [] }],
+      streaming: true,
+      onRetry: vi.fn(),
+    });
+    const dots = [...container.querySelectorAll('[role="status"][aria-label] .animate-bounce')];
+    expect(dots).toHaveLength(3);
+    for (const dot of dots) expect(dot.className).toContain('motion-reduce:animate-none');
   });
 
   it('refreshes grounding and attachments without relying on text-only comparisons', async () => {

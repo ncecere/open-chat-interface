@@ -146,7 +146,10 @@ export function ToolStepRow({
         className="flex w-full min-w-0 items-center gap-2 text-start text-[0.8125rem] text-[var(--text-muted)] transition-colors hover:text-[var(--text-secondary)]"
       >
         <Icon
-          className={cn('size-4 shrink-0', step.state === 'running' && 'animate-pulse')}
+          className={cn(
+            'size-4 shrink-0',
+            step.state === 'running' && 'animate-pulse motion-reduce:animate-none',
+          )}
           aria-hidden="true"
         />
         <span className="min-w-0 flex-1 break-words">{toolSummaryNode(t, part, step)}</span>
