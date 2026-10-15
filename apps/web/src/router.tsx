@@ -176,6 +176,17 @@ const chatHomeRoute = createRoute({
 
 const ProjectPage = lazyRouteComponent(() => import('~/routes/projects/project'), 'ProjectPage');
 
+const ProjectsPage = lazyRouteComponent(
+  () => import('~/routes/projects/projects-list'),
+  'ProjectsPage',
+);
+
+const projectsRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/projects',
+  component: ProjectsPage,
+});
+
 const projectRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: '/projects/$projectId',
@@ -537,7 +548,7 @@ const routeTree = rootRoute.addChildren([
   acceptInviteRoute,
   verifyEmailRoute,
   publicShareRoute,
-  authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute, projectRoute]),
+  authenticatedRoute.addChildren([chatHomeRoute, chatThreadRoute, projectsRoute, projectRoute]),
   settingsRoute.addChildren([...settingsTabRoutes, ...retiredSettingsRoutes]),
   adminRoute.addChildren([
     adminOverviewRoute,

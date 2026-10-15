@@ -35,6 +35,15 @@ export function useProjects(enabled = true) {
   });
 }
 
+/** Both lists of `GET /api/projects` for the Projects page. */
+export function useProjectsOverview(enabled = true) {
+  return useQuery({
+    queryKey: ['projects'],
+    queryFn: () => api.get<ProjectList>('/projects'),
+    enabled,
+  });
+}
+
 /**
  * Projects other people shared with the person (v0.14), by name. `projects`
  * stays the person's own, so nothing that offers "my projects" can mistake one

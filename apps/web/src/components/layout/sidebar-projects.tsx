@@ -1,6 +1,6 @@
 import type { SidebarProject, ThreadSummary } from '@oci/shared';
 import { Link, useParams } from '@tanstack/react-router';
-import { ChevronRight, Folder, Plus } from 'lucide-react';
+import { ChevronRight, Folder, LayoutList, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { ThreadRow } from '~/components/layout/thread-list';
 import { CreateProjectDialog } from '~/components/projects/project-dialogs';
@@ -8,7 +8,12 @@ import { Button } from '~/components/ui/button';
 import { useAutoRetry } from '~/hooks/use-auto-retry';
 import { useExpandedProjects } from '~/hooks/use-expanded-projects';
 import { type OpenConversation, useOpenConversation } from '~/hooks/use-open-conversation';
-import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
+import {
+  useProjectsAvailable,
+  useSidebarProjects,
+  useSidebarSharedProjects,
+} from '~/hooks/use-projects';
+import { accessLabel } from '~/lib/project-access';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
@@ -38,7 +43,9 @@ function ProjectsSection() {
   useAutoRetry(isError, () => void refetch());
   const params = useParams({ strict: false }) as { projectId?: string; threadId?: string };
   const open = useOpenConversation(params.threadId);
-  const { expanded, toggle } = useExpandedProjects(projects);
+  // Projects shared with the person (v0.14) open and close like their own, in the same remembered set.
+  const { data: shared } = useSidebarSharedProjects();
+  const { expanded, toggle } = useExpandedProjects(projects && [...projects, ...(shared ?? [])]);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   // Off while read-only, as the conversations' Pin, Rename and Archive are (#331).
@@ -64,6 +71,14 @@ function ProjectsSection() {
         >
           Projects
         </h2>
+        <Link
+          to="/projects"
+          aria-label="All projects"
+          title="All projects"
+          className="flex size-6 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] [&_svg]:size-3.5"
+        >
+          <LayoutList aria-hidden="true" />
+        </Link>
         <Button
           type="button"
           variant="ghost"
@@ -105,6 +120,30 @@ function ProjectsSection() {
             />
           ))}
         </ul>
+      )}
+
+      {(shared?.length ?? 0) > 0 && (
+        <div className="mt-3">
+          <h3
+            id="sidebar-shared-heading"
+            className="px-2.5 pb-1 text-[0.6875rem] font-semibold text-[var(--accent-bright)]"
+          >
+            Shared with me
+          </h3>
+          <ul className="flex flex-col gap-0.5" aria-label="Shared with me">
+            {shared?.map((project) => (
+              <ProjectItem
+                key={project.id}
+                project={project}
+                active={params.projectId === project.id}
+                expanded={isExpanded(project.id)}
+                onToggle={() => handleToggle(project.id)}
+                openThreadId={params.threadId}
+                open={open}
+              />
+            ))}
+          </ul>
+        </div>
       )}
 
       <CreateProjectDialog open={creating} onOpenChange={setCreating} />
@@ -167,6 +206,11 @@ function ProjectItem({
   open: OpenConversation | undefined;
 }) {
   const listId = `sidebar-project-${project.id}`;
+  // Who owns a project shared with the person, and what they may do in it.
+  const sharedNote =
+    project.access && project.access !== 'owner'
+      ? `${project.ownerName ? `${project.ownerName} · ` : ''}${accessLabel(project.access)}`
+      : null;
   const rows = expanded ? projectRows(project, open) : [];
   // Pinned conversations are counted but listed in Pinned, so a project can
   // have more conversations than rows even with five or fewer.
@@ -202,11 +246,18 @@ function ProjectItem({
           to="/projects/$projectId"
           params={{ projectId: project.id }}
           aria-current={active ? 'page' : undefined}
-          title={project.name}
+          title={sharedNote ? `${project.name} · ${sharedNote}` : project.name}
           className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2.5 pl-1 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         >
           <Folder className="size-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-          <span className="min-w-0 truncate">{project.name}</span>
+          <span className="min-w-0">
+            <span className="block truncate">{project.name}</span>
+            {sharedNote && (
+              <span className="block truncate text-[0.6875rem] text-[var(--text-muted)]">
+                {sharedNote}
+              </span>
+            )}
+          </span>
         </Link>
       </div>
 

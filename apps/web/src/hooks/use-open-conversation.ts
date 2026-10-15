@@ -1,6 +1,6 @@
 import type { ThreadSummary } from '@oci/shared';
 import { useCachedConversation } from '~/lib/conversation-cache';
-import { useProjectsAvailable, useSidebarProjects } from './use-projects';
+import { useProjectsAvailable, useSidebarProjects, useSidebarSharedProjects } from './use-projects';
 import { useSidebarThreads } from './use-threads';
 
 export interface OpenConversation {
@@ -22,13 +22,17 @@ export interface OpenConversation {
  */
 export function useOpenConversation(threadId: string | undefined): OpenConversation | undefined {
   const { data: threads } = useSidebarThreads();
-  const { data: projects } = useSidebarProjects(useProjectsAvailable());
+  const available = useProjectsAvailable();
+  const { data: projects } = useSidebarProjects(available);
+  const { data: shared } = useSidebarSharedProjects(available);
   const cached = useCachedConversation(threadId);
   if (!threadId) return undefined;
 
   const listed =
     threads?.find((thread) => thread.id === threadId) ??
-    projects?.flatMap((project) => project.recentThreads).find((thread) => thread.id === threadId);
+    [...(projects ?? []), ...(shared ?? [])]
+      .flatMap((project) => project.recentThreads)
+      .find((thread) => thread.id === threadId);
   if (listed) return { thread: listed, listed: true };
   return cached ? { thread: cached, listed: false } : undefined;
 }

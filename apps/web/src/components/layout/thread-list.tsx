@@ -5,7 +5,11 @@ import { useState } from 'react';
 import { RenameThreadDialog } from '~/components/chat/rename-thread-dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useAutoRetry } from '~/hooks/use-auto-retry';
-import { useProjectsAvailable, useSidebarProjects } from '~/hooks/use-projects';
+import {
+  useProjectsAvailable,
+  useSidebarProjects,
+  useSidebarSharedProjects,
+} from '~/hooks/use-projects';
 import { useArchiveThread, useSidebarThreads, useUpdateThread } from '~/hooks/use-threads';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
@@ -176,7 +180,10 @@ export function ThreadList() {
   useAutoRetry(isError, () => void refetch());
   const projectsAvailable = useProjectsAvailable();
   const { data: projects } = useSidebarProjects(projectsAvailable);
-  const projectNames = new Map(projects?.map((project) => [project.id, project.name]));
+  const { data: shared } = useSidebarSharedProjects(projectsAvailable);
+  const projectNames = new Map(
+    [...(projects ?? []), ...(shared ?? [])].map((project) => [project.id, project.name]),
+  );
   const params = useParams({ strict: false }) as { threadId?: string };
   const [pinnedOpen, setPinnedOpen] = useState(true);
 
@@ -190,7 +197,8 @@ export function ThreadList() {
 
   if (!threads || threads.length === 0) {
     // Someone whose every conversation is in a project has nothing to add here.
-    if (projects?.some((project) => project.threadCount > 0)) return null;
+    if ([...(projects ?? []), ...(shared ?? [])].some((project) => project.threadCount > 0))
+      return null;
     return (
       <p className="px-2 py-8 text-center text-xs text-[var(--text-muted)]">
         Your conversations will appear here.
