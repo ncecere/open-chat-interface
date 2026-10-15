@@ -36,10 +36,9 @@ import { updateSetting } from '../../services/settings.js';
  */
 export const dataClassRoutes = new Hono<AppBindings>();
 
+/** A class that exists (the caller just created, changed or found it) with its usage counts. */
 async function adminClass(id: string) {
-  const found = (await listAdminClasses()).find((entry) => entry.id === id);
-  if (!found) throw notFound('Data class not found');
-  return found;
+  return (await listAdminClasses()).find((entry) => entry.id === id)!;
 }
 
 /** Every class, retired ones included, with where each is used. */
@@ -211,18 +210,9 @@ adminProjectLabelRoutes.put('/:id/data-classes', async (c) => {
       after: await namesOf(result.after),
     },
   });
-  return c.json({ classes: await classesOfProject(projectId) });
+  const projects = await listUserProjectsWithClasses(result.ownerId);
+  return c.json({ classes: projects.find((entry) => entry.id === projectId)!.classes });
 });
-
-async function classesOfProject(projectId: string) {
-  const [owner] = await db
-    .select({ userId: schema.project.userId })
-    .from(schema.project)
-    .where(eq(schema.project.id, projectId));
-  if (!owner) throw notFound('Project not found');
-  return (await listUserProjectsWithClasses(owner.userId)).find((entry) => entry.id === projectId)!
-    .classes;
-}
 
 /** `GET /admin/users/:id/projects`: a person's projects with their labels. */
 export const adminUserProjectRoutes = new Hono<AppBindings>();

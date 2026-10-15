@@ -416,6 +416,33 @@ describe.skipIf(!available)('live data classification: enforcement points', () =
     });
   });
 
+  describe('mode off', () => {
+    it('still records which connector a conversation used, and runs the tool and the search as in v0.13', async () => {
+      const connector = await docsConnector();
+      await enable(connector, 'search');
+      await allow(['mcp__docs__search', 'web_search']);
+      const chat = await thread(ctx.alice);
+      script(
+        toolStep([
+          ['c1', 'mcp__docs__search', { query: 'handbook' }],
+          ['s1', 'web_search', { query: 'campus news' }],
+        ]),
+        textStep('Done.'),
+      );
+      await accepted(
+        await send(ctx.alice, chat.id, 'Find it', { modelSlug: UNAPPROVED_MODEL, webSearch: true }),
+        chat.id,
+      );
+      expect(ctx.mcp.calls).toHaveLength(1);
+      expect(search.hits).toBe(1);
+      // The use is written first, in every mode: that is what makes labelling a
+      // connector later reach conversations that used it earlier.
+      const uses = await ctx.pool.db.select().from(schema.threadConnectorUse);
+      expect(uses.map((row) => [row.threadId, row.connectorId])).toEqual([[chat.id, connector.id]]);
+      expect(await suite.auditsOf('classification.block')).toEqual([]);
+    });
+  });
+
   it('counts nothing for a conversation in a project without labels, in any mode', async () => {
     setMode('block');
     const project = await createProject(ctx.alice);

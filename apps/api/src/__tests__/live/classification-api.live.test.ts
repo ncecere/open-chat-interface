@@ -287,6 +287,20 @@ describe.skipIf(!available)('live data classification: the API', () => {
         ).toBe(404);
     });
 
+    it('changes only the description of a class, and says so without naming it', async () => {
+      const student = await createClass('Student records');
+      const updated = await ok<AdminClass>(
+        call('PATCH', `/api/admin/data-classes/${student.id}`, {
+          body: { description: 'Grades only' },
+        }),
+      );
+      expect(updated).toMatchObject({ name: 'Student records', description: 'Grades only' });
+      expect((await auditsOf('data_class.update'))[0]?.metadata).toEqual({
+        name: 'Student records',
+        changes: { description: { changed: true } },
+      });
+    });
+
     it('limits how many an instance defines', async () => {
       for (let index = 0; index < 100; index += 1)
         await ctx.pool.db.execute(
@@ -786,6 +800,36 @@ describe.skipIf(!available)('live data classification: the API', () => {
       });
       expect(response.status).toBe(404);
       expect(await response.text()).not.toContain('Student');
+    });
+  });
+
+  describe('what a refusal says', () => {
+    it('names several classes, and says when no model is approved for them', async () => {
+      const student = await createClass('Student records');
+      const health = await createClass('Health records');
+      const chat = await thread(ctx.alice);
+      await labelThread(ctx.alice, chat.id, student.id);
+      await labelThread(ctx.alice, chat.id, health.id);
+      setMode('block');
+      script(textStep('Unused'));
+      const error = await blocked(
+        await send(ctx.alice, chat.id, 'Hello', { modelSlug: UNAPPROVED_MODEL }),
+      );
+      expect(error.message).toBe(
+        'Your message was not sent. tool-model is not approved for Health records and Student records, which this conversation carries. No model is approved for them yet. Ask an administrator.',
+      );
+      expect(error.details.approvedModels).toEqual([]);
+      await approve(APPROVED_MODEL, [student.id]);
+      await approve(UNAPPROVED_MODEL, [student.id, health.id]);
+      const one = await thread(ctx.alice);
+      await labelThread(ctx.alice, one.id, health.id);
+      const single = await blocked(
+        await send(ctx.alice, one.id, 'Hello', { modelSlug: APPROVED_MODEL }),
+      );
+      expect(single.message).toContain('Choose a model that is approved for it.');
+      expect(single.details.approvedModels).toEqual([
+        { slug: UNAPPROVED_MODEL, displayName: 'Tool Model' },
+      ]);
     });
   });
 

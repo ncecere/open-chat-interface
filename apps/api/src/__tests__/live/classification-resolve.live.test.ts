@@ -58,6 +58,7 @@ describe.skipIf(!available)('live data classification: resolver', () => {
   let owner: string;
   let resolveClassification: typeof import('../../services/classification/resolve.js').resolveClassification;
   let loadClasses: typeof import('../../services/classification/resolve.js').loadClasses;
+  let loadClassesForThreads: typeof import('../../services/classification/resolve.js').loadClassesForThreads;
   let resetReadinessCache: typeof import('../../services/migrations/readiness.js').resetReadinessCache;
 
   const mode = (value: 'off' | 'warn' | 'block', services: Record<string, string[]> = {}) =>
@@ -72,7 +73,7 @@ describe.skipIf(!available)('live data classification: resolver', () => {
     state.organizationId = await seedOrganization(pool.db);
     owner = await seedUser(pool.db, state.organizationId);
     data = classificationData(pool, state.organizationId, owner);
-    ({ resolveClassification, loadClasses } = await import(
+    ({ resolveClassification, loadClasses, loadClassesForThreads } = await import(
       '../../services/classification/resolve.js'
     ));
     ({ resetReadinessCache } = await import('../../services/migrations/readiness.js'));
@@ -422,12 +423,58 @@ describe.skipIf(!available)('live data classification: resolver', () => {
         expect(await loadClasses({ threadId: other })).toEqual([]);
     });
 
+    it('ignores a part that is not in a list, and other tools beside a connector’s in the same message', async () => {
+      const student = await data.dataClass('Student');
+      await data.connector('Docs', [student], 'docs');
+      await pending();
+      // `parts` should be a list; a lone object that looks like a tool part is not a use.
+      const lone = await data.thread();
+      await data.run(sql`insert into message (id, thread_id, user_id, role, position, parts, status)
+        values (${data.id()}, ${lone}, ${owner}, 'assistant', 0,
+        '{"type":"tool-mcp__docs__search","toolCallId":"c1"}'::jsonb, 'complete')`);
+      expect(await loadClasses({ threadId: lone })).toEqual([]);
+      // One message with a built-in tool and a connector's: only the connector counts.
+      const mixed = await data.thread();
+      await data.run(sql`insert into message (id, thread_id, user_id, role, position, parts, status)
+        values (${data.id()}, ${mixed}, ${owner}, 'assistant', 0, ${JSON.stringify([
+          { type: 'tool-web_search', toolCallId: 'c1' },
+          { type: 'dynamic-tool', toolName: 'mcp__', toolCallId: 'c2' },
+          { type: 'tool-mcp__docs__search', toolCallId: 'c3' },
+        ])}::jsonb, 'complete')`);
+      expect(names(await loadClasses({ threadId: mixed }))).toEqual(['Student']);
+    });
+
     it('is also what a not yet scheduled migration means', async () => {
       const student = await data.dataClass('Student');
       await data.connector('Docs', [student], 'docs');
       const chat = await threadWithToolPart('tool-mcp__docs__search');
       await data.run(sql`delete from background_migration`);
       expect(names(await loadClasses({ threadId: chat }))).toEqual(['Student']);
+    });
+  });
+
+  describe('lists', () => {
+    it('reads the classes of several conversations in one query, and none for none', async () => {
+      const { loadClassesForThreads } = await import('../../services/classification/resolve.js');
+      expect(await loadClassesForThreads([])).toEqual(new Map());
+      const student = await data.dataClass('Student');
+      const health = await data.dataClass('Health');
+      const labelled = await data.thread({ projectId: await data.project([student]) });
+      const plain = await data.thread();
+      const both = await data.thread();
+      await data.label(both, health);
+      await data.label(both, student, 'kept');
+      const recording = recordStatements(pool);
+      let result: Awaited<ReturnType<typeof loadClassesForThreads>>;
+      try {
+        result = await loadClassesForThreads([labelled, plain, both]);
+      } finally {
+        recording.stop();
+      }
+      expect(recording.statements).toHaveLength(1);
+      expect([...result.keys()].sort()).toEqual([labelled, both].sort());
+      expect(names(result.get(labelled)!)).toEqual(['Student']);
+      expect(names(result.get(both)!)).toEqual(['Health', 'Student']);
     });
   });
 

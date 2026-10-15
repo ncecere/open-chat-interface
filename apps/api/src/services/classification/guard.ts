@@ -89,7 +89,7 @@ function blockedMessage(
 }
 
 interface ModelGate {
-  user: { id: string; role?: UserRole | undefined };
+  user: { id: string; role: UserRole };
   threadId: string;
   model: { slug: string; displayName: string };
   point: Extract<ClassificationBlockPoint, 'send' | 'approval' | 'compaction'>;
@@ -113,11 +113,9 @@ export async function guardModel(gate: ModelGate): Promise<Decision> {
     threadId: gate.threadId,
   });
   if (decision.outcome !== 'block') return decision;
-  const approvedModels = gate.user.role
-    ? (await modelStatuses(gate.user.role, decision.classes, 'block'))
-        .filter((candidate) => candidate.status === 'ok')
-        .map(({ slug, displayName }) => ({ slug, displayName }))
-    : [];
+  const approvedModels = (await modelStatuses(gate.user.role, decision.classes, 'block'))
+    .filter((candidate) => candidate.status === 'ok')
+    .map(({ slug, displayName }) => ({ slug, displayName }));
   throw new AppError(
     ERROR_CODES.DATA_CLASS_BLOCKED,
     blockedMessage(gate.point, gate.model.displayName, decision.missing, approvedModels.length > 0),
@@ -164,7 +162,9 @@ interface ServiceGate {
   userId: string;
   name: ClassificationService;
   point: Extract<ClassificationPoint, 'web_search' | 'embedding' | 'rerank'>;
+  /** For the audit entry. */
   threadId?: string | undefined;
+  /** Without `known`, the project whose own labels are judged (file embedding). */
   projectId?: string | undefined;
   /** What the turn already read, so the check costs no query. */
   known?: TurnClassification | undefined;
@@ -183,8 +183,7 @@ export async function guardService(gate: ServiceGate): Promise<boolean> {
         new Set((await classificationSettings()).services[gate.name]),
       )
     : await resolveClassification({
-        ...(gate.threadId && { threadId: gate.threadId }),
-        ...(gate.projectId && { projectId: gate.projectId }),
+        projectId: gate.projectId,
         destination: { kind: 'service', name: gate.name },
       });
   await recordDecision(decision, {

@@ -306,9 +306,18 @@ describe.skipIf(!available)(
           modelSlug: APPROVED_MODEL,
           reason: 'automatic',
         });
+        // `requestCompaction` also kicks a pass of its own, which may start a
+        // moment later: wait until the request has ended, whoever ran it.
         await processCompactionQueue();
+        await vi.waitFor(
+          async () =>
+            expect(await ctx.pool.db.select().from(schema.conversationCompactionJob)).toHaveLength(
+              0,
+            ),
+          { timeout: 8_000, interval: 25 },
+        );
+        await compactionQueueSettled();
         expect(model.doGenerateCalls).toHaveLength(0);
-        expect(await ctx.pool.db.select().from(schema.conversationCompactionJob)).toHaveLength(0);
         expect(await ctx.pool.db.select().from(schema.conversationCompactionFailure)).toHaveLength(
           0,
         );

@@ -109,8 +109,8 @@ function classQuery(input: {
   threadIds: readonly string[];
   projectId?: string | undefined;
   extraClassIds: readonly string[];
-  /** Connector slugs found by scanning messages, while the backfill is unfinished. */
-  scannedSlugs: readonly string[];
+  /** Connector slugs found by scanning one conversation's messages, while the backfill is unfinished. */
+  scanned?: { threadId: string; slugs: readonly string[] };
 }): ReturnType<typeof sql> {
   const branches: Array<ReturnType<typeof sql>> = [];
   if (input.threadIds.length)
@@ -134,12 +134,12 @@ function classQuery(input: {
       select null::text as thread_id, pdc.data_class_id as class_id, 'project' as reason,
              '' as detail, pdc.locked as locked
       from project_data_class pdc where pdc.project_id = ${input.projectId}`);
-  if (input.scannedSlugs.length)
+  if (input.scanned?.slugs.length)
     branches.push(sql`
-      select ${input.threadIds[0] ?? null}::text as thread_id, cdc.data_class_id as class_id,
+      select ${input.scanned.threadId}::text as thread_id, cdc.data_class_id as class_id,
              'connector' as reason, conn.name as detail, false as locked
       from connector conn join connector_data_class cdc on cdc.connector_id = conn.id
-      where conn.slug in (${ids(input.scannedSlugs)})`);
+      where conn.slug in (${ids(input.scanned.slugs)})`);
   for (const classId of input.extraClassIds)
     branches.push(sql`select null::text as thread_id, ${classId}::text as class_id,
       'connector' as reason, '' as detail, false as locked`);
@@ -172,13 +172,13 @@ function groupClasses(rows: readonly ClassRow[]): ResolvedClass[] {
       entry.origins.push(row.detail);
     if (reason === 'project' && row.locked) entry.locked = true;
   }
-  const order = (entry: ResolvedClass) => entry.name.toLowerCase();
+  // Names are unique ignoring case (a unique index), so this order is total.
   return [...byId.values()]
     .map((entry) => ({
       ...entry,
       reasons: CLASSIFICATION_REASONS.filter((reason) => entry.reasons.includes(reason)),
     }))
-    .sort((a, b) => order(a).localeCompare(order(b)) || a.id.localeCompare(b.id));
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 }
 
 /**
@@ -201,8 +201,8 @@ async function scanConnectorSlugs(threadId: string): Promise<string[]> {
       if (!isToolPart(part)) continue;
       const toolId = toolIdOfPart(part);
       if (!toolId.startsWith('mcp__')) continue;
-      const slug = toolId.slice('mcp__'.length).split('__')[0];
-      if (slug) slugs.add(slug);
+      // `mcp__<slug>__<tool>`; an empty slug matches no connector.
+      slugs.add(toolId.slice('mcp__'.length).split('__', 1).join(''));
     }
   }
   return [...slugs];
@@ -212,16 +212,16 @@ async function scanConnectorSlugs(threadId: string): Promise<string[]> {
 export async function loadClasses(
   input: Pick<ClassificationInput, 'threadId' | 'projectId' | 'extraClassIds'>,
 ): Promise<ResolvedClass[]> {
-  const scannedSlugs =
+  const scanned =
     input.threadId && !(await isBackgroundMigrationDone(THREAD_CONNECTOR_USE_MIGRATION))
-      ? await scanConnectorSlugs(input.threadId)
-      : [];
+      ? { threadId: input.threadId, slugs: await scanConnectorSlugs(input.threadId) }
+      : undefined;
   const rows = (await db.execute(
     classQuery({
       threadIds: input.threadId ? [input.threadId] : [],
       projectId: input.projectId,
       extraClassIds: input.extraClassIds ?? [],
-      scannedSlugs,
+      ...(scanned && { scanned }),
     }),
   )) as unknown as ClassRow[];
   return groupClasses(rows);
@@ -239,12 +239,13 @@ export async function loadClassesForThreads(
   const result = new Map<string, ResolvedClass[]>();
   if (threadIds.length === 0) return result;
   const rows = (await db.execute(
-    classQuery({ threadIds, extraClassIds: [], scannedSlugs: [] }),
+    classQuery({ threadIds, extraClassIds: [] }),
   )) as unknown as ClassRow[];
   const byThread = new Map<string, ClassRow[]>();
+  // Every row of a thread query names its thread.
   for (const row of rows) {
-    if (!row.thread_id) continue;
-    byThread.set(row.thread_id, [...(byThread.get(row.thread_id) ?? []), row]);
+    const threadId = row.thread_id as string;
+    byThread.set(threadId, [...(byThread.get(threadId) ?? []), row]);
   }
   for (const [threadId, threadRows] of byThread) result.set(threadId, groupClasses(threadRows));
   return result;
