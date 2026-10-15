@@ -1,4 +1,5 @@
 import { type APIRequestContext, expect } from '@playwright/test';
+import { withProcessLock } from './process-lock';
 
 /**
  * Two catalog models these tests can rely on. CI starts from an empty catalog
@@ -15,8 +16,16 @@ export const E2E_MODELS = [
 
 const PROVIDER_LABEL = 'E2E catalog provider';
 
-/** Needs an administrator's request context. */
+/**
+ * Needs an administrator's request context. Looks, then creates what is missing:
+ * under a lock, because specs run in parallel worker processes and two of them
+ * both finding the models missing made the second fail on "slug already exists".
+ */
 export async function ensureCatalogModels(admin: APIRequestContext) {
+  return withProcessLock('catalog-models', () => createMissingCatalogModels(admin));
+}
+
+async function createMissingCatalogModels(admin: APIRequestContext) {
   const providers = await admin.get('/api/admin/providers');
   expect(providers.ok(), await providers.text()).toBe(true);
   const listed = (await providers.json()) as { providers: Array<{ id: string; label: string }> };

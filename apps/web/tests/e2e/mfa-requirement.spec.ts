@@ -58,6 +58,9 @@ async function chooseRestricted(page: Page, graceDays: string) {
 }
 
 test.beforeAll(async ({ browser }) => {
+  // Making the account waits on the lock the specs share: more than a test's 30 seconds when
+  // other workers are doing the same.
+  test.setTimeout(120_000);
   const account = await createAccount(browser, 'admin', 'Requirement Admin');
   const context = await browser.newContext();
   const page = await context.newPage();

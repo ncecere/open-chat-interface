@@ -1,7 +1,5 @@
-import { mkdir, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { type APIRequestContext, expect } from '@playwright/test';
+import { withProcessLock } from './process-lock';
 
 /**
  * Making an account that can sign in, in a fixture that cannot send mail.
@@ -17,31 +15,9 @@ import { type APIRequestContext, expect } from '@playwright/test';
  *
  * Every spec that makes accounts therefore does it through this function, which
  * serialises the lift, the creation and the restore between worker processes
- * with a lock directory (`mkdir` is atomic). The lock is held for the few
- * requests of one creation, not for a test.
+ * with a lock (process-lock.ts). The lock is held for the few requests of one
+ * creation, not for a test.
  */
-const LOCK = join(tmpdir(), 'oci-e2e-verification-setting.lock');
-
-/** A lock left by a run that died is older than any creation takes. */
-const STALE_AFTER_MS = 30_000;
-
-async function acquire(): Promise<void> {
-  for (let waited = 0; ; waited += 1) {
-    try {
-      await mkdir(LOCK);
-      return;
-    } catch {
-      const age = await stat(LOCK).then(
-        (info) => Date.now() - info.mtimeMs,
-        () => 0,
-      );
-      if (age > STALE_AFTER_MS) await rm(LOCK, { recursive: true, force: true });
-      if (waited > 600) throw new Error('The verification setting stayed locked');
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-}
-
 /**
  * Runs `work` (the account creations) with email verification not required,
  * as the administrator `admin` is signed in on, and puts the setting back
@@ -52,8 +28,7 @@ export async function whileVerificationLifted<T>(
   admin: APIRequestContext,
   work: () => Promise<T>,
 ): Promise<T> {
-  await acquire();
-  try {
+  return withProcessLock('verification-setting', async () => {
     const settings = await admin.get('/api/admin/settings');
     expect(settings.ok()).toBe(true);
     const { emailVerificationRequired } = (await settings.json()) as {
@@ -75,7 +50,5 @@ export async function whileVerificationLifted<T>(
         expect(restored.ok(), await restored.text()).toBe(true);
       }
     }
-  } finally {
-    await rm(LOCK, { recursive: true, force: true });
-  }
+  });
 }

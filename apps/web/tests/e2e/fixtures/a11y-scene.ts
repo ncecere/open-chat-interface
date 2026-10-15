@@ -58,6 +58,9 @@ export function provideScene() {
   let cleanup: Array<() => Promise<void>> = [];
 
   test.beforeAll(async ({ browser }) => {
+    // Three sign-ins (each hashes a password) and the accounts, made behind the lock the specs
+    // share, while the other workers do their own set-up: more than a test's 30 seconds.
+    test.setTimeout(120_000);
     const run = uniqueRun();
     const { context, page } = await signInAdmin(browser);
     cleanup.push(() => context.close());
