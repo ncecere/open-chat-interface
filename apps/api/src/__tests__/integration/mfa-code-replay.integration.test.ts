@@ -1,12 +1,14 @@
 import Redis from 'ioredis';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { redisUrlForDatabase } from '../../../test/redis-database.js';
 
 /**
  * The TOTP replay guard (SPEC-mfa.md, "Replay"): a code the plugin accepted
  * for a person is refused for 120 seconds, across replicas (Redis, one atomic
  * SET NX EX) and, with Redis away, in this process.
  */
-const url = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6389';
+// A database of its own: this file clears the replay claims by pattern, see test/redis-database.ts.
+const url = redisUrlForDatabase(process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6389', 13);
 const redis = new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 1 });
 await redis.connect();
 

@@ -9,6 +9,7 @@ import {
   seedOrganization,
   seedUser,
 } from '../../../test/live-postgres.js';
+import { redisUrlForDatabase } from '../../../test/redis-database.js';
 import { signCookieValue } from '../../../test/session-cookie.js';
 import { secretFromUri, totp } from '../../../test/totp.js';
 import {
@@ -61,6 +62,12 @@ describe.skipIf(!available)('live: requiring two-step verification', { timeout: 
   let app: ReturnType<typeof import('../../app.js')['createApp']>;
   let updateSetting: typeof import('../../services/settings.js')['updateSetting'];
   let settle: () => Promise<void>;
+  // A database of its own: clearClaims clears the replay claims by pattern, see test/redis-database.ts.
+  const redisUrl = redisUrlForDatabase(
+    process.env.TEST_REDIS_URL ?? process.env.REDIS_URL ?? 'redis://127.0.0.1:6389',
+    12,
+  );
+  process.env.REDIS_URL = redisUrl;
   const origin = new URL(process.env.APP_URL ?? 'http://localhost:3000').origin;
   const rpId = new URL(origin).hostname;
 
@@ -97,6 +104,9 @@ describe.skipIf(!available)('live: requiring two-step verification', { timeout: 
     ({ auth } = await import('../../auth/index.js'));
     ({ updateSetting } = await import('../../services/settings.js'));
     ({ settleAccountEmails: settle } = await import('../../services/account-email-delivery.js'));
+    const { sharedRedis } = await import('../../services/chat-streams.js');
+    // The isolation only holds if the application itself uses that database.
+    expect((await sharedRedis())?.options.db).toBe(12);
     const { createApp } = await import('../../app.js');
     app = createApp();
   });
@@ -122,9 +132,7 @@ describe.skipIf(!available)('live: requiring two-step verification', { timeout: 
     const { resetLocalCodeClaims } = await import('../../services/limits/code-replay.js');
     resetLocalCodeClaims();
     const { default: Redis } = await import('ioredis');
-    const redis = new Redis(
-      process.env.TEST_REDIS_URL ?? process.env.REDIS_URL ?? 'redis://127.0.0.1:6389',
-    );
+    const redis = new Redis(redisUrl);
     try {
       const keys = await redis.keys('oci:mfa-code:*');
       if (keys.length > 0) await redis.del(...keys);

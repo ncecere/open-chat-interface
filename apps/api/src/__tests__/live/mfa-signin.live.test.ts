@@ -10,6 +10,7 @@ import {
   seedOrganization,
   seedUser,
 } from '../../../test/live-postgres.js';
+import { redisUrlForDatabase } from '../../../test/redis-database.js';
 import { secretFromUri, totp } from '../../../test/totp.js';
 
 /**
@@ -45,7 +46,12 @@ vi.mock('nodemailer', () => ({
   },
 }));
 
-const redisUrl = process.env.TEST_REDIS_URL ?? process.env.REDIS_URL ?? 'redis://127.0.0.1:6389';
+// A database of its own: this file clears the replay claims by pattern, see test/redis-database.ts.
+const redisUrl = redisUrlForDatabase(
+  process.env.TEST_REDIS_URL ?? process.env.REDIS_URL ?? 'redis://127.0.0.1:6389',
+  11,
+);
+process.env.REDIS_URL = redisUrl;
 const available = await livePostgresAvailable();
 const password = 'Mfa-live-test-password-123!';
 const RECOVERY_CODE = /^[A-Za-z0-9]{5}-[A-Za-z0-9]{5}$/;
@@ -91,6 +97,9 @@ describe.skipIf(!available)('live: two-step verification', { timeout: 60_000 }, 
     ]);
     redis = new Redis(redisUrl, { lazyConnect: true });
     await redis.connect();
+    const { sharedRedis } = await import('../../services/chat-streams.js');
+    // The isolation only holds if the application itself uses that database.
+    expect((await sharedRedis())?.options.db).toBe(11);
     ({ auth } = await import('../../auth/index.js'));
     ({ settleAccountEmails: settle } = await import('../../services/account-email-delivery.js'));
     const { createApp } = await import('../../app.js');
