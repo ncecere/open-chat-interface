@@ -61,7 +61,7 @@ const FILES: Record<string, Entry> = {
   },
   'services/threads.ts': {
     class: 'A',
-    via: 'projectAccess',
+    via: 'projectReadableBy',
     why: 'A conversation may start in any project the person can read; forks and edits copy projectId only while access holds. Listing stays thread.user_id-scoped.',
   },
   'services/thread-summary.ts': {
@@ -80,7 +80,7 @@ const FILES: Record<string, Entry> = {
   },
   'services/attachments/upload.ts': {
     class: 'A',
-    via: 'projectAccess',
+    via: 'requireProjectAccess',
     why: 'A project upload checks owner or editor under the project row lock; quota, limits and the cap are the uploader’s.',
   },
   'services/attachments/copies.ts': {
@@ -102,7 +102,7 @@ const FILES: Record<string, Entry> = {
   // Chat context.
   'services/chat/project-context.ts': {
     class: 'A',
-    via: 'projectAccess',
+    via: 'projectReadableBy',
     why: 'Resolves access first; none means an ordinary conversation. Passages, headings and file names read through the actor’s access.',
   },
   'services/chat/attachment-context.ts': {
@@ -120,6 +120,29 @@ const FILES: Record<string, Entry> = {
     why: 'Calls assertExcludableProjectFiles (project-context.ts, A); no query of its own.',
   },
   'services/chat/prepare-turn.ts': { class: 'U', why: 'Imports a type; carries the stored note.' },
+  // Sharing itself.
+  'services/project-sharing/access.ts': {
+    class: 'A',
+    via: 'projectAccess',
+    why: 'The rule itself: owner, else the highest permission among shares naming the person or one of their groups, else none. projectReadableBy is its SQL twin (compared in project-access.live.test.ts).',
+  },
+  'services/project-sharing/shares.ts': {
+    class: 'A',
+    via: 'requireProjectAccess',
+    why: 'Listing, creating, changing, removing shares and transfer demand owner; the access summary and leaving demand any access; each checks first and again under the project row lock.',
+  },
+  'services/project-sharing/reconcile.ts': {
+    class: 'S',
+    why: 'Puts a project back in line with who may use it, after an event that ended access or from the projects.reconcile-access job; keyed by project, no actor, idempotent.',
+  },
+  'services/project-sharing/holds.ts': {
+    class: 'U',
+    why: 'Legal-hold lookups for deleting project data (the actor’s and the uploader’s); asks nothing about access.',
+  },
+  'services/project-sharing/upgrade-guard.ts': {
+    class: 'U',
+    why: 'The mixed-version guard reads replica heartbeats; no project query.',
+  },
   // Search and vectors.
   'services/project-search/retrieval.ts': {
     class: 'A',
