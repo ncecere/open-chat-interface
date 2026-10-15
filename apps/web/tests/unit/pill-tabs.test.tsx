@@ -141,3 +141,21 @@ describe('on a phone (#243)', () => {
     expect(await mask()).toBeUndefined();
   });
 });
+
+// Right-to-left: the tabs run from the right, so Left is the next one (the
+// keys follow what is on screen). Direction comes from the computed style.
+it('moves with the arrow keys the other way round in right-to-left', async () => {
+  ({ root } = await renderAdmin(
+    <div dir="rtl" style={{ direction: 'rtl' }}>
+      <Harness />
+    </div>,
+  ));
+  await press(tab('One'), 'ArrowLeft');
+  expect(selected()).toBe('two');
+  expect(document.activeElement).toBe(tab('Two'));
+  await press(tab('Two'), 'ArrowRight');
+  expect(selected()).toBe('one');
+  // Up and Down are not direction keys: Down is still the next one.
+  await press(tab('One'), 'ArrowDown');
+  expect(selected()).toBe('two');
+});

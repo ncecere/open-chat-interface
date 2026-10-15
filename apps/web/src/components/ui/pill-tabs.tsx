@@ -25,7 +25,8 @@ export interface PillTab<T extends string> {
  *
  * Keyboard behaviour follows the WAI-ARIA tabs pattern: only the selected tab
  * is in the Tab order, and Left/Right (or Up/Down), Home and End move between
- * tabs and select them. Selection follows focus because switching a facet is
+ * tabs and select them (Left and Right follow the screen, so in right-to-left
+ * Left is the next tab). Selection follows focus because switching a facet is
  * cheap and reversible.
  */
 export function PillTabs<T extends string>({
@@ -48,12 +49,21 @@ export function PillTabs<T extends string>({
 
   function move(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     const last = tabs.length - 1;
+    // Left and Right follow what is on screen: in right-to-left the next tab
+    // is on the left.
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const key =
+      event.key === 'ArrowRight' || event.key === 'ArrowLeft'
+        ? (event.key === 'ArrowRight') === rtl
+          ? 'ArrowUp'
+          : 'ArrowDown'
+        : event.key;
     const target =
-      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      key === 'ArrowDown'
         ? index === last
           ? 0
           : index + 1
-        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        : key === 'ArrowUp'
           ? index === 0
             ? last
             : index - 1
@@ -119,11 +129,16 @@ export function PillTabs<T extends string>({
  * The fade on a side with tabs scrolled out of view, over its last 1.5rem.
  * Written out in full: Tailwind finds classes in the source as written.
  */
-const FADE = [
-  'data-[overflow-end]:[mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)]',
-  'data-[overflow-start]:[mask-image:linear-gradient(to_left,#000_calc(100%-1.5rem),transparent)]',
-  'data-[overflow-start]:data-[overflow-end]:[mask-image:linear-gradient(to_right,transparent,#000_1.5rem,#000_calc(100%-1.5rem),transparent)]',
-].join(' ');
+// One string, so the check for physical utilities sees each fade next to its
+// `rtl:` counterpart (the tabs run from the right in Arabic, so the fades swap sides).
+const FADE = `
+  data-[overflow-end]:[mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)]
+  data-[overflow-start]:[mask-image:linear-gradient(to_left,#000_calc(100%-1.5rem),transparent)]
+  data-[overflow-start]:data-[overflow-end]:[mask-image:linear-gradient(to_right,transparent,#000_1.5rem,#000_calc(100%-1.5rem),transparent)]
+  rtl:data-[overflow-end]:[mask-image:linear-gradient(to_left,#000_calc(100%-1.5rem),transparent)]
+  rtl:data-[overflow-start]:[mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)]
+  rtl:data-[overflow-start]:data-[overflow-end]:[mask-image:linear-gradient(to_left,transparent,#000_1.5rem,#000_calc(100%-1.5rem),transparent)]
+`;
 
 /** Whether the strip has tabs out of view before or after what shows. */
 function useOverflow(ref: RefObject<HTMLElement | null>) {
@@ -131,8 +146,11 @@ function useOverflow(ref: RefObject<HTMLElement | null>) {
   const measure = useCallback(() => {
     const node = ref.current;
     if (!node) return;
-    const start = node.scrollLeft > 1;
-    const end = node.scrollLeft + node.clientWidth < node.scrollWidth - 1;
+    // scrollLeft is 0 at the start and counts down (negative) from there in
+    // right-to-left, so the distance scrolled is its absolute value.
+    const scrolled = Math.abs(node.scrollLeft);
+    const start = scrolled > 1;
+    const end = scrolled + node.clientWidth < node.scrollWidth - 1;
     setOverflow((current) =>
       current.start === start && current.end === end ? current : { start, end },
     );

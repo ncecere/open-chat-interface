@@ -86,15 +86,18 @@ describe('a reply with right-to-left text', () => {
     expect(container.querySelectorAll('li[dir="auto"]')).toHaveLength(3);
   });
 
-  it('leaves code blocks and inline code alone', async () => {
+  it('keeps code blocks and inline code left to right and isolated, in a right-to-left reply', async () => {
     await render(REPLY);
-    const block = container.querySelector('[data-streamdown="code-block"]')!;
-    expect(block).not.toBeNull();
-    expect(block.hasAttribute('dir')).toBe(false);
-    expect(block.querySelector('[dir]')).toBeNull();
-    // Not <html>: the test setup activates English, which sets <html lang dir>.
-    expect(container.querySelector('pre')?.closest('[dir]:not(html)')).toBeNull();
-    expect(container.querySelector('code')?.hasAttribute('dir')).toBe(false);
+    expect(container.querySelector('[data-streamdown="code-block"]')).not.toBeNull();
+    // Inline code carries dir="ltr"; nothing around it (auto, rtl) reaches into it.
+    const inline = [...container.querySelectorAll('code')].find((code) => !code.closest('pre'));
+    expect(inline?.getAttribute('dir')).toBe('ltr');
+    // Streamdown builds a code block's own markup, so its direction is the prose
+    // classes': left to right and isolated from the Arabic around it.
+    const classes = container.firstElementChild?.className ?? '';
+    expect(classes).toContain('[&_[data-streamdown=code-block]]:[direction:ltr]');
+    expect(classes).toContain('[&_[data-streamdown=code-block]]:[unicode-bidi:isolate]');
+    expect(classes).toContain('[&_:not(pre)>code]:[unicode-bidi:isolate]');
   });
 
   it('applies to a person’s own message too (maths off) and to a share page’s (safe-link policy)', async () => {

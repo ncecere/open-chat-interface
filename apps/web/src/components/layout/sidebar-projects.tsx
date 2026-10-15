@@ -102,7 +102,7 @@ function ProjectsSection() {
           variant="ghost"
           locked={lock.title}
           onClick={() => setCreating(true)}
-          className="h-auto w-full justify-start whitespace-normal rounded-lg px-2.5 py-2 text-left text-xs text-[var(--text-muted)]"
+          className="h-auto w-full justify-start whitespace-normal rounded-lg px-2.5 py-2 text-start text-xs text-[var(--text-muted)]"
         >
           Create a project to group conversations with shared instructions and files.
         </Button>
@@ -232,12 +232,15 @@ function ProjectItem({
           title={expanded ? 'Hide conversations' : 'Show conversations'}
           onClick={onToggle}
           // 24px is the WCAG 2.2 minimum target; the row's link fills the rest.
-          className="ml-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          className="ms-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
         >
           <ChevronRight
             className={cn(
               'size-3.5 transition-transform motion-reduce:transition-none',
-              expanded && 'rotate-90',
+              // Collapsed it points to where the text goes on (the other way in
+              // Arabic); open it points down in both. `rotate`, not a flip: a
+              // flipped chevron turned 90 degrees would point up.
+              expanded ? 'rotate-90' : 'rtl:rotate-180',
             )}
             aria-hidden="true"
           />
@@ -247,11 +250,13 @@ function ProjectItem({
           params={{ projectId: project.id }}
           aria-current={active ? 'page' : undefined}
           title={sharedNote ? `${project.name} · ${sharedNote}` : project.name}
-          className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2.5 pl-1 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+          className="flex min-w-0 flex-1 items-center gap-2 py-2 pe-2.5 ps-1 text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         >
           <Folder className="size-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
           <span className="min-w-0">
-            <span className="block truncate">{project.name}</span>
+            <span dir="auto" className="block truncate">
+              {project.name}
+            </span>
             {sharedNote && (
               <span
                 className={cn(
@@ -269,7 +274,7 @@ function ProjectItem({
 
       <div id={listId} hidden={!expanded}>
         {expanded && (
-          <div className="ml-4 border-l border-[var(--border-subtle)] pl-1.5">
+          <div className="ms-4 border-s border-[var(--border-subtle)] ps-1.5">
             {rows.length > 0 && (
               <ul aria-label={`Conversations in ${project.name}`} className="flex flex-col gap-0.5">
                 {rows.map((thread) => (

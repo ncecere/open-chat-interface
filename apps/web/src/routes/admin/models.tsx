@@ -159,7 +159,7 @@ function ModelRow({
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
-          className="min-w-0 flex-1 text-left"
+          className="min-w-0 flex-1 text-start"
         >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <LabLogo labId={model.labId} className="size-4" />

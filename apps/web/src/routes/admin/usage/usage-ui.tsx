@@ -69,7 +69,7 @@ export function Trend({
               height: point.value > 0 ? `${Math.max(2, (point.value / peak) * 100)}%` : '0',
             }}
           >
-            <span className="-translate-x-1/2 pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden whitespace-nowrap rounded bg-[var(--bg-control-hover)] px-2 py-1 text-[10px] group-hover:block">
+            <span className="-translate-x-1/2 pointer-events-none absolute bottom-full start-1/2 rtl:translate-x-1/2 z-10 mb-1 hidden whitespace-nowrap rounded bg-[var(--bg-control-hover)] px-2 py-1 text-[10px] group-hover:block">
               {describe(written(point))}
             </span>
           </div>
@@ -86,7 +86,7 @@ export function Trend({
           <tbody>
             {active.map((point) => (
               <tr key={point.day}>
-                <td className="py-0.5 pr-6 text-[var(--text-muted)]">
+                <td className="py-0.5 pe-6 text-[var(--text-muted)]">
                   {formatActivityDay(point.day)}
                 </td>
                 <td className="py-0.5">{describe(written(point)).split(' · ').at(-1)}</td>
@@ -154,7 +154,7 @@ export function PeopleList({
               {entry.email}
             </p>
           </div>
-          <div className="shrink-0 text-right">
+          <div className="shrink-0 text-end">
             <p className="text-sm">{entry.primary}</p>
             <p className="text-[var(--text-muted)] text-xs">{entry.secondary}</p>
           </div>

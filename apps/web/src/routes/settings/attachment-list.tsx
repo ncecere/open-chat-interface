@@ -165,7 +165,7 @@ export function AttachmentList({
         <span>Name</span>
         <button
           type="button"
-          className="hidden items-center justify-end gap-1 text-right transition-colors hover:text-[var(--text-primary)] sm:flex"
+          className="hidden items-center justify-end gap-1 text-end transition-colors hover:text-[var(--text-primary)] sm:flex"
           aria-label={`Sort by date ${sortDirection === 'asc' ? 'newest first' : 'oldest first'}`}
           onClick={onSort}
         >
@@ -239,8 +239,10 @@ export function AttachmentList({
                       {/* Wraps, as the details line does (#195): cut short, the
                           name could be read only in a tooltip, which touch
                           cannot reach (#244). The icon stays by the first line. */}
-                      <span className="min-w-0 wrap-anywhere">{attachment.filename}</span>
-                      <ExternalLink className="mt-1 size-3 shrink-0 text-[var(--text-secondary)]" />
+                      <span dir="auto" className="min-w-0 wrap-anywhere">
+                        {attachment.filename}
+                      </span>
+                      <ExternalLink className="mt-1 size-3 shrink-0 text-[var(--text-secondary)] rtl:-scale-x-100" />
                     </a>
                     {/* Wraps: cut short on a phone, it hid the size and date,
                         with no tooltip to read them (#195). */}
@@ -252,6 +254,7 @@ export function AttachmentList({
                             to="/projects/$projectId"
                             params={{ projectId: project.id }}
                             search={{ tab: 'files' }}
+                            dir="auto"
                             className="font-medium text-[var(--text-secondary)] hover:underline"
                           >
                             {project.name}
@@ -267,6 +270,7 @@ export function AttachmentList({
                           <Link
                             to="/chat/$threadId"
                             params={{ threadId: attachment.conversation.id }}
+                            dir="auto"
                             className="font-medium text-[var(--text-secondary)] hover:underline"
                           >
                             {attachment.conversation.title}
@@ -284,7 +288,7 @@ export function AttachmentList({
 
                 <time
                   dateTime={attachment.createdAt}
-                  className="hidden text-right text-xs text-[var(--text-secondary)] sm:block"
+                  className="hidden text-end text-xs text-[var(--text-secondary)] sm:block"
                 >
                   {formatCreatedAt(attachment.createdAt)}
                 </time>

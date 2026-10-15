@@ -75,7 +75,10 @@ export function EventDetails({ entry }: { entry: AuditLogEntry }) {
             tabIndex={0}
             className="scrollbar-thin mt-2 max-h-64 overflow-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] focus-visible:outline-2 focus-visible:outline-[var(--accent-bright)]"
           >
-            <pre className="m-0 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-[var(--text-secondary)]">
+            <pre
+              dir="ltr"
+              className="m-0 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-[var(--text-secondary)]"
+            >
               {serializeMetadata(entry.metadata)}
             </pre>
           </section>

@@ -64,12 +64,12 @@ function CountedInput({
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className={cn(shared, 'h-11 pr-16')}
+          className={cn(shared, 'h-11 pe-16')}
         />
       )}
       <span
         id={countId}
-        className="pointer-events-none absolute bottom-2.5 right-3 text-xs text-[var(--text-muted)]"
+        className="pointer-events-none absolute bottom-2.5 end-3 text-xs text-[var(--text-muted)]"
       >
         {value.length}/{max}
         <span className="sr-only"> characters</span>

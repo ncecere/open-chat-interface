@@ -2,10 +2,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider, useLocale, useT } from '../../src/lib/i18n';
 import { activateLocale } from '../../src/lib/i18n/state';
 import { settle } from './admin-test-utils';
+import { preloadCatalogs } from './i18n-test-utils';
 
 // The provider decides the language from the person's saved choice, the
 // instance setting and the browser, and keeps <html lang dir> in step.
@@ -75,6 +76,7 @@ function browserLanguages(languages: string[]) {
   Object.defineProperty(navigator, 'languages', { value: languages, configurable: true });
 }
 
+beforeAll(preloadCatalogs);
 beforeEach(async () => {
   localStorage.clear();
   api.get.mockReset();

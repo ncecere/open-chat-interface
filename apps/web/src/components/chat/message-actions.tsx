@@ -14,7 +14,7 @@ function ModelAttribution({ slug, effort }: { slug: string | null; effort: strin
   const model = models?.find((entry) => entry.slug === slug);
 
   return (
-    <span className="ml-1 inline-flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-[var(--text-muted)]">
+    <span className="ms-1 inline-flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-[var(--text-muted)]">
       {/* A long name is cut short; its tooltip has it in full (#312). */}
       <span className="max-w-52 truncate" title={model?.displayName ?? slug}>
         {model?.displayName ?? slug}
@@ -49,7 +49,7 @@ function ReplyExport({
   return (
     <>
       <ExportMenu markdown={text} state={state} compact about={about} />
-      <ExportNotice state={state} className="order-last basis-full pl-1 pt-1" />
+      <ExportNotice state={state} className="order-last basis-full ps-1 pt-1" />
     </>
   );
 }
@@ -152,7 +152,7 @@ export function MessageActions({
       )}
       {modelSlug && <ModelAttribution slug={modelSlug} effort={effort ?? null} />}
       {searched && (
-        <Globe2 className="ml-0.5 size-3.5 text-[var(--text-muted)]" aria-label="Web search used" />
+        <Globe2 className="ms-0.5 size-3.5 text-[var(--text-muted)]" aria-label="Web search used" />
       )}
     </div>
   );

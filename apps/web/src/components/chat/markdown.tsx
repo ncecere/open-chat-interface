@@ -261,7 +261,10 @@ export const HighlightedCode = memo(function HighlightedCode({
   return (
     <Suspense
       fallback={
-        <pre className={cn('m-0 whitespace-pre-wrap break-words font-mono text-xs', className)}>
+        <pre
+          dir="ltr"
+          className={cn('m-0 whitespace-pre-wrap break-words font-mono text-xs', className)}
+        >
           <code>{source}</code>
         </pre>
       }
@@ -311,9 +314,11 @@ const MARKDOWN_BASE = cn(
   '[&_[data-streamdown=code-block]]:![content-visibility:visible]',
   // Paragraphs, lists and cells take their own direction (markdown-direction.ts,
   // #360); code does not follow them: a code block stays left to right, even
-  // in a right-to-left list item or quote, and inline code reads by its own text.
-  '[&_[data-streamdown=code-block]]:[direction:ltr] [&_pre]:text-left',
-  '[&_:not(pre)>code]:[unicode-bidi:plaintext]',
+  // in a right-to-left list item or quote, and inline code too: both are
+  // `dir="ltr"` (markdown-direction.ts) and isolated, so an Arabic sentence
+  // around them neither reorders them nor is reordered by them.
+  '[&_[data-streamdown=code-block]]:[direction:ltr] [&_[data-streamdown=code-block]]:[unicode-bidi:isolate] [&_pre]:text-start',
+  '[&_:not(pre)>code]:[direction:ltr] [&_:not(pre)>code]:[unicode-bidi:isolate]',
 );
 
 /**
@@ -351,6 +356,7 @@ export const MARKDOWN_PROSE = cn(
   // The indent is on the side the list starts, so a right-to-left list indents
   // from the right (#360); Streamdown's nested lists add a left one to undo.
   '[&_ul]:list-outside [&_ol]:list-outside [&_ul]:ps-6 [&_ol]:ps-6',
+  // `pl-0` stays physical: it undoes Streamdown's own physical `[li_&]:pl-6`.
   '[&_ul:dir(rtl)]:pl-0 [&_ol:dir(rtl)]:pl-0',
   // An item that reads the other way from its list (an Arabic item in an
   // English list) keeps its marker inside its own text: outside, the marker
@@ -364,8 +370,10 @@ export const MARKDOWN_PROSE = cn(
   // Streamdown's table header is left-aligned and its quote bar is on the
   // left: both follow the text's direction instead (#360).
   '[&_th]:text-start',
-  '[&_blockquote:dir(rtl)]:border-l-0 [&_blockquote:dir(rtl)]:border-r-4',
-  '[&_blockquote:dir(rtl)]:pl-0 [&_blockquote:dir(rtl)]:pr-4',
+  // `border-l-0` and `pl-0` stay physical: they undo Streamdown's own physical
+  // `border-l-4 pl-4`; the bar and the padding come back on the start side.
+  '[&_blockquote:dir(rtl)]:border-l-0 [&_blockquote:dir(rtl)]:border-s-4',
+  '[&_blockquote:dir(rtl)]:pl-0 [&_blockquote:dir(rtl)]:ps-4',
 );
 
 // Cache at the wrapper boundary, before normalization and the lazy renderer.

@@ -132,7 +132,7 @@ export function ComposerOptions({
               <DropdownMenuSubTrigger>
                 <Brain />
                 <span className="flex-1 capitalize">Reasoning: {effort}</span>
-                <ChevronRight className="ml-auto" />
+                <ChevronRight className="ms-auto rtl:-scale-x-100" />
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 {availableEfforts.map((option) => (

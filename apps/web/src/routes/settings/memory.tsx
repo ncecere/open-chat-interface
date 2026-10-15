@@ -180,7 +180,9 @@ function MemoryRow({
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
           <div className="min-w-0 flex-1">
-            <p className="break-words text-sm text-[var(--text-primary)]">{entry.content}</p>
+            <p dir="auto" className="break-words text-sm text-[var(--text-primary)]">
+              {entry.content}
+            </p>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
               {entry.source === 'tool' ? 'Saved by a model' : 'Added by you'} · updated{' '}
               {formatRelativeTime(entry.updatedAt)}

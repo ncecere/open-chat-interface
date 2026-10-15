@@ -135,7 +135,7 @@ export function DiscoverModelsDialog({
                 disabled={model.alreadyInCatalog}
                 onClick={() => toggle(model.upstreamModelId)}
                 className={cn(
-                  'flex w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 py-2.5 text-left last:border-0',
+                  'flex w-full items-center gap-3 border-b border-[var(--border-subtle)] px-3 py-2.5 text-start last:border-0',
                   'transition-colors disabled:opacity-45',
                   isSelected ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--bg-control-hover)]',
                 )}

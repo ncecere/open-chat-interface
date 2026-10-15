@@ -477,7 +477,7 @@ function ThreadConversation({
             <button
               type="button"
               onClick={scroll.jumpToLatest}
-              className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors hover:text-[var(--text-primary)]"
+              className="absolute bottom-3 start-1/2 flex -translate-x-1/2 items-center rtl:translate-x-1/2 gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--text-secondary)] shadow-sm transition-colors hover:text-[var(--text-primary)]"
             >
               <ArrowDown className="size-4" aria-hidden="true" />
               Jump to latest

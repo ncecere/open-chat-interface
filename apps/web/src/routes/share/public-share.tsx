@@ -167,7 +167,7 @@ function Sources({ parts }: { parts: PublicPart[] }) {
             className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-control-hover)]"
           >
             <span className="truncate">{source.title || hostname}</span>
-            <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+            <ExternalLink className="size-3 shrink-0 rtl:-scale-x-100" aria-hidden="true" />
           </SafeExternalLink>
         );
       })}
@@ -206,7 +206,7 @@ function SharedWork({ steps }: { steps: PublicToolStepPart[] }) {
       <ol
         aria-label="Steps"
         data-work-timeline=""
-        className="mt-3 ml-2 space-y-2 border-l border-[var(--border-subtle)] pl-4 text-xs text-[var(--text-muted)]"
+        className="mt-3 ms-2 space-y-2 border-s border-[var(--border-subtle)] ps-4 text-xs text-[var(--text-muted)]"
       >
         {steps.map((step, index) => (
           // Summaries carry no stable id; the list is static once loaded.
@@ -400,7 +400,9 @@ export function PublicSharePage({ slug }: { slug: string }) {
               />
             </span>
             <div className="min-w-0">
-              <h1 className="break-words text-xl sm:text-2xl">{thread.title}</h1>
+              <h1 dir="auto" className="break-words text-xl sm:text-2xl">
+                {thread.title}
+              </h1>
               <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
                 {snapshot ? 'Snapshot' : 'Live conversation'}
                 {sharedAtLabel ? ` · Shared ${sharedAtLabel}` : ''}

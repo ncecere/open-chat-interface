@@ -243,7 +243,7 @@ export function MutationError({
         {detail && ` ${detail}`}
       </p>
       {issues.length > 0 && (
-        <ul className="mt-1 list-disc pl-5">
+        <ul className="mt-1 list-disc ps-5">
           {issues.map((issue) => (
             <li key={issue}>{issue}</li>
           ))}
@@ -322,7 +322,7 @@ export function SaveRow({
 
   return (
     <div className="flex min-h-9 flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-      <div className="sm:mr-auto" aria-live="polite">
+      <div className="sm:me-auto" aria-live="polite">
         {errorMessage && (
           <p role="alert" className="text-sm text-[var(--danger)]">
             {errorMessage}

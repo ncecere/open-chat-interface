@@ -72,7 +72,7 @@ export function AccountActivityList({
           {entry.ipAddress && (
             <span className="font-mono text-[var(--text-muted)] text-xs">{entry.ipAddress}</span>
           )}
-          <span className="ml-auto shrink-0 text-[var(--text-muted)] text-xs">
+          <span className="ms-auto shrink-0 text-[var(--text-muted)] text-xs">
             {formatRelativeTime(entry.createdAt)}
           </span>
         </li>

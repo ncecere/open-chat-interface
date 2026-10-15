@@ -34,7 +34,7 @@ export function ReplySwitcher({ index, count, disabled, onSelect }: ReplySwitch)
           if (!previous) onSelect(index - 1);
         }}
       >
-        <ChevronLeft />
+        <ChevronLeft className="rtl:-scale-x-100" />
       </Button>
       <span aria-hidden="true" className="min-w-10 text-center tabular-nums">
         {index + 1} / {count}
@@ -49,7 +49,7 @@ export function ReplySwitcher({ index, count, disabled, onSelect }: ReplySwitch)
           if (!next) onSelect(index + 1);
         }}
       >
-        <ChevronRight />
+        <ChevronRight className="rtl:-scale-x-100" />
       </Button>
       <span role="status" className="sr-only">
         Reply {index + 1} of {count}

@@ -8,7 +8,7 @@ export function ProjectChatNotice({ projectId }: { projectId: string }) {
 
   if (isError) {
     return (
-      <p role="alert" className="mt-2 text-center text-sm text-[var(--warning)] md:text-left">
+      <p role="alert" className="mt-2 text-center text-sm text-[var(--warning)] md:text-start">
         That project is not available. Remove it from the address to start an ordinary chat.
       </p>
     );
@@ -23,6 +23,7 @@ export function ProjectChatNotice({ projectId }: { projectId: string }) {
           <Link
             to="/projects/$projectId"
             params={{ projectId }}
+            dir="auto"
             className="font-medium text-[var(--accent-bright)] underline underline-offset-2"
           >
             {project.name}

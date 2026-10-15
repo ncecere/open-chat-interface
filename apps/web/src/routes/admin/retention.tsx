@@ -286,12 +286,12 @@ function RetentionForm({
       <EditOnly>
         <div className="flex items-center justify-end gap-3">
           {error && (
-            <p role="alert" className="mr-auto whitespace-pre-line text-[var(--danger)] text-sm">
+            <p role="alert" className="me-auto whitespace-pre-line text-[var(--danger)] text-sm">
               {error}
             </p>
           )}
           {saved && (
-            <span className="mr-auto flex items-center gap-1.5 text-[var(--success)] text-sm">
+            <span className="me-auto flex items-center gap-1.5 text-[var(--success)] text-sm">
               <CheckCircle2 className="size-4" aria-hidden="true" />
               Saved
             </span>

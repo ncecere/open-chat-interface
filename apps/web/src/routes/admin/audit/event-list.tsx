@@ -30,7 +30,7 @@ export function DesktopEventTable({
       aria-label="Audit events"
       className="relative hidden overflow-x-auto xl:block"
     >
-      <table className="w-full min-w-[48rem] table-fixed text-left text-sm">
+      <table className="w-full min-w-[48rem] table-fixed text-start text-sm">
         <caption className="sr-only">Administrative and security audit events</caption>
         <thead>
           <tr className="border-b border-[var(--border-subtle)] text-xs uppercase tracking-wider text-[var(--text-muted)]">
@@ -46,7 +46,7 @@ export function DesktopEventTable({
             <th scope="col" className="w-[28%] px-4 py-3 font-medium">
               Target
             </th>
-            <th scope="col" className="w-[14%] px-4 py-3 text-right font-medium">
+            <th scope="col" className="w-[14%] px-4 py-3 text-end font-medium">
               Details
             </th>
           </tr>
@@ -95,7 +95,7 @@ export function DesktopEventTable({
                       <TargetCell entry={entry} />
                     </p>
                   </td>
-                  <td className="px-4 py-2 text-right align-top">
+                  <td className="px-4 py-2 text-end align-top">
                     <DetailsButton
                       entry={entry}
                       expanded={expanded}

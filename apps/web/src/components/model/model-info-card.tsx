@@ -38,7 +38,7 @@ export function ModelInfoCard({ model }: { model: CatalogModel }) {
   const description = model.description?.trim();
 
   return (
-    <div className="flex h-full flex-col gap-6 text-left">
+    <div className="flex h-full flex-col gap-6 text-start">
       <div className="flex items-start gap-3">
         <LabLogo labId={model.labId} className="size-8 shrink-0" />
         <div className="min-w-0">

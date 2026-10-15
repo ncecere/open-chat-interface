@@ -173,7 +173,7 @@ function InstanceWideForm({ settings }: { settings: RateLimitConfig }) {
           <MutationError
             error={save.error}
             message="Instance-wide limits could not be saved."
-            className="mr-auto"
+            className="me-auto"
           />
           <SavedNote show={saved} />
           <Button

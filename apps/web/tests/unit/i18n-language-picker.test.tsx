@@ -2,11 +2,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LanguagePicker } from '../../src/components/settings/language-picker';
 import { I18nProvider } from '../../src/lib/i18n';
 import { activateLocale } from '../../src/lib/i18n/state';
 import { click, settle } from './admin-test-utils';
+import { preloadCatalogs } from './i18n-test-utils';
 
 // Settings → Customization → Language: saved to the server, applied at once,
 // beta languages labelled, nothing shown when there is no choice to make.
@@ -69,6 +70,7 @@ async function choose(label: string) {
   await click(option);
 }
 
+beforeAll(preloadCatalogs);
 beforeEach(async () => {
   localStorage.clear();
   api.get.mockReset();

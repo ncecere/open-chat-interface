@@ -317,7 +317,7 @@ export function BrandingForm({ initialSettings }: { initialSettings: BrandingSet
 
       <EditOnly>
         <div className="mt-8 flex min-h-10 flex-col-reverse gap-3 border-t border-[var(--border-subtle)] pt-6 sm:flex-row sm:items-center sm:justify-end">
-          <div className="sm:mr-auto" aria-live="polite">
+          <div className="sm:me-auto" aria-live="polite">
             {errorMessage && (
               <p role="alert" className="text-sm text-[var(--danger)]">
                 {errorMessage}

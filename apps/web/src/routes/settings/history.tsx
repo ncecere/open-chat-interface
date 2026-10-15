@@ -203,7 +203,7 @@ function ConversationList({ archived }: { archived: boolean }) {
           </label>
           <Search
             aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]"
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]"
           />
           <Input
             id={searchId}
@@ -211,12 +211,12 @@ function ConversationList({ archived }: { archived: boolean }) {
             value={query}
             placeholder="Search titles"
             onChange={(event) => setQuery(event.target.value)}
-            className="pl-9"
+            className="ps-9"
           />
         </div>
 
         {selected.size > 0 && (
-          <div className="flex items-center gap-2 sm:ml-auto">
+          <div className="flex items-center gap-2 sm:ms-auto">
             <span className="text-xs text-[var(--text-muted)]">{selected.size} selected</span>
             {!archived && (
               <Button

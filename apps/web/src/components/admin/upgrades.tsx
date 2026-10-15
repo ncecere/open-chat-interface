@@ -117,7 +117,7 @@ export function UpgradesSection() {
           <p className="font-medium text-sm">{data.verdict.summary}</p>
         </div>
         {data.verdict.reasons.length > 0 && (
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--text-muted)] text-xs">
+          <ul className="mt-2 list-disc space-y-1 ps-5 text-[var(--text-muted)] text-xs">
             {data.verdict.reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}

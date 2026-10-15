@@ -285,7 +285,7 @@ function AcceptanceList({ policy }: { policy: UsagePolicy }) {
                   </span>
                   {entry.accountDeleted && <Badge variant="outline">account deleted</Badge>}
                   <span
-                    className="ml-auto shrink-0 text-[var(--text-muted)] text-xs"
+                    className="ms-auto shrink-0 text-[var(--text-muted)] text-xs"
                     title={entry.acceptedAt}
                   >
                     {formatDateTime(entry.acceptedAt)}
@@ -453,7 +453,7 @@ export function AdminPoliciesPage() {
                             aria-label={`Publish ${policy.title} v${policy.version}`}
                             onClick={() => setPublishing(policy)}
                           >
-                            <Send />
+                            <Send className="rtl:-scale-x-100" />
                             Publish
                           </Button>
                         )}

@@ -31,7 +31,7 @@ export function VerifyEmailPage() {
         <Button asChild variant="primary" className="w-full">
           <Link to="/auth/login">Sign in</Link>
         </Button>
-        <div className="flex flex-col gap-1.5 text-left">
+        <div className="flex flex-col gap-1.5 text-start">
           <Label htmlFor="verify-email-address">Email</Label>
           <Input
             id="verify-email-address"

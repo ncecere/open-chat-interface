@@ -30,20 +30,20 @@ export function DeliveryLog({ endpoint }: { endpoint: WebhookEndpoint }) {
       aria-label={`Recent deliveries to ${endpoint.url}`}
       className="overflow-x-auto rounded-md"
     >
-      <table className="w-full text-left text-xs">
+      <table className="w-full text-start text-xs">
         <caption className="sr-only">Recent deliveries to {endpoint.url}</caption>
         <thead className="text-[var(--text-muted)]">
           <tr>
-            <th scope="col" className="py-1 pr-3 font-medium">
+            <th scope="col" className="py-1 pe-3 font-medium">
               Event
             </th>
-            <th scope="col" className="py-1 pr-3 font-medium">
+            <th scope="col" className="py-1 pe-3 font-medium">
               Status
             </th>
-            <th scope="col" className="py-1 pr-3 font-medium">
+            <th scope="col" className="py-1 pe-3 font-medium">
               Attempts
             </th>
-            <th scope="col" className="py-1 pr-3 font-medium">
+            <th scope="col" className="py-1 pe-3 font-medium">
               Last attempt
             </th>
             <th scope="col" className="py-1 font-medium">
@@ -54,8 +54,8 @@ export function DeliveryLog({ endpoint }: { endpoint: WebhookEndpoint }) {
         <tbody className="divide-y divide-[var(--border-subtle)]">
           {log.data.deliveries.map((delivery) => (
             <tr key={delivery.id}>
-              <td className="py-1.5 pr-3 font-mono">{delivery.event}</td>
-              <td className="py-1.5 pr-3">
+              <td className="py-1.5 pe-3 font-mono">{delivery.event}</td>
+              <td className="py-1.5 pe-3">
                 <Badge
                   variant={
                     delivery.status === 'succeeded'
@@ -70,10 +70,10 @@ export function DeliveryLog({ endpoint }: { endpoint: WebhookEndpoint }) {
                     : delivery.status}
                 </Badge>
               </td>
-              <td className="py-1.5 pr-3">
+              <td className="py-1.5 pe-3">
                 {delivery.attempts} of {delivery.maxAttempts}
               </td>
-              <td className="py-1.5 pr-3">
+              <td className="py-1.5 pe-3">
                 {delivery.lastAttemptAt ? formatRelativeTime(delivery.lastAttemptAt) : '—'}
               </td>
               <td className="py-1.5">

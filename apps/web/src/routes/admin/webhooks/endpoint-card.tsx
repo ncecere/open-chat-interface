@@ -99,7 +99,7 @@ export function EndpointCard({
               aria-label={`Send test to ${endpoint.url}`}
               onClick={() => test.mutate()}
             >
-              {test.isPending ? <Spinner /> : <Send />}
+              {test.isPending ? <Spinner /> : <Send className="rtl:-scale-x-100" />}
               Send test
             </Button>
             <Button

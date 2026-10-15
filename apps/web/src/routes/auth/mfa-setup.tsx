@@ -63,7 +63,7 @@ export function MfaSetupPage() {
             variant={signInAgain ? 'accent' : 'ghost'}
             onClick={() => void signOut()}
           >
-            <LogOut />
+            <LogOut className="rtl:-scale-x-100" />
             Sign out
           </Button>
         </div>

@@ -62,9 +62,11 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       // As a modal, Tab and Shift+Tab stay in it (#191).
       onKeyDown={mobile && open ? loopTab : undefined}
       className={cn(
-        'fixed inset-y-0 left-0 z-50 flex h-dvh w-full shrink-0 flex-col bg-[var(--bg-app)] bg-[image:var(--sidebar-gradient)]',
+        'fixed inset-y-0 start-0 z-50 flex h-dvh w-full shrink-0 flex-col bg-[var(--bg-app)] bg-[image:var(--sidebar-gradient)]',
         'transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:transition-[margin]',
-        open ? 'translate-x-0 lg:ml-0' : '-translate-x-full lg:-ml-64 lg:translate-x-0',
+        open
+          ? 'translate-x-0 lg:ms-0'
+          : '-translate-x-full rtl:translate-x-full lg:-ms-64 lg:translate-x-0',
       )}
     >
       <div className="flex h-14 items-center px-3">
@@ -76,7 +78,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           aria-label="Close sidebar"
           aria-keyshortcuts={ariaKeyShortcuts('toggle-sidebar')}
         >
-          <PanelLeft />
+          <PanelLeft className="rtl:-scale-x-100" />
         </Button>
         {/* Mark and name sit beside the toggle (v0.10): centring them needed a
             spacer that left too little room for the full default name. */}
@@ -103,7 +105,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
       </div>
 
       <div className="relative px-3">
-        <Search className="pointer-events-none absolute left-6 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
+        <Search className="pointer-events-none absolute start-6 top-1/2 size-4 -translate-y-1/2 text-[var(--text-muted)]" />
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -117,7 +119,7 @@ export function Sidebar({ open, mobile, onToggle }: SidebarProps) {
           aria-label="Search your conversations"
           dir="auto"
           aria-describedby="thread-search-hint"
-          className="h-11 w-full bg-transparent pl-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
+          className="h-11 w-full bg-transparent ps-8 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
         />
       </div>
 

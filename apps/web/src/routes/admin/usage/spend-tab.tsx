@@ -63,7 +63,7 @@ export function SpendTab({ days }: { days: number }) {
           >
             <table className="w-full min-w-[36rem] text-sm">
               <thead>
-                <tr className="border-[var(--border-subtle)] border-b text-left text-[var(--text-muted)] text-xs uppercase tracking-wider">
+                <tr className="border-[var(--border-subtle)] border-b text-start text-[var(--text-muted)] text-xs uppercase tracking-wider">
                   <th className="px-4 py-3 font-medium">Model</th>
                   <th className="px-4 py-3 font-medium">Messages</th>
                   <th className="px-4 py-3 font-medium">Tokens</th>

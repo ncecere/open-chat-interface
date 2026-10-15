@@ -88,7 +88,7 @@ export function ArtifactSource({
           Syntax highlighting is off for sources over{' '}
           {new Intl.NumberFormat().format(HIGHLIGHT_LIMIT)} characters.
         </p>
-        <pre className={PLAIN}>
+        <pre dir="ltr" className={PLAIN}>
           <code>{content}</code>
         </pre>
       </div>

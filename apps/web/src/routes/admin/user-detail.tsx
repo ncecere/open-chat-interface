@@ -133,7 +133,7 @@ export function AdminUserDetailPage() {
           to="/admin/users"
           className="inline-flex items-center gap-1.5 text-[var(--text-muted)] text-sm hover:text-[var(--text-primary)]"
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-4 rtl:-scale-x-100" />
           All users
         </Link>
         <LoadError title="This account could not be loaded." query={detail} className="mt-6" />
@@ -153,7 +153,7 @@ export function AdminUserDetailPage() {
         to="/admin/users"
         className="inline-flex items-center gap-1.5 text-[var(--text-muted)] text-sm hover:text-[var(--text-primary)]"
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft className="size-4 rtl:-scale-x-100" />
         All users
       </Link>
 
@@ -261,7 +261,7 @@ export function AdminUserDetailPage() {
 
       {/* Borders are drawn per cell so the rules stay right when the four
           figures wrap into two rows on a phone. */}
-      <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-l [&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-l sm:[&>*:nth-child(n+3)]:border-t-0">
+      <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-xl border border-[var(--border-subtle)] sm:grid-cols-4 [&>*]:border-[var(--border-subtle)] [&>*:nth-child(even)]:border-s [&>*:nth-child(n+3)]:border-t sm:[&>*:nth-child(n+2)]:border-s sm:[&>*:nth-child(n+3)]:border-t-0">
         <Stat label="Conversations" value={String(user.threadCount)} />
         <Stat label="Messages" value={String(user.messageCount)} />
         <Stat label="Storage" value={formatBytes(storage.bytesUsed)} />
@@ -289,10 +289,10 @@ export function AdminUserDetailPage() {
               <table className="w-full min-w-[32rem] text-sm">
                 <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs uppercase">
                   <tr>
-                    <th className="px-4 py-2 text-left">Started</th>
-                    <th className="px-4 py-2 text-left">Expires</th>
-                    <th className="px-4 py-2 text-left">Address</th>
-                    <th className="px-4 py-2 text-left">Client</th>
+                    <th className="px-4 py-2 text-start">Started</th>
+                    <th className="px-4 py-2 text-start">Expires</th>
+                    <th className="px-4 py-2 text-start">Address</th>
+                    <th className="px-4 py-2 text-start">Client</th>
                   </tr>
                 </thead>
                 <tbody>

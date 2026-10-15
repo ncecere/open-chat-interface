@@ -251,7 +251,7 @@ export function SettingsLayout() {
           <header className="flex items-center justify-between">
             <Button variant="ghost" size="sm" asChild>
               <Link to="/">
-                <ArrowLeft />
+                <ArrowLeft className="rtl:-scale-x-100" />
                 Back to Chat
               </Link>
             </Button>

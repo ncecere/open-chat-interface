@@ -45,7 +45,8 @@ export function DialogContent({
           // On a phone every dialog is a card 16 px in from each edge (#199):
           // the base was full-bleed (w-full), so only dialogs that narrowed
           // themselves were inset, and the two looked like different apps.
-          'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2',
+          // Centred with an `rtl:` counterpart: `start` is the right edge in Arabic.
+          'fixed start-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rtl:translate-x-1/2',
           'rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-6',
           'shadow-[var(--shadow-popover)]',
           className,
@@ -73,7 +74,7 @@ export function DialogContent({
         {children}
         {closeButton && (
           <DialogPrimitive.Close
-            className="absolute right-4 top-4 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
+            className="absolute end-4 top-4 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
             aria-label="Close"
           >
             <X className="size-4" />

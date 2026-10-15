@@ -192,7 +192,7 @@ export function StorageAllowanceForm({ access }: { access: RoleAccess }) {
           <MutationError
             error={save.error}
             message={`The ${role} storage allowance could not be saved.`}
-            className="mr-auto"
+            className="me-auto"
           />
           <SavedNote show={saved} />
           <Button

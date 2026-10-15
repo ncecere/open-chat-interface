@@ -145,7 +145,7 @@ export function RoleToolsForm({
           <MutationError
             error={save.error}
             message={`Tools for the ${role} role could not be saved.`}
-            className="mr-auto"
+            className="me-auto"
           />
           {showSaved && (
             <span className="flex items-center gap-1.5 text-[var(--success)] text-sm">

@@ -208,7 +208,9 @@ function ProjectView({
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm text-[var(--text-muted)]">Project</p>
-          <h1 className="mt-1 break-words text-2xl font-bold leading-tight">{project.name}</h1>
+          <h1 dir="auto" className="mt-1 break-words text-2xl font-bold leading-tight">
+            {project.name}
+          </h1>
           {access !== 'owner' && (
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               {project.ownerName ? `Shared by ${project.ownerName} · ` : 'Shared with you · '}
@@ -303,7 +305,7 @@ function SaveRow({
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {state.update.error && (
-        <p role="alert" className="mr-auto text-xs text-[var(--danger-on-tint)]">
+        <p role="alert" className="me-auto text-xs text-[var(--danger-on-tint)]">
           {apiErrorMessage(state.update.error, 'The project could not be saved.')}
         </p>
       )}
@@ -370,7 +372,7 @@ function ProjectInstructionsForm({
             setInstructions(event.target.value);
           }}
         />
-        <p id={counterId} className="text-right text-xs text-[var(--text-muted)]">
+        <p id={counterId} className="text-end text-xs text-[var(--text-muted)]">
           {instructions.length} / {PROJECT_INSTRUCTIONS_MAX_LENGTH} characters
         </p>
         {canEdit && <SaveRow state={state} dirty={dirty} disabled={!dirty} />}
@@ -511,6 +513,7 @@ function ProjectFiles({
                   target="_blank"
                   rel="noreferrer"
                   // Wrapped, not cut: a tooltip is no use on touch (#244).
+                  dir="auto"
                   className="text-sm wrap-anywhere hover:underline"
                 >
                   {file.filename}
