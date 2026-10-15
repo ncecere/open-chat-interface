@@ -176,7 +176,7 @@ describe.skipIf(!available)('live data classification: triggers (a v0.13 replica
       expect(await run(sql`select 1 from project where id = ${home}`)).toHaveLength(1);
     });
 
-    it('keeps the labels when the owner is deleted with their projects and conversations', async () => {
+    it('does not trip on deleting a person together with their projects and labelled conversations', async () => {
       const student = await dataClass('Student');
       const person = await seedUser(pool.db, organizationId);
       const projectId = id();
