@@ -1,0 +1,35 @@
+{
+  "description": "Physical (left/right) utilities that stay on purpose under apps/web/src, each with the reason. Everything else must be logical (ms-, me-, ps-, pe-, start-, end-, text-start, border-s, rounded-s, ...) so the page mirrors in right-to-left; scripts/check-logical-css.mjs fails on a new physical one. file and utility must match; count is how many uses the file has, and may only go down. An entry that no longer matches fails the check.",
+  "entries": [
+    {
+      "file": "apps/web/src/components/chat/markdown.tsx",
+      "utility": "pl-0",
+      "count": 3,
+      "reason": "Undoes Streamdown's own physical padding (`[li_&]:pl-6` on a nested list, `pl-4` on a quote) inside a right-to-left list or quote; the padding comes back on the start side with ps-*"
+    },
+    {
+      "file": "apps/web/src/components/chat/markdown.tsx",
+      "utility": "border-l-0",
+      "count": 1,
+      "reason": "Undoes Streamdown's own physical `border-l-4` quote bar inside a right-to-left quote; the bar comes back on the start side with border-s-4"
+    },
+    {
+      "file": "apps/web/src/components/chat/model-picker-presentation.tsx",
+      "utility": "right-full",
+      "count": 1,
+      "reason": "The model details card is placed against the viewport side that had room when it opened (model-picker.tsx measures getBoundingClientRect against window.innerWidth), so left and right are physical here"
+    },
+    {
+      "file": "apps/web/src/components/chat/model-picker-presentation.tsx",
+      "utility": "left-full",
+      "count": 1,
+      "reason": "As right-full: placed on the physical side that fits in the window"
+    },
+    {
+      "file": "apps/web/src/components/chat/model-picker-presentation.tsx",
+      "utility": "translate-x-2",
+      "count": 2,
+      "reason": "The 8 px gutter beside the picker, away from it: it follows the physical side the card was placed on, not the reading direction"
+    }
+  ]
+}
