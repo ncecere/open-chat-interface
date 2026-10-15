@@ -5,6 +5,7 @@ import { Button } from '~/components/ui/button';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { api } from '~/lib/api-client';
+import { type MessageKey, type Translate, useT } from '~/lib/i18n';
 import { SUGGESTED_TRAITS, withTrait } from '~/lib/traits';
 import { cn } from '~/lib/utils';
 
@@ -16,28 +17,44 @@ interface Draft {
 }
 
 const STEPS = [
-  {
-    id: 'name',
-    icon: UserRound,
-    title: 'What should we call you?',
-    description:
-      'Used to greet you and when a reply addresses you directly. Your account name is used if you leave this blank.',
-  },
-  {
-    id: 'traits',
-    icon: Sparkles,
-    title: 'How should replies sound?',
-    description:
-      'Pick any that fit. These shape the tone of every answer, and you can change them whenever you like.',
-  },
-  {
-    id: 'context',
-    icon: MessageSquare,
-    title: 'Anything else worth knowing?',
-    description:
-      'Preferences about format, subject matter, or anything a colleague would find useful to know before helping you.',
-  },
+  { id: 'name', icon: UserRound },
+  { id: 'traits', icon: Sparkles },
+  { id: 'context', icon: MessageSquare },
 ] as const;
+
+/** What each step asks, in the language showing now. */
+function stepText(id: (typeof STEPS)[number]['id'], t: Translate) {
+  switch (id) {
+    case 'name':
+      return { title: t('onboarding.name.title'), description: t('onboarding.name.description') };
+    case 'traits':
+      return {
+        title: t('onboarding.traits.title'),
+        description: t('onboarding.traits.description'),
+      };
+    case 'context':
+      return {
+        title: t('onboarding.context.title'),
+        description: t('onboarding.context.description'),
+      };
+  }
+}
+
+/**
+ * A suggested trait as the person reads it. What is saved is the English word
+ * (`value`): it goes into the assistant's instructions, so only the label shown
+ * is translated, and a trait this list does not know is shown as it is.
+ */
+const TRAIT_LABELS: Record<string, MessageKey> = {
+  concise: 'onboarding.trait.concise',
+  thorough: 'onboarding.trait.thorough',
+  formal: 'onboarding.trait.formal',
+  casual: 'onboarding.trait.casual',
+  encouraging: 'onboarding.trait.encouraging',
+  direct: 'onboarding.trait.direct',
+  patient: 'onboarding.trait.patient',
+  technical: 'onboarding.trait.technical',
+};
 
 /**
  * A short introduction that personalizes replies.
@@ -50,6 +67,7 @@ const STEPS = [
  * ask at all.
  */
 export function IntroductionWizard() {
+  const t = useT();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Draft>({
@@ -78,6 +96,7 @@ export function IntroductionWizard() {
   const current = STEPS[step];
   if (!current) return null;
   const Icon = current.icon;
+  const text = stepText(current.id, t);
 
   function toggleTrait(trait: string) {
     setDraft((value) => ({
@@ -102,8 +121,8 @@ export function IntroductionWizard() {
               <span className="flex size-12 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
                 <Icon className="size-6 text-[var(--accent-bright)]" aria-hidden="true" />
               </span>
-              <h1 className="mt-6 font-semibold text-2xl leading-tight">{current.title}</h1>
-              <p className="mt-3 text-[var(--text-muted)] leading-relaxed">{current.description}</p>
+              <h1 className="mt-6 font-semibold text-2xl leading-tight">{text.title}</h1>
+              <p className="mt-3 text-[var(--text-muted)] leading-relaxed">{text.description}</p>
             </div>
 
             <div className="flex items-center gap-2" aria-hidden="true">
@@ -121,7 +140,7 @@ export function IntroductionWizard() {
                 />
               ))}
               <span className="sr-only">
-                Step {step + 1} of {STEPS.length}
+                {t('onboarding.stepOf', { step: step + 1, total: STEPS.length })}
               </span>
             </div>
           </div>
@@ -131,7 +150,7 @@ export function IntroductionWizard() {
               {current.id === 'name' && (
                 <>
                   <label className="flex flex-col gap-1.5 text-sm" htmlFor="wizard-name">
-                    <span className="font-medium">Name</span>
+                    <span className="font-medium">{t('onboarding.name.label')}</span>
                     <Input
                       id="wizard-name"
                       className="h-11"
@@ -139,20 +158,20 @@ export function IntroductionWizard() {
                       value={draft.displayName}
                       maxLength={120}
                       // Not a name, which read as one already filled in (#107).
-                      placeholder="Your first name"
+                      placeholder={t('onboarding.name.placeholder')}
                       onChange={(event) =>
                         setDraft((value) => ({ ...value, displayName: event.target.value }))
                       }
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm" htmlFor="wizard-occupation">
-                    <span className="font-medium">What do you do?</span>
+                    <span className="font-medium">{t('onboarding.name.occupationLabel')}</span>
                     <Input
                       id="wizard-occupation"
                       className="h-11"
                       value={draft.occupation}
                       maxLength={200}
-                      placeholder="Research administrator"
+                      placeholder={t('onboarding.name.occupationPlaceholder')}
                       onChange={(event) =>
                         setDraft((value) => ({ ...value, occupation: event.target.value }))
                       }
@@ -179,7 +198,7 @@ export function IntroductionWizard() {
                         )}
                       >
                         {selected && <Check className="size-3.5" aria-hidden="true" />}
-                        {trait}
+                        {TRAIT_LABELS[trait] ? t(TRAIT_LABELS[trait]) : trait}
                       </button>
                     );
                   })}
@@ -188,13 +207,13 @@ export function IntroductionWizard() {
 
               {current.id === 'context' && (
                 <label className="flex flex-col gap-1.5 text-sm" htmlFor="wizard-context">
-                  <span className="font-medium">Notes</span>
+                  <span className="font-medium">{t('onboarding.context.label')}</span>
                   <Textarea
                     id="wizard-context"
                     rows={9}
                     value={draft.additionalContext}
                     maxLength={4_000}
-                    placeholder="I prefer short answers with examples, and I work mostly in TypeScript."
+                    placeholder={t('onboarding.context.placeholder')}
                     onChange={(event) =>
                       setDraft((value) => ({ ...value, additionalContext: event.target.value }))
                     }
@@ -207,7 +226,7 @@ export function IntroductionWizard() {
               {step > 0 ? (
                 <Button variant="ghost" size="sm" onClick={() => setStep((value) => value - 1)}>
                   <ArrowLeft className="rtl:-scale-x-100" />
-                  Back
+                  {t('onboarding.back')}
                 </Button>
               ) : (
                 <Button
@@ -216,7 +235,7 @@ export function IntroductionWizard() {
                   disabled={finish.isPending}
                   onClick={() => finish.mutate(true)}
                 >
-                  Skip for now
+                  {t('onboarding.skip')}
                 </Button>
               )}
 
@@ -226,7 +245,7 @@ export function IntroductionWizard() {
                 onClick={() => (isLast ? finish.mutate(false) : setStep((value) => value + 1))}
               >
                 {finish.isPending && <Spinner />}
-                {isLast ? 'Finish' : 'Continue'}
+                {isLast ? t('onboarding.finish') : t('onboarding.continue')}
               </Button>
             </div>
           </div>
