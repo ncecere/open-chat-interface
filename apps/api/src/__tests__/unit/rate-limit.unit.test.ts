@@ -33,6 +33,7 @@ import {
   consumeRateLimit,
   refundRateLimit,
   resetLocalRateLimits,
+  SECOND_FACTOR_CHALLENGE_LIMIT,
 } from '../../services/limits/rate-limit.js';
 
 beforeEach(() => {
@@ -208,6 +209,46 @@ describe('sign-in storms (v0.11)', () => {
     expect((await consumeRateLimit({ bucket: 'refund', identifier: 'x', limit: 1 })).allowed).toBe(
       false,
     );
+  });
+});
+
+describe('the second step (v0.14, #399)', () => {
+  const secondFactor = (ip: string | null, challenge: string | null) =>
+    authRateLimit({ kind: 'second-factor', ipAddress: ip, challenge });
+
+  it('counts wrong codes per challenge and per address, and refunds a code that worked', async () => {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const result = await secondFactor('198.51.100.20', 'challenge-a');
+      expect(result.allowed).toBe(true);
+      expect(result.refundOnSuccess).toHaveLength(2);
+      for (const key of result.refundOnSuccess) await refundRateLimit(key);
+    }
+  });
+
+  it('stops a challenge after six wrong codes in a minute and names it', async () => {
+    for (let attempt = 0; attempt < SECOND_FACTOR_CHALLENGE_LIMIT; attempt += 1)
+      expect((await secondFactor('198.51.100.21', 'challenge-b')).allowed).toBe(true);
+    expect(await secondFactor('198.51.100.21', 'challenge-b')).toMatchObject({
+      allowed: false,
+      scope: 'challenge',
+      refundOnSuccess: [],
+    });
+    // A new challenge from the same address is still allowed (the address allows far more).
+    expect((await secondFactor('198.51.100.21', 'challenge-c')).allowed).toBe(true);
+  });
+
+  it('limits an address across challenges, as it does for passwords', async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1)
+      expect((await secondFactor('198.51.100.22', `challenge-${attempt}`)).allowed).toBe(true);
+    expect(await secondFactor('198.51.100.22', 'challenge-new')).toMatchObject({
+      allowed: false,
+      scope: 'ip',
+    });
+  });
+
+  it('counts nothing per challenge without one, and nothing per address without an address', async () => {
+    const none = await secondFactor(null, null);
+    expect(none).toMatchObject({ allowed: true, scope: null, refundOnSuccess: [] });
   });
 });
 
