@@ -22,6 +22,7 @@ vi.mock('../../services/jobs/workers.js', () => ({
     return replicas.next;
   },
 }));
+const { APP_VERSION } = await import('../../version.js');
 const { assertNoOlderReplicas, isOlderMinor } = await import(
   '../../services/groups/upgrade-guard.js'
 );
@@ -111,12 +112,19 @@ describe('assertNoOlderReplicas', () => {
     await expect(assertNoOlderReplicas()).resolves.toBeUndefined();
     replicas.next = 'fails';
     await expect(assertNoOlderReplicas()).resolves.toBeUndefined();
-    replicas.next = [{ version: '0.13.1' }, { version: '0.99.0' }];
+    // Relative to the build under test: this passed with literal versions until the build
+    // became 0.14.0, when a 0.13.1 replica rightly became an older one.
+    replicas.next = [{ version: APP_VERSION }, { version: '0.99.0' }];
+    await expect(assertNoOlderReplicas()).resolves.toBeUndefined();
+    // The same minor with an earlier patch is not an older release.
+    const [major, minor] = APP_VERSION.split('.').map(Number) as [number, number];
+    replicas.next = [{ version: `${major}.${minor}.0` }];
     await expect(assertNoOlderReplicas()).resolves.toBeUndefined();
   });
 
   it('refuses with 409 while an earlier minor release serves', async () => {
-    replicas.next = [{ version: '0.12.9' }, { version: '0.13.1' }];
+    const [major, minor] = APP_VERSION.split('.').map(Number) as [number, number];
+    replicas.next = [{ version: `${major}.${minor - 1}.9` }, { version: APP_VERSION }];
     await expect(assertNoOlderReplicas()).rejects.toMatchObject({
       status: 409,
       message: 'An upgrade is still in progress',

@@ -24,6 +24,7 @@ import {
   livePostgresAvailable,
   seedOrganization,
 } from '../../../test/live-postgres.js';
+import { APP_VERSION } from '../../version.js';
 
 const available = await livePostgresAvailable();
 const state = vi.hoisted(() => ({
@@ -230,8 +231,10 @@ describe.skipIf(!available)('live: what a group grants (budgets and models)', ()
 
     it('waits for an upgrade in progress: 409 while an older replica serves, nothing written', async () => {
       const scratch = await groupNamed(live.db, organizationId, 'Mixed versions');
-      // The running release is 0.13.1 here: a 0.12 replica is older, 0.13.x and 0.14 are not.
-      state.replicas = [{ version: '0.12.9' }, { version: '0.13.1' }];
+      // Relative to the running release, whatever it is: a replica two minors back is older,
+      // the same minor (any patch) and later ones are not.
+      const [major, minor] = APP_VERSION.split('.').map(Number) as [number, number];
+      state.replicas = [{ version: `${major}.${minor - 2}.9` }, { version: APP_VERSION }];
       const error = await refusal(
         await put(scratch.id, { policyIds: [policies[0]!.id], modelIds: [] }),
         409,
@@ -241,7 +244,11 @@ describe.skipIf(!available)('live: what a group grants (budgets and models)', ()
       expect(await grants(scratch.id)).toEqual({ policyIds: [], modelIds: [] });
       // Reads and member changes are not held; same-minor replicas and no heartbeats are fine.
       expect((await call(admin, 'GET', `/admin/groups/${scratch.id}/grants`)).status).toBe(200);
-      state.replicas = [{ version: '0.13.1' }, { version: '0.13.9' }, { version: '0.14.0' }];
+      state.replicas = [
+        { version: APP_VERSION },
+        { version: `${major}.${minor}.99` },
+        { version: `${major}.${minor + 1}.0` },
+      ];
       expect((await put(scratch.id, { policyIds: [], modelIds: [] })).status).toBe(200);
       state.replicas = null;
       expect((await put(scratch.id, { policyIds: [], modelIds: [] })).status).toBe(200);
