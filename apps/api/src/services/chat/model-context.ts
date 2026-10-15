@@ -262,6 +262,7 @@ export async function buildModelContext(
       budget,
       supportsVision,
       textFromParts(history.latest.parts),
+      context.classification,
     );
     required = addCost(required, projectFiles.cost);
     // The summary stands for the turns before the cut. If even it does not fit

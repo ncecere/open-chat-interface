@@ -1,5 +1,6 @@
 import { type CompactionReason, ERROR_CODES, type UserRole } from '@oci/shared';
 import { AppError, quotaExceeded, validationFailed } from '../../lib/errors.js';
+import { guardModel } from '../classification/guard.js';
 import { allowanceExhausted } from '../quota/index.js';
 import { softThresholdUnits } from './compaction-plan.js';
 import {
@@ -40,7 +41,9 @@ export type CompactionOutcome =
   /** The person's allowance is spent: try again later. */
   | { status: 'allowance' }
   /** Made, but its input changed meanwhile or a further cut won. */
-  | { status: 'discarded' };
+  | { status: 'discarded' }
+  /** Data classification: the conversation carries a class the model is not approved for. */
+  | { status: 'blocked' };
 
 /**
  * One background compaction, run by the queue (compaction-queue.ts), never
@@ -58,6 +61,25 @@ export async function compactConversation(input: {
   reason: CompactionReason;
   instructions?: string | null;
 }): Promise<CompactionOutcome> {
+  // Data classification: the transcript of earlier turns goes to this model. A
+  // manual request is refused (403); an automatic one ends quietly (and is
+  // audited), since nobody asked and nobody is waiting.
+  try {
+    await guardModel({
+      user: input.user,
+      threadId: input.threadId,
+      model: { slug: input.model.slug, displayName: input.model.displayName ?? input.model.slug },
+      point: 'compaction',
+    });
+  } catch (error) {
+    if (
+      input.reason === 'automatic' &&
+      error instanceof AppError &&
+      error.code === ERROR_CODES.DATA_CLASS_BLOCKED
+    )
+      return { status: 'blocked' };
+    throw error;
+  }
   const budget = contextBudget(input.model);
   const previous = await latestCompaction(input.threadId, input.user.id);
   const plan = await planCompaction({
@@ -115,6 +137,13 @@ export async function assertCompactionPossible(input: {
   model: SummaryModel;
   instructions?: string | null;
 }) {
+  // For an answer at once; `compactConversation` judges again when the job runs.
+  await guardModel({
+    user: input.user,
+    threadId: input.threadId,
+    model: { slug: input.model.slug, displayName: input.model.displayName ?? input.model.slug },
+    point: 'compaction',
+  });
   const previous = await latestCompaction(input.threadId, input.user.id);
   if (!(await hasTurnsToSummarise(input.threadId, input.user.id, previous)))
     throw validationFailed(NOTHING_TO_COMPACT);

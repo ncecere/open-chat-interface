@@ -4,6 +4,7 @@ import type { UIMessage } from 'ai';
 import { db } from '../../db/index.js';
 import { validationFailed } from '../../lib/errors.js';
 import { clip, singleLine } from '../../lib/text.js';
+import { guardService, type TurnClassification } from '../classification/guard.js';
 import { passageHeadings } from '../project-search/excerpts.js';
 import { hybridRanking } from '../project-search/fusion.js';
 import {
@@ -269,6 +270,8 @@ export async function selectProjectFiles(
   budget: ContextCost,
   supportsVision: boolean,
   latestText: string,
+  /** What the conversation carries: gates the calls to embeddings and reranking (data classification). */
+  classification?: TurnClassification,
 ): Promise<ProjectFileSelection> {
   const selection = await selectIncludedFiles(
     project,
@@ -276,6 +279,7 @@ export async function selectProjectFiles(
     budget,
     supportsVision,
     latestText,
+    classification,
   );
   // Files the person left out (v0.10) are named on the reply, with or without
   // searched passages, so the reply says what it did not look at.
@@ -299,6 +303,7 @@ async function selectIncludedFiles(
   budget: ContextCost,
   supportsVision: boolean,
   latestText: string,
+  classification?: TurnClassification,
 ): Promise<ProjectFileSelection> {
   if (!project || project.files.length === 0) return noProjectFiles();
   const whole = fitWholeFiles(
@@ -324,13 +329,36 @@ async function selectIncludedFiles(
     projectId: project.id,
     fileIds: searchable.map((file) => file.id),
   };
+  // The outside services this reply was not allowed to use, for its note.
+  const withheld: Array<'embeddings' | 'reranking'> = [];
+  const gate = (name: 'embeddings' | 'reranking', point: 'embedding' | 'rerank') =>
+    classification
+      ? async () => {
+          const allowed = await guardService({
+            userId: project.userId,
+            name,
+            point,
+            projectId: project.id,
+            known: classification,
+          });
+          if (!allowed) withheld.push(name);
+          return allowed;
+        }
+      : undefined;
   const terms = await projectSearchTerms(latestText);
   let ranking: ProjectSearchData['ranking'] = 'keyword';
   let candidates = await rankProjectChunks(scope, terms, PASSAGE_CANDIDATES);
   // Meaning-based search (v0.9) joins in when it is configured and available;
   // otherwise, or if it fails, the keyword ranking stands alone as in v0.8.
   const semantic =
-    terms.length > 0 ? await semanticProjectChunks(scope, latestText, PASSAGE_CANDIDATES) : null;
+    terms.length > 0
+      ? await semanticProjectChunks(
+          scope,
+          latestText,
+          PASSAGE_CANDIDATES,
+          gate('embeddings', 'embedding'),
+        )
+      : null;
   if (semantic && semantic.length > 0) {
     ranking = 'hybrid';
     candidates = hybridRanking(candidates, semantic, chunkKey, PASSAGE_CANDIDATES);
@@ -339,7 +367,12 @@ async function selectIncludedFiles(
   // any failure keeps the order above.
   let reranked: boolean | undefined;
   if (candidates.length > 0) {
-    ({ candidates, reranked } = await rerankProjectCandidates(scope, latestText, candidates));
+    ({ candidates, reranked } = await rerankProjectCandidates(
+      scope,
+      latestText,
+      candidates,
+      gate('reranking', 'rerank'),
+    ));
   }
   if (candidates.length === 0) {
     // Nothing relevant. Until v0.9 each file's opening passages were used
@@ -388,6 +421,7 @@ async function selectIncludedFiles(
         ),
         ranking,
         ...(reranked !== undefined && { reranked }),
+        ...(withheld.length > 0 && { withheld }),
       },
     },
   };

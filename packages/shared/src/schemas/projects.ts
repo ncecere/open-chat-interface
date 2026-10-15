@@ -129,11 +129,16 @@ const projectSearchExcerptSchema = z.object({
  * `reranked` (v0.9) is present only when a reranking model is configured:
  * `true` when it reordered the candidates, `false` when it could not and the
  * previous order was used.
+ * `withheld` (v0.14, data classification) names the outside services this
+ * reply did not use because the conversation carries a class they are not
+ * approved for: meaning-based search (`embeddings`, keyword search only) and
+ * `reranking` (the combined order kept).
  */
 export const projectSearchDataSchema = z.object({
   mode: z.enum(['search', 'opening']),
   ranking: z.enum(['hybrid', 'keyword']).optional(),
   reranked: z.boolean().optional(),
+  withheld: z.array(z.enum(['embeddings', 'reranking'])).optional(),
   files: z.array(
     z.object({
       name: z.string(),
