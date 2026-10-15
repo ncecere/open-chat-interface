@@ -100,6 +100,10 @@ Further down are choices about the interface itself, all kept in this browser:
   or document, so you can watch it being written. It applies on wide screens
   only; see [Artifacts](artifacts.md).
 
+**Install the app** appears at the bottom of the page, only while your browser
+offers to install OCI as an app. See [Installing the app](installing.md), which
+also covers iPhone, iPad and Safari, where there is no button.
+
 ## History
 
 ![History](../images/user-settings-history.png)

@@ -31,6 +31,8 @@ way regardless of which model you pick.
 13. [Limits](limits.md) — what a usage warning means and what to do about it.
 14. [Your data](your-data.md) — exporting everything, and importing from ChatGPT
     or Claude.
+15. [Installing the app](installing.md) — adding OCI to a phone's home screen or a
+    computer's desktop, and why it still needs a connection.
 
 ## The parts of the screen
 
