@@ -11,10 +11,17 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly details?: unknown,
+    /** Seconds the server asked the client to wait (`Retry-After`), when it did. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/** `Retry-After` as whole seconds; a date, or nothing, is not used. */
+function retryAfterSeconds(header: string | null): number | undefined {
+  return header && /^\d{1,6}$/.test(header.trim()) ? Number(header.trim()) : undefined;
 }
 
 /**
@@ -135,7 +142,13 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
       // Non-JSON error responses keep the status text.
     }
 
-    throw new ApiError(response.status, code, message, details);
+    throw new ApiError(
+      response.status,
+      code,
+      message,
+      details,
+      retryAfterSeconds(response.headers.get('retry-after')),
+    );
   }
   return response;
 }
