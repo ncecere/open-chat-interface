@@ -24,6 +24,7 @@ import {
 import { recordAudit } from '../services/audit.js';
 import { activeBroadcastsFor, dismissBroadcast } from '../services/broadcasts.js';
 import { userConnectors } from '../services/connectors/people.js';
+import { mfaSummaryFor } from '../services/mfa/state.js';
 import { listAvailableModels } from '../services/models.js';
 import {
   acceptPolicy,
@@ -106,6 +107,7 @@ meRoutes.get('/', async (c) => {
     memoryEntries,
     connectors,
     shareLinks,
+    mfa,
   ] = await Promise.all([
     loadPreferences(user.id),
     getSetting('features'),
@@ -117,6 +119,7 @@ meRoutes.get('/', async (c) => {
     memoryEntryCount(user.id),
     userConnectors(user),
     activeShareLinkCount(user.id),
+    mfaSummaryFor({ id: user.id, role: user.role }, c.get('mfa')),
   ]);
   const { reasoningEfforts, ...effective } = combineFeatures(features, search, own);
   const instanceEffort: ReasoningEffort = chat.defaultEffort ?? 'instant';
@@ -143,6 +146,11 @@ meRoutes.get('/', async (c) => {
     preferences,
     /** v0.9.1: which sign-in methods the person has, for Settings → Account. */
     signIn,
+    /**
+     * v0.14: two-step verification: what is set up, whether the role requires
+     * it, until when, and whether this session is limited (#399).
+     */
+    mfa: mfa.summary,
     /**
      * v0.9.1: what Settings needs to hide sections with nothing in them
      * without fetching each section on every settings page. `shareLinks`

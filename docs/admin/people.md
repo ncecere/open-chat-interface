@@ -90,6 +90,14 @@ until the hold is lifted.
   one to end. This is the right response to a suspected compromise; changing the
   password alone leaves existing sessions working. They can sign in again
   straight away.
+- **Two-step verification** shows what the person has set up (an authenticator,
+  how many recovery codes are left, how many passkeys, whether the second step is
+  locked) and whether their role requires it; never a key or a code. Auditors see
+  it read-only. **Reset two-step verification** (administrators only, not on your
+  own account) removes their authenticator, recovery codes and passkeys, ends
+  their sessions and emails them: use it when somebody lost their phone and
+  their recovery codes. It is recorded as `user.mfa.reset`. See
+  [Identity and access](identity.md#two-step-verification).
 - **Delete user**, at the bottom of the page, removes the account for good.
   See [Deleting an account](#deleting-an-account).
 

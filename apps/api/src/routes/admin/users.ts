@@ -9,6 +9,7 @@ import { parseBody, parseChanges, parseQuery } from '../../middleware/validate.j
 import { applyBulkUserAction, bulkActionSchema } from '../../services/admin-users/bulk-actions.js';
 import { getUserDetail } from '../../services/admin-users/detail.js';
 import { listQuerySchema, listUsers } from '../../services/admin-users/listing.js';
+import { adminResetMfa } from '../../services/admin-users/mfa.js';
 import {
   createUser,
   deleteUser,
@@ -67,6 +68,17 @@ userRoutes.patch('/:id', async (c) => {
   const targetId = c.req.param('id');
   const patch = await parseChanges(c, updateUserSchema);
   return c.json(await updateUser({ id, email }, targetId, patch));
+});
+
+/**
+ * Resets a person's two-step verification (#399): authenticator, recovery codes
+ * and passkeys removed, sessions ended, the person emailed, audited
+ * `user.mfa.reset`. Administrators only (an auditor gets 403 from the guard on
+ * every write); 422 on oneself, 404 for an unknown account.
+ */
+userRoutes.post('/:id/mfa/reset', async (c) => {
+  const { id, email } = currentUser(c);
+  return c.json(await adminResetMfa({ id, email }, c.req.param('id')));
 });
 
 userRoutes.post('/:id/revoke-sessions', async (c) => {

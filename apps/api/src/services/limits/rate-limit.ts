@@ -173,6 +173,14 @@ export async function uploadRateLimit(userId: string, role: UserRole): Promise<R
  * - `session` (`/change-password`, `/change-email`): every request counts per
  *   session (the account's own credential is what is being tried).
  * - `sso-start` (`/sign-in/sso`): only the address ceiling.
+ * - `second-factor` (`/two-factor/verify-totp`, `/two-factor/verify-backup-code`,
+ *   `/passkey/verify-authentication`, and OCI's own MFA routes, v0.14): only
+ *   **failed** attempts count, per challenge (the signed `two_factor` cookie,
+ *   or the session when signed in: `SECOND_FACTOR_CHALLENGE_LIMIT`) and per
+ *   address, both refunded when the attempt succeeds. The plugin ends a
+ *   challenge after 5 wrong codes and locks an account's second step after 10
+ *   consecutive failures, but counts them after the fact and not atomically:
+ *   this bounds a burst sent at once.
  * - `sso-callback`: every callback counts against its identity provider's
  *   budget (`RATE_LIMIT_AUTH_SSO_PROVIDER_PER_MINUTE`), so one misbehaving
  *   provider cannot starve the others; failed callbacks also count per
@@ -189,9 +197,18 @@ export async function uploadRateLimit(userId: string, role: UserRole): Promise<R
  * account, session or provider is counted: one shared "unknown" counter
  * would let a single client lock everyone out.
  */
-export type AuthRequestKind = 'credential' | 'request' | 'session' | 'sso-start' | 'sso-callback';
+export type AuthRequestKind =
+  | 'credential'
+  | 'request'
+  | 'session'
+  | 'sso-start'
+  | 'sso-callback'
+  | 'second-factor';
 
-export type AuthLimitScope = 'ip' | 'ip-ceiling' | 'account' | 'session' | 'provider';
+/** Wrong second-step codes one challenge may send in a minute (the plugin ends it at 5 anyway). */
+export const SECOND_FACTOR_CHALLENGE_LIMIT = 6;
+
+export type AuthLimitScope = 'ip' | 'ip-ceiling' | 'account' | 'session' | 'provider' | 'challenge';
 
 export interface AuthRateLimitResult extends RateLimitResult {
   scope: AuthLimitScope | null;
@@ -219,6 +236,8 @@ export async function authRateLimit(params: {
   session?: string | null;
   /** The identity provider, for `sso-callback` requests. */
   provider?: string | null;
+  /** A hash of the challenge or session the code is for, for `second-factor` requests. */
+  challenge?: string | null;
 }): Promise<AuthRateLimitResult> {
   const kind = params.kind ?? 'request';
   const settings = await getRateLimitSettings();
@@ -269,7 +288,15 @@ export async function authRateLimit(params: {
       limit: accountLimit,
       refund: false,
     });
-  if (ip && (kind === 'credential' || kind === 'sso-callback'))
+  if (kind === 'second-factor' && params.challenge)
+    checks.push({
+      scope: 'challenge',
+      bucket: 'auth:2fa-challenge',
+      identifier: params.challenge,
+      limit: SECOND_FACTOR_CHALLENGE_LIMIT,
+      refund: true,
+    });
+  if (ip && (kind === 'credential' || kind === 'sso-callback' || kind === 'second-factor'))
     checks.push({
       scope: 'ip',
       bucket: 'auth:ip-failed',

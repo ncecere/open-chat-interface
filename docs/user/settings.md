@@ -28,6 +28,11 @@ Your name, email address, role, and how you sign in.
   organisation, your password is managed there instead. If your administrator
   has turned off email and password sign-in, the page says so and the password
   cannot be changed.
+- **Two-step verification.** Add an authenticator app, recovery codes and
+  passkeys to an account that signs in with a password, or see that your
+  administrator requires it. See [Two-step verification](two-step-verification.md).
+  If you sign in through your organisation, it says **Managed by your
+  organisation**.
 - **Devices.** **View Devices** lists where your account is signed in: the
   browser and system, a shortened network address, when each signed in, and
   when it was last active (to within five minutes). Your current device is

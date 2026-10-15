@@ -257,7 +257,8 @@ procedure.
 
 4. Point a test deployment at the restored database, with the **same
    `ENCRYPTION_KEY` and `AUTH_SECRET`** (without them, stored credentials and
-   sessions cannot be read), and the restored attachment storage. Run the same
+   sessions cannot be read, and from v0.14 neither can the authenticators of
+   people who use two-step verification), and the restored attachment storage. Run the same
    or a newer OCI version: startup applies any newer migrations.
 
    **Run it with `OCI_ROLE=web` only, no worker.** The restored database

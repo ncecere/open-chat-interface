@@ -351,6 +351,20 @@
       "when": 1790539200029,
       "tag": "0049_project_file_chunk_search_folded",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790539200030,
+      "tag": "0050_two_factor",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1790539200031,
+      "tag": "0051_session_auth_method_passkeys",
+      "breakpoints": true
     }
   ]
 }

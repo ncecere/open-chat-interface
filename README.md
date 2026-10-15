@@ -64,7 +64,9 @@ The first administrator is created from `INITIAL_ADMIN_EMAIL` /
 `INITIAL_ADMIN_PASSWORD` on an empty database. If no password is supplied (the
 variable is unset or empty) a one-time password is printed to the API logs.
 
-Locked out? `pnpm --filter @oci/api admin:promote you@example.com`.
+Locked out? `pnpm --filter @oci/api admin:promote you@example.com`. Locked out by
+two-step verification? `pnpm --filter @oci/api admin:reset-mfa you@example.com`
+(see [docs/OPERATIONS.md](docs/OPERATIONS.md#when-two-step-verification-stands-in-the-way)).
 
 ## Production
 

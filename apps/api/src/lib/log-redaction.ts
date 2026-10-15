@@ -36,12 +36,47 @@ const PARAMS_MARKER = '\nparams: ';
 export const REDACTED = '[redacted]';
 
 /**
+ * Two-step verification (v0.14, #399): the key an authenticator is set up
+ * with, the `otpauth://` link that carries it, recovery codes and the code a
+ * person types are credentials. By field name, wherever they appear in a
+ * logged object (compared in lower case), and by shape in text and in a `code`
+ * field, so a line logged by mistake cannot carry one.
+ */
+const SECRET_FIELDS: ReadonlySet<string> = new Set([
+  'secret',
+  'backupcodes',
+  'recoverycodes',
+  'totpuri',
+  'totpsecret',
+  'manualkey',
+]);
+/** Six digits (spaces allowed) or a recovery code, `xxxxx-xxxxx` or its ten pasted characters. */
+const CODE_SHAPE = /^\s*(?:\d{3}\s?\d{3}|[A-Za-z0-9]{5}-?[A-Za-z0-9]{5})\s*$/;
+/** An error code (`ECONNRESET`) has the length of a pasted recovery code but is only capitals. */
+const ERROR_CODE_SHAPE = /^[A-Z_]+$/;
+const OTPAUTH_LINK = /otpauth:\/\/[^\s"'<>]+/gi;
+
+/** True for a field whose value is a second-step credential. */
+function isSecretField(key: string, value: unknown): boolean {
+  if (SECRET_FIELDS.has(key.toLowerCase())) return true;
+  return (
+    key === 'code' &&
+    typeof value === 'string' &&
+    CODE_SHAPE.test(value) &&
+    !ERROR_CODE_SHAPE.test(value)
+  );
+}
+
+/**
  * Removes the parameter values from a DrizzleQueryError's text
  * ("Failed query: <statement>\nparams: <values>"). The values run to the end
  * of the text and may themselves hold newlines, so everything after the
  * marker goes.
  */
-export function redactLogText(text: string): string {
+export function redactLogText(input: string): string {
+  const text = input.includes('otpauth://')
+    ? input.replace(OTPAUTH_LINK, `otpauth://${REDACTED}`)
+    : input;
   const at = text.indexOf(PARAMS_MARKER);
   if (at === -1 || !text.includes('Failed query: ')) return text;
   return `${text.slice(0, at)}${PARAMS_MARKER}${REDACTED}`;
@@ -91,7 +126,7 @@ function redactError(error: Error, depth: number, seen: WeakSet<object>): Record
   for (const key of Object.keys(error)) {
     if (key in out || key === 'cause') continue;
     const value = (error as unknown as Record<string, unknown>)[key];
-    if (VALUE_KEYS.has(key)) {
+    if (VALUE_KEYS.has(key) || isSecretField(key, value)) {
       if (value !== undefined) out[key] = REDACTED;
     } else if (key === 'query' && typeof value === 'string') {
       out[key] = shortenQuery(value);
@@ -121,7 +156,8 @@ function redact(value: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (!isPlainObject(value)) return value;
   seen.add(value);
   const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) out[key] = redact(item, depth + 1, seen);
+  for (const [key, item] of Object.entries(value))
+    out[key] = isSecretField(key, item) ? REDACTED : redact(item, depth + 1, seen);
   return out;
 }
 

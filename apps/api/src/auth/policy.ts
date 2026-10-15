@@ -68,6 +68,57 @@ export interface AuthRequestPolicy {
   requireEmailVerification: boolean;
 }
 
+/**
+ * The rule every local way in shares, the password and a passkey: local sign-in
+ * must be on, unless the person is a verified administrator (the break-glass
+ * path).
+ */
+function assertLocalSignInAllowed(settings: AuthSettings, recoveryAdmin: boolean): void {
+  if (!settings.localAuthEnabled && !recoveryAdmin) {
+    throw new APIError('FORBIDDEN', {
+      code: 'LOCAL_AUTH_DISABLED',
+      message: 'Email and password sign-in is disabled',
+    });
+  }
+}
+
+/**
+ * The password's local rules, applied to a passkey sign-in (v0.14, #399): a
+ * passkey is a local way in, so it follows `localAuthEnabled` (a verified
+ * administrator keeps the break-glass path) and `emailVerificationRequired`.
+ * Called after the passkey was verified and before a session exists. Banned
+ * people are refused at session creation by the administration plugin.
+ */
+export async function enforcePasskeySignInPolicy(userId: string): Promise<void> {
+  const [user] = await db
+    .select({ role: schema.user.role, emailVerified: schema.user.emailVerified })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId))
+    .limit(1);
+  if (!user) {
+    throw new APIError('UNAUTHORIZED', {
+      code: 'PASSKEY_NOT_FOUND',
+      message: 'Passkey not found',
+    });
+  }
+  const recoveryAdmin = isRecoveryAdmin(user);
+  let settings: AuthSettings;
+  try {
+    settings = await getAuthPolicySettings();
+  } catch (error) {
+    // As the password path: only the verified administrator survives an unreadable policy.
+    if (recoveryAdmin) return;
+    throw error;
+  }
+  assertLocalSignInAllowed(settings, recoveryAdmin);
+  if (settings.emailVerificationRequired && !recoveryAdmin && !user.emailVerified) {
+    throw new APIError('FORBIDDEN', {
+      code: 'EMAIL_NOT_VERIFIED',
+      message: 'Verify your email address before signing in',
+    });
+  }
+}
+
 /** Resolve dynamic policy for Better Auth's email/password endpoints. */
 export async function enforceAuthRequestPolicy(
   path: string,
@@ -93,12 +144,7 @@ export async function enforceAuthRequestPolicy(
     throw error;
   }
 
-  if (!settings.localAuthEnabled && !recoveryAdmin) {
-    throw new APIError('FORBIDDEN', {
-      code: 'LOCAL_AUTH_DISABLED',
-      message: 'Email and password sign-in is disabled',
-    });
-  }
+  assertLocalSignInAllowed(settings, recoveryAdmin);
 
   if (path === '/sign-up/email' && settings.registrationMode !== 'open') {
     throw new APIError('FORBIDDEN', {
