@@ -91,10 +91,25 @@ turn them on only after every replica runs v0.14.**
   measured contrast, target size, text spacing, reflow). It is a **self-assessment
   by the project, not a third-party audit**: it says how it was made and what was
   not done (no screen reader or voice-control testing by a person; user and
-  model generated content).
+  model generated content). The final run (104 contexts: every role, both
+  themes, every accent, five views and three languages) found no axe violation.
+  A criterion is "Supports" only where a measurement or a written inspection
+  decides it: 11 are, 1 (1.4.4) is "Partially Supports" and 36 of the 55 Level A
+  and AA criteria are "Not Evaluated", because automation covers only part of
+  them and nobody has yet inspected them. Every audit check has a negative
+  control that shows it can fail.
 
 ### Changed
 
+- Accessibility fixes from the audit (#401): form controls have a 3:1 edge in
+  both themes (a new `--border-control` token, so fields and selects are
+  visibly darker); conversation row actions are 24 px and sit beside the title,
+  which now wraps to two lines before it is cut; Settings, Branding and
+  Customization hold at 200% text; a reply that is streaming is announced to a
+  screen reader as started, complete or stopped, never its words; the artifact
+  panel's width can be changed with Wider and Narrower buttons, without
+  dragging; the loading animations stop under reduced motion; white text on the
+  emerald accent in the dark theme reached 3.51:1 and now reaches 4.66:1.
 - The initial JavaScript allowance was raised from 8 kB to 24 kB over v0.13.1
   for the code that every page needs for these features (the QR code and the
   enrolment pages are lazy); the reason is recorded in

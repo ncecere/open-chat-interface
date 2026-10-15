@@ -75,9 +75,9 @@ Format, one block per criterion (the generator reads it):
 - Date: 2026-10-15
 
 ### 2.5.7
-- Status: Partially Supports
-- Method: `grep -rniE "draggable|onDrag|onDrop|dragover|dragstart|setPointerCapture|onPointerMove|pointermove" apps/web/src` found one dragging movement in the application: the artifact panel's resize handle (`components/artifacts/panel-resize.tsx`). The handle was also driven in the keyboard walkthrough (audit fact `dragging`).
-- Remarks: The handle can be dragged. Without dragging it can be operated from the keyboard (ArrowLeft and ArrowRight in 32 px steps, Home and End, Enter to reset) and, with a pointer, double-clicked to restore the default width. There is no pointer-operable way to choose another width without dragging (no buttons or presets), which is what 2.5.7 asks for a person who uses a pointer but cannot drag. Recorded as a defect in findings.md. The same search found no drag-and-drop handlers for files (`onDrop`, `dragover`), so nothing else in the application is dragged.
+- Status: Supports
+- Method: `grep -rniE "draggable|onDrag|onDrop|dragover|dragstart|setPointerCapture|onPointerMove|pointermove" apps/web/src` found one dragging movement in the application: the artifact panel's resize handle (`components/artifacts/panel-resize.tsx`). The handle was also driven in the keyboard walkthrough (audit fact `dragging`). The alternative was then exercised by `tests/e2e/artifact-panel-resize.spec.ts` (clicks "Make panel wider" and "Make panel narrower", checks the width each time, that each is disabled at its limit, and that neither is offered in full screen) and by `tests/unit/artifacts-docked.test.tsx` (including a page set to right-to-left).
+- Remarks: The handle can be dragged. Without dragging, the same width can be changed with a single pointer: two buttons in the panel's header, Make panel wider and Make panel narrower, each a 64 px step through the handle's own resize function, disabled at the limits and absent where the panel cannot be resized (full screen, the phone dialog, a window with no room). They can also be reached from the keyboard (ArrowLeft and ArrowRight in 32 px steps on the handle, Home and End, Enter to reset) and double-click restores the default width. This was a defect in the first run (D7 in findings.md) and is fixed. The same search found no drag-and-drop handlers for files (`onDrop`, `dragover`), so nothing else in the application is dragged.
 - Date: 2026-10-15
 
 ### 3.2.6

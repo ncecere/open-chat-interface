@@ -4,23 +4,52 @@ Defects the audit found, from the first run of `pnpm a11y:audit` (the `smoke` ma
 [report](acr.md) for exactly what ran) and from the inspections in [inspections.md](inspections.md).
 Each has its criterion, route, severity, evidence and a suggested fix.
 
-**Status.** The application was being changed while this audit was made (CSS converted to logical
-properties, strings extracted for translation), so nothing was fixed in that run. The fixes came
-after, on the branch `v0.14/a11y-fixes-1` (D1 to D5, outside the chat area), each with a test that
-failed first; each finding below says which commit fixed it and what is still open. The chat area
-(components/chat, components/artifacts, routes/chat) was being translated at the time and is fixed
-later (D6, D7, the model picker and message box under D1, D2 and D4, the reduced-motion notes). The
-final audit runs after the application settles; a finding that still reproduces then is fixed with a
-test that fails first, or filed as an issue and the report's row stays "Partially Supports". The
-evidence keys are the `rule` names in `evidence.json` (`findings[].rule`); a test fails if a finding
-there is missing from this file.
+**Status.** The first run (the `smoke` matrix) found D1 to D7 below, while the application was still
+being changed (CSS converted to logical properties, strings extracted for translation), so nothing was
+fixed in that run. The fixes came after, each with a test that failed first, and each finding says
+which commit fixed it. The final run (the `standard` matrix, 104 contexts: every role, both themes,
+every accent, five views and three languages, on the build that is released, version 0.14.0 at
+commit f96c7416) found one more defect, D8, which is fixed, and four findings that remain, all one
+thing: **the model's name in the message box is cut with an ellipsis at 200% text and under the text
+spacing** (#435; see "What remains" below). It reported no axe violation of any impact, 0 errors, and
+every one of the 13 keyboard walkthroughs completed. The evidence keys are the `rule` names in
+`evidence.json` (`findings[].rule`); a test fails if a finding there is missing from this file.
 
-The focused re-run after the fixes (`pnpm a11y:audit --matrix smoke --only pages`, the same 32
-contexts as the first run, on a freshly seeded instance) went from 172 findings to 8; the 8 are all
-in the chat area (the message box, the model picker under it) and are listed under D1, D2 and D4.
+The focused re-run after the fixes of D1 to D5 (`pnpm a11y:audit --matrix smoke --only pages`, the same
+32 contexts as the first run, on a freshly seeded instance) went from 172 findings to 8, all in the chat
+area. The same chat-area edges were fixed afterwards and are gone from the final run.
 
-This is a record of the first run, on build 68f91a59 (version file 0.13.1, before the release
-bump). Numbers can change after the interface changes; re-run before trusting any of them.
+The first run was on build 68f91a59 (version file 0.13.1, before the release bump). The numbers in
+D1 to D7 are from that run. Re-run before trusting any number in this file.
+
+## The final run, and what remains
+
+- **D8 (1.4.3, serious): white text on the emerald accent in the dark theme was 3.51:1** (needs 4.5:1):
+  the sign-in button, a 12 px control label on the chat home page and a badge in the Settings → Groups
+  table, in the dark theme with the emerald accent. The `smoke` matrix runs one accent, so the first run could not see
+  it; the `standard` matrix does. The accent presets are older than this release, so it is not new in
+  v0.14, only found. Fixed in `171f8fe6`: the dark emerald fill is `oklch(53% 0.125 165)` (4.66:1 with
+  the white text; the light theme's shade would have measured 5.14:1 for text but 2.82:1 against the
+  lightest dark surface, which is the 3:1 that a switch's track needs, so it was not used). A link-style
+  button in the model scope picker that used the accent as text colour now uses `--accent-bright`. Test:
+  `tests/unit/accent-fill-contrast.test.ts` checks every accent in both themes (it was red for dark
+  emerald alone, at the measured 3.51:1).
+- **Two audit refinements, made with the fixes, that change what is measured.** (1) A field with no edge
+  of its own is measured by the frame that draws it when the page marks one with `data-field-frame`;
+  only the message box's frame is marked (its 3:1 edge is `--border-control`). A card that merely
+  contains a field does not count; the audit's controls prove a borderless field in a bordered card,
+  and a marked frame with a pale edge, are both still flagged. (2) A `<button role="combobox">` that
+  shows its current value as text (the model picker's trigger) is not measured as a field, because
+  1.4.11 asks for a boundary only where the boundary identifies the control and its text does; an
+  icon-only combobox button is still flagged. If you disagree with either, the alternative is a
+  visible border on the trigger: that is a design change on the main screen and was not made here.
+- **What remains (4 findings, #435).** The model picker's trigger (`components/chat/model-picker.tsx`)
+  shows the current model on one line and cuts it when the row is narrow, on purpose (#109, #312): the
+  full name is in the trigger's accessible name, in a tooltip, and in the list it opens. At 200% text
+  (131 px cut, `text-resize-clipping`, moderate, on `/` and `/chat/$threadId`) and under the 1.4.12
+  spacing at 320 px in Arabic (33 px cut, `text-spacing-clipping`, review) the visible name is cut, so
+  1.4.4 is reported as Partially Supports. A fix that wraps the row of controls would also move the
+  picker to its own line on a phone for everyone with a long model name, so it needs a design decision.
 
 ## What the first run found nothing in
 
