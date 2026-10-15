@@ -351,6 +351,13 @@
       "when": 1790539200029,
       "tag": "0049_project_file_chunk_search_folded",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790539200032,
+      "tag": "0052_data_classification",
+      "breakpoints": true
     }
   ]
 }

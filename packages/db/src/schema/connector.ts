@@ -42,6 +42,11 @@ export const connector = pgTable(
     enabled: boolean('enabled').notNull().default(true),
     /** Allows plain HTTP and private, loopback and link-local addresses. */
     allowPrivateNetwork: boolean('allow_private_network').notNull().default(false),
+    /**
+     * When an administrator last said which data classes the connector carries
+     * (possibly none; migration 0052). Null shows "Not reviewed".
+     */
+    dataClassesReviewedAt: timestamp('data_classes_reviewed_at', { withTimezone: true }),
     /** Last successful exchange with the server, and the last failure (a short, safe message). */
     lastContactAt: timestamp('last_contact_at', { withTimezone: true }),
     lastErrorAt: timestamp('last_error_at', { withTimezone: true }),
