@@ -1,10 +1,13 @@
 import {
+  MAX_DIRECT_INBOUND_SHARES_PER_USER,
+  MAX_PROJECTS_PER_USER,
+  MAX_SHARES_PER_PROJECT,
   PROJECT_SHARE_ERROR_REASONS,
   type ProjectAccessLevel,
   type ProjectShareErrorReason,
 } from '@oci/shared';
 import { ApiError, apiErrorMessage } from '~/lib/api-client';
-import { formatNumber } from '~/lib/i18n';
+import { formatList, type MessageKey, translate } from '~/lib/i18n';
 
 /**
  * What each access level may do on the project page (SPEC-groups.md, access
@@ -68,21 +71,23 @@ export function accessOf(project: { access?: ProjectAccessLevel }): ProjectAcces
   return project.access ?? 'owner';
 }
 
-const LABELS: Record<ProjectAccessLevel, string> = {
-  owner: 'Owner',
-  editor: 'Editor',
-  viewer: 'Viewer',
+const LABEL_KEYS: Record<ProjectAccessLevel, MessageKey> = {
+  owner: 'sharing.permission.owner',
+  editor: 'sharing.permission.editor',
+  viewer: 'sharing.permission.viewer',
 };
 
+/** The name of an access level: the same word in every list, chip and sentence that shows one. */
 export function accessLabel(access: ProjectAccessLevel): string {
-  return LABELS[access];
+  return translate(LABEL_KEYS[access]);
 }
 
 /** What each level means, for the places that choose or explain one. */
-export const ACCESS_SUMMARY: Record<'viewer' | 'editor', string> = {
-  viewer: 'Can read the instructions and files and use them in their own conversations.',
-  editor: 'Can also change the instructions and add or remove files.',
-};
+export function accessSummary(level: 'viewer' | 'editor'): string {
+  return translate(
+    level === 'viewer' ? 'sharing.permission.viewerSummary' : 'sharing.permission.editorSummary',
+  );
+}
 
 /** The refusal reason the API gave, when it gave a known one (`error.details.reason`). */
 export function shareErrorReason(error: unknown): ProjectShareErrorReason | undefined {
@@ -93,37 +98,74 @@ export function shareErrorReason(error: unknown): ProjectShareErrorReason | unde
     : undefined;
 }
 
-/** How long to wait, in words, for a refusal that said (`Retry-After`). */
-export function waitText(seconds: number | undefined): string {
-  return seconds
-    ? `Try again in ${seconds === 1 ? '1 second' : `${seconds} seconds`}.`
-    : 'Wait a moment and try again.';
+/** Where a sharing request came from: the same refusal reads differently to whoever is acting. */
+export type ShareErrorContext = 'share' | 'transfer';
+
+/**
+ * The sentence for each reason the API gives, so a refusal reads in the
+ * person's language whatever language the server wrote it in. The server's
+ * numbers are the shared constants it uses.
+ */
+function reasonText(reason: ProjectShareErrorReason, context: ShareErrorContext): string {
+  switch (reason) {
+    case 'upgrade_in_progress':
+      return translate('sharing.error.upgradeInProgress');
+    case 'already_shared':
+      return translate('sharing.error.alreadyShared');
+    case 'share_limit':
+      return translate('sharing.error.shareLimit', { limit: MAX_SHARES_PER_PROJECT });
+    case 'inbound_limit':
+      return translate(
+        context === 'transfer' ? 'sharing.error.inboundLimitYou' : 'sharing.error.inboundLimit',
+        { limit: MAX_DIRECT_INBOUND_SHARES_PER_USER },
+      );
+    case 'person_not_found':
+      return translate('sharing.error.personNotFound');
+    case 'cannot_share_with_self':
+      return translate('sharing.error.cannotShareWithSelf');
+    case 'not_a_group_member':
+      return translate('sharing.error.notAGroupMember');
+    case 'leave_via_group':
+      return translate('sharing.error.leaveViaGroup');
+    case 'transfer_target_not_editor':
+      return translate('sharing.error.transferTargetNotEditor');
+    case 'transfer_target_project_limit':
+      return translate('sharing.error.transferTargetProjectLimit', {
+        limit: MAX_PROJECTS_PER_USER,
+      });
+    case 'transfer_target_projects_off':
+      return translate('sharing.error.transferTargetProjectsOff');
+    case 'legal_hold':
+      return translate('sharing.error.legalHold');
+  }
 }
 
 /**
- * What a refused sharing request says. The server's sentences already carry
- * the numbers for a limit and the "upgrade in progress" wording, so they are
- * shown as they are; what is added is a wait for the rate limit, and wording
- * for an unknown address that does not say more than the server did.
+ * What a refused sharing request says, by the reason the API gave (`error.details.reason`),
+ * so every known refusal is a complete sentence in the person's language. A wait for
+ * the rate limit is added; a refusal with no known reason shows the server's own text.
  */
-export function describeShareError(error: unknown, fallback: string): string {
+export function describeShareError(
+  error: unknown,
+  fallback: string,
+  context: ShareErrorContext = 'share',
+): string {
   if (error instanceof ApiError) {
     if (error.status === 429)
-      return `Too many sharing attempts. ${waitText(error.retryAfterSeconds)}`;
+      return error.retryAfterSeconds
+        ? translate('sharing.error.rateLimitedWait', { count: error.retryAfterSeconds })
+        : translate('sharing.error.rateLimited');
     const reason = shareErrorReason(error);
-    if (reason === 'person_not_found')
-      return 'No account has that email address. It has to match exactly.';
-    if (reason === 'already_shared')
-      return 'This project is already shared with them. Change their access in the list below.';
-    if (error.status === 404)
-      return 'That person could not be found, or you can no longer share this project.';
+    if (reason) return reasonText(reason, context);
+    if (error.status === 404) return translate('sharing.error.notFound');
   }
   return apiErrorMessage(error, fallback);
 }
 
 /** "2 people and 1 group", leaving out what is zero; empty when nothing is shared. Counts only: who they are is never shown. */
 export function sharedWithText(personShares: number, groupShares: number): string {
-  const people = personShares === 1 ? '1 person' : `${formatNumber(personShares)} people`;
-  const groups = groupShares === 1 ? '1 group' : `${formatNumber(groupShares)} groups`;
-  return [personShares > 0 && people, groupShares > 0 && groups].filter(Boolean).join(' and ');
+  return formatList([
+    ...(personShares > 0 ? [translate('sharing.summary.people', { count: personShares })] : []),
+    ...(groupShares > 0 ? [translate('sharing.summary.groups', { count: groupShares })] : []),
+  ]);
 }
