@@ -16,6 +16,8 @@ import { quotaRoutes } from '../src/routes/admin/quotas.js';
 import { rolesRoutes } from '../src/routes/admin/roles.js';
 import { userRoutes } from '../src/routes/admin/users.js';
 import { groupRoutes } from '../src/routes/groups.js';
+import { meRoutes } from '../src/routes/me.js';
+import { modelCatalogRoutes } from '../src/routes/models.js';
 
 /**
  * Shared fixtures for the live groups suites (groups-*.live.test.ts): the app
@@ -41,6 +43,8 @@ export function appFor(actor: Actor | null) {
   app.route('/admin/models', modelRoutes);
   app.route('/admin/roles', rolesRoutes);
   app.route('/groups', groupRoutes);
+  app.route('/me', meRoutes);
+  app.route('/models', modelCatalogRoutes);
   return app;
 }
 

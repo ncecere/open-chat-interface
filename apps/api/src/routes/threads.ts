@@ -367,7 +367,7 @@ threadRoutes.post('/:id/compact', async (c) => {
   const input = await parseBody(c, compactThreadSchema);
   const slug = input.modelSlug ?? (await defaultSummaryModel(thread.id, user.id, user.role));
   if (!slug) throw validationFailed(NOTHING_TO_COMPACT);
-  const model = await resolveModelForRole(slug, user.role);
+  const model = await resolveModelForRole(slug, { userId: user.id, role: user.role });
   await assertCompactionPossible({
     user,
     threadId: thread.id,

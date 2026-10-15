@@ -87,7 +87,7 @@ export async function defaultSummaryModel(
     .from(schema.userPreference)
     .where(eq(schema.userPreference.userId, userId))
     .limit(1);
-  const catalog = await listAvailableModels(role);
+  const catalog = await listAvailableModels({ userId, role });
   const usable = (slug: string | null | undefined) =>
     slug && slug !== latest.modelSlug && catalog.some((model) => model.slug === slug) ? slug : null;
   return (

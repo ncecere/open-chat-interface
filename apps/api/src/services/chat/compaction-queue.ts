@@ -379,7 +379,7 @@ async function runClaimed(claimed: JobRow): Promise<void> {
   // Switched off since it was queued (or unreadable): automatic requests go.
   if (claimed.reason === 'automatic' && !(await automaticAllowed())) return finish(claimed, done);
   try {
-    const model = await resolveModelForRole(claimed.modelSlug, role);
+    const model = await resolveModelForRole(claimed.modelSlug, { userId: claimed.userId, role });
     const outcome = await compactConversation({
       user: { id: claimed.userId, role },
       threadId: claimed.threadId,

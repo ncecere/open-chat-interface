@@ -110,7 +110,7 @@ export async function setupApprovalContinuation(
     .limit(1);
   if (!reply) throw notFound('Reply not found');
   if (!reply.modelSlug || !reply.parentMessageId) throw validationFailed(NOT_PENDING);
-  const resolved = await resolveModelForRole(reply.modelSlug, user.role);
+  const resolved = await resolveModelForRole(reply.modelSlug, { userId: user.id, role: user.role });
   const tools = await resolveTurnTools({
     role: user.role,
     userId: user.id,

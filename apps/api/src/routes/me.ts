@@ -126,7 +126,9 @@ meRoutes.get('/', async (c) => {
     defaultEffort: preferences?.defaultEffort ?? null,
   };
   const personal = resolvePersonalDefaults(saved, {
-    catalog: saved.defaultModelSlug ? await listAvailableModels(user.role) : null,
+    catalog: saved.defaultModelSlug
+      ? await listAvailableModels({ userId: user.id, role: user.role })
+      : null,
     roleEfforts: reasoningEfforts,
     instanceEffort,
   });
@@ -237,7 +239,7 @@ meRoutes.patch('/preferences', async (c) => {
   const current = await loadPreferences(user.id);
   if (patch.defaultModelSlug !== undefined || patch.defaultEffort !== undefined) {
     const [catalog, own] = await Promise.all([
-      listAvailableModels(user.role),
+      listAvailableModels({ userId: user.id, role: user.role }),
       roleFeatures(user.role),
     ]);
     assertPersonalDefaultsAllowed(
