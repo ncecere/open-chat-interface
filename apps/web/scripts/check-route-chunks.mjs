@@ -6,6 +6,11 @@ import { gzipSync } from 'node:zlib';
 // Check the actual production graph, not just import syntax in router.tsx.
 // Shared imports (for example the command palette) can defeat a lazy boundary.
 const dist = process.argv[2] ?? fileURLToPath(new URL('../dist/', import.meta.url));
+// The size budget for the initial JavaScript (v0.14, #397): what v0.13.1 weighed
+// plus the growth the i18n framework was allowed. Raising it is a decision to
+// make in review, with a reason in the change, not a way to make a build pass.
+const budgetPath =
+  process.argv[3] ?? fileURLToPath(new URL('./bundle-budget.json', import.meta.url));
 const json = (path) => JSON.parse(readFileSync(resolve(dist, path), 'utf8'));
 const manifest = json('.vite/manifest.json');
 if (!manifest['index.html']?.isEntry) throw new Error('Missing application entry in Vite manifest');
@@ -49,3 +54,16 @@ for (const file of files) {
 console.log(
   `Route chunk boundary passed: ${files.size} initial JS files, ${bytes} bytes (${gzipBytes} gzip bytes). Not a browser-latency measurement.`,
 );
+if (existsSync(budgetPath)) {
+  const budget = JSON.parse(readFileSync(budgetPath, 'utf8'));
+  const limit = budget.baselineGzipBytes + budget.allowedGrowthGzipBytes;
+  const growth = gzipBytes - budget.baselineGzipBytes;
+  if (gzipBytes > limit) {
+    throw new Error(
+      `Initial JavaScript is ${gzipBytes} gzip bytes, ${growth} over the ${budget.baseline} baseline of ${budget.baselineGzipBytes}; the budget allows ${budget.allowedGrowthGzipBytes} (${limit}). Load it lazily, or change apps/web/scripts/bundle-budget.json with a reason.`,
+    );
+  }
+  console.log(
+    `Initial JavaScript budget passed: +${growth} of ${budget.allowedGrowthGzipBytes} gzip bytes allowed over ${budget.baseline}.`,
+  );
+}
