@@ -13,7 +13,12 @@ import {
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
-import { useCreateProject, useMoveThread, useProjects } from '~/hooks/use-projects';
+import {
+  useCreateProject,
+  useMoveThread,
+  useProjects,
+  useSharedProjects,
+} from '~/hooks/use-projects';
 import { apiErrorMessage } from '~/lib/api-client';
 import { cn } from '~/lib/utils';
 
@@ -150,6 +155,8 @@ function MoveToProjectForm({
   onDone: () => void;
 }) {
   const projects = useProjects();
+  // Any project the person can read takes their conversations (v0.14): the conversation stays theirs.
+  const shared = useSharedProjects();
   const move = useMoveThread();
   const [selected, setSelected] = useState<string>(currentProjectId ?? '');
   const groupName = useId();
@@ -157,7 +164,10 @@ function MoveToProjectForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const name = (id: string | null) =>
-      (id && projects.data?.find((project) => project.id === id)?.name) || null;
+      (id &&
+        [...(projects.data ?? []), ...(shared.data ?? [])].find((project) => project.id === id)
+          ?.name) ||
+      null;
     await move.mutateAsync({
       threadId,
       projectId: selected || null,
@@ -170,6 +180,12 @@ function MoveToProjectForm({
   const options = [
     { value: '', label: 'No project' },
     ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name })),
+    ...(shared.data ?? []).map((project) => ({
+      value: project.id,
+      label: project.ownerName
+        ? `${project.name} (shared by ${project.ownerName})`
+        : `${project.name} (shared with you)`,
+    })),
   ];
   const unchanged = selected === (currentProjectId ?? '');
 

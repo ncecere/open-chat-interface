@@ -10,7 +10,7 @@ import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { PillTabs } from '~/components/ui/pill-tabs';
 import { Spinner } from '~/components/ui/spinner';
-import { useProjects, useProjectsAvailable } from '~/hooks/use-projects';
+import { useProjects, useProjectsAvailable, useSharedProjects } from '~/hooks/use-projects';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { keepFocusWhenRemoved, placeBesideRows } from '~/lib/focus-return';
@@ -96,9 +96,16 @@ function ConversationList({ archived }: { archived: boolean }) {
   const listRef = useRef<HTMLUListElement>(null);
   const projectsAvailable = useProjectsAvailable();
   const projects = useProjects(projectsAvailable);
+  const sharedProjects = useSharedProjects(projectsAvailable);
   const projectNames = useMemo(
-    () => new Map((projects.data ?? []).map((project) => [project.id, project.name])),
-    [projects.data],
+    () =>
+      new Map(
+        [...(projects.data ?? []), ...(sharedProjects.data ?? [])].map((project) => [
+          project.id,
+          project.name,
+        ]),
+      ),
+    [projects.data, sharedProjects.data],
   );
 
   const history = useInfiniteQuery({
