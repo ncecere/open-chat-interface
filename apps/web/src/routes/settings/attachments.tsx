@@ -2,8 +2,9 @@ import type { StoredFile } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Files, FileText, ImageIcon, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { SettingsConfirmDialog } from '~/components/settings/confirm-dialog';
 import { StorageMeter } from '~/components/settings/storage-meter';
+import { tWithUserText } from '~/components/settings/user-text';
 import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
@@ -14,17 +15,18 @@ import {
 } from '~/components/ui/dropdown-menu';
 import { type CurrentFeatures, useCurrentUser } from '~/hooks/use-current-user';
 import { api } from '~/lib/api-client';
+import { type MessageKey, translate, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { cn } from '~/lib/utils';
 import { AttachmentList } from '~/routes/settings/attachment-list';
 
 const FILTERS = [
-  { value: 'all', label: 'All Files', icon: Files },
-  { value: 'image', label: 'Images', icon: ImageIcon },
-  { value: 'pdf', label: 'PDF Documents', icon: FileText },
-  { value: 'text', label: 'Text Documents', icon: FileText },
-] as const;
+  { value: 'all', labelKey: 'settings.attachments.filterAll', icon: Files },
+  { value: 'image', labelKey: 'settings.attachments.filterImages', icon: ImageIcon },
+  { value: 'pdf', labelKey: 'settings.attachments.filterPdf', icon: FileText },
+  { value: 'text', labelKey: 'settings.attachments.filterText', icon: FileText },
+] as const satisfies readonly { value: string; labelKey: MessageKey; icon: unknown }[];
 
 type AttachmentFilter = (typeof FILTERS)[number]['value'];
 type SortDirection = 'asc' | 'desc';
@@ -50,7 +52,8 @@ function matchesFilter(mimeType: string, filter: AttachmentFilter): boolean {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'The attachment could not be deleted.';
+  // The server's own text when there is one.
+  return error instanceof Error ? error.message : translate('settings.attachments.deleteFailed');
 }
 
 interface FilterMenuProps {
@@ -59,6 +62,7 @@ interface FilterMenuProps {
 }
 
 function FilterMenu({ value, onChange }: FilterMenuProps) {
+  const t = useT();
   const active = FILTERS.find((option) => option.value === value) ?? FILTERS[0];
 
   return (
@@ -70,9 +74,9 @@ function FilterMenu({ value, onChange }: FilterMenuProps) {
             'flex h-9 w-full items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors sm:w-40',
             'hover:bg-[var(--bg-control-hover)] data-[state=open]:border-[var(--accent-bright)]',
           )}
-          aria-label={`Filter attachments: ${active.label}`}
+          aria-label={t('settings.attachments.filterLabel', { filter: t(active.labelKey) })}
         >
-          <span>{active.label}</span>
+          <span>{t(active.labelKey)}</span>
           <ChevronDown className="size-3.5 text-[var(--text-secondary)]" />
         </button>
       </DropdownMenuTrigger>
@@ -95,7 +99,7 @@ function FilterMenu({ value, onChange }: FilterMenuProps) {
               )}
             >
               <option.icon />
-              {option.label}
+              {t(option.labelKey)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
@@ -111,9 +115,9 @@ function FilterMenu({ value, onChange }: FilterMenuProps) {
 function emptyHint(features: CurrentFeatures | undefined): string | undefined {
   if (!features) return undefined;
   if (features.attachments && features.projects) return undefined;
-  if (features.attachments) return 'Files you attach in chats will appear here.';
-  if (features.projects) return 'Files you add to projects will appear here.';
-  return 'Uploading files is not available for your role.';
+  if (features.attachments) return translate('settings.attachments.hintChats');
+  if (features.projects) return translate('settings.attachments.hintProjects');
+  return translate('settings.attachments.hintNone');
 }
 
 /**
@@ -125,16 +129,21 @@ function emptyHint(features: CurrentFeatures | undefined): string | undefined {
  */
 function deleteDescription(count: number, unsent: number): string {
   if (count <= 1)
-    return unsent
-      ? 'It was never sent. This cannot be undone.'
-      : 'The file is deleted and models can no longer read it. It stays visible in the conversation it was attached to, marked as removed. This cannot be undone.';
-  if (unsent === count) return 'They were never sent. This cannot be undone.';
-  return unsent
-    ? 'Those that were sent are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed. This cannot be undone.'
-    : 'The files are deleted and models can no longer read them. Each stays visible in the conversation it was attached to, marked as removed. This cannot be undone.';
+    return translate(
+      unsent
+        ? 'settings.attachments.deleteUnsentOneDescription'
+        : 'settings.attachments.deleteOneDescription',
+    );
+  if (unsent === count) return translate('settings.attachments.deleteUnsentManyDescription');
+  return translate(
+    unsent
+      ? 'settings.attachments.deleteMixedDescription'
+      : 'settings.attachments.deleteManyDescription',
+  );
 }
 
 export function SettingsAttachmentsPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const features = useCurrentUser().data?.features;
   // Deleting files is refused while read-only (#353).
@@ -159,8 +168,8 @@ export function SettingsAttachmentsPage() {
       ? attachments.data?.find((file) => file.id === confirming[0])?.filename
       : undefined;
   const confirmTitle = confirmName
-    ? `Delete ${confirmName}?`
-    : `Delete ${confirming?.length ?? 0} files?`;
+    ? tWithUserText(t, 'settings.attachments.deleteTitleOne', { name: confirmName }, ['name'])
+    : t('settings.attachments.deleteTitleMany', { count: confirming?.length ?? 0 });
   const confirmUnsent = (confirming ?? []).filter(
     (id) => attachments.data?.find((file) => file.id === id)?.unsent,
   ).length;
@@ -194,7 +203,7 @@ export function SettingsAttachmentsPage() {
         setDeleteError(
           failed.length === 1
             ? errorMessage(failed[0])
-            : `${failed.length} attachments could not be deleted. Please try again.`,
+            : translate('settings.attachments.removeFailed', { count: failed.length }),
         );
       }
     },
@@ -253,12 +262,9 @@ export function SettingsAttachmentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Attachments</h1>
+      <h1 className="text-2xl font-bold">{t('settings.attachments.title')}</h1>
       <p className="mt-1 max-w-4xl text-sm leading-5 text-[var(--text-secondary)]">
-        Files you uploaded in chats and to projects. Deleting a chat file deletes it: the
-        conversation it is listed with keeps its name, shown as removed, and models can no longer
-        read it. A fork or an edit has its own copy of each file, listed and counted separately.
-        Project files are managed from their project.
+        {t('settings.attachments.description')}
       </p>
 
       <StorageMeter />
@@ -276,7 +282,7 @@ export function SettingsAttachmentsPage() {
             onClick={() => setConfirming([...selected])}
           >
             <Trash2 />
-            Delete ({selected.size})
+            {t('settings.attachments.deleteButton', { count: selected.size })}
           </Button>
         )}
       </div>
@@ -308,15 +314,15 @@ export function SettingsAttachmentsPage() {
 
       {/* Deleting is permanent, so it asks first (#101). Failures are reported
           on the page, as before. */}
-      <ConfirmDialog
+      <SettingsConfirmDialog
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
         title={confirmTitle}
         // Said in the plural for several files (#179).
         description={deleteDescription(confirming?.length ?? 0, confirmUnsent)}
-        confirmLabel="Delete"
-        pendingLabel="Deleting…"
-        errorMessage="The files could not be deleted."
+        confirmLabel={t('settings.attachments.deleteConfirm')}
+        pendingLabel={t('settings.trash.deleting')}
+        errorMessage={t('settings.attachments.removeManyFailed')}
         confirmDisabled={lock.locked}
         onConfirm={() => remove.mutateAsync(confirming ?? [])}
       />

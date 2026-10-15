@@ -137,8 +137,8 @@ describe('Settings → Attachments', () => {
       [['/chat/t2', 'Fork of Grant questions']],
     ]);
     expect(rows.map((row) => row.querySelector('p')?.textContent)).toEqual([
-      expect.stringMatching(/^In Grant questions · text\/plain · 2.0 KB/),
-      expect.stringMatching(/^In Fork of Grant questions · text\/plain · 2.0 KB/),
+      expect.stringMatching(/^In Grant questions · text\/plain · 2 kB/),
+      expect.stringMatching(/^In Fork of Grant questions · text\/plain · 2 kB/),
     ]);
     // Each has its own checkbox and delete button.
     expect(document.querySelectorAll('[aria-label="Delete walk9-grant.pdf"]')).toHaveLength(2);
