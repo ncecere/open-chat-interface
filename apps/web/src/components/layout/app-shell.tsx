@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { UsageWarning } from '~/components/chat/usage-warning';
 import { CommandPalette } from '~/components/command-palette/command-palette';
 import { BroadcastBanner, useBroadcastsSettled } from '~/components/layout/broadcast-banner';
+import { MfaBanner } from '~/components/layout/mfa-banner';
 import { ReadOnlyBanner } from '~/components/layout/read-only-banner';
 import { Sidebar } from '~/components/layout/sidebar';
 import { SkipLink } from '~/components/layout/skip-link';
@@ -137,6 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className={cn('shrink-0', sidebarOpen ? 'pt-[3.25rem]' : 'pt-[4.25rem]')}
             >
               <ReadOnlyBanner />
+              <MfaBanner />
               <BroadcastBanner />
             </div>
             <div

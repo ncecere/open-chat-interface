@@ -1,4 +1,10 @@
-import type { PersonalDefaultProblem, ReasoningEffort, SignInMethods, UserRole } from '@oci/shared';
+import type {
+  MfaSummary,
+  PersonalDefaultProblem,
+  ReasoningEffort,
+  SignInMethods,
+  UserRole,
+} from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, api } from '~/lib/api-client';
 
@@ -85,6 +91,8 @@ interface MeResponse {
   preferences: UserPreferences;
   /** How the person signs in (v0.9.1); absent from an older API. */
   signIn?: SignInMethods;
+  /** Two-step verification (v0.14); absent from an older API, which has none. */
+  mfa?: MfaSummary;
   /** Absent from an older API; every section then shows. */
   settingsSummary?: SettingsSummary;
   /** Instance switches narrowed by the person's role. */

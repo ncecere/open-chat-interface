@@ -1,3 +1,4 @@
+import { MFA_CHALLENGE_PATH, MFA_SETUP_PATH } from '@oci/shared';
 import {
   createRootRoute,
   createRoute,
@@ -8,6 +9,7 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { AppShell } from '~/components/layout/app-shell';
+import { MfaGate } from '~/components/mfa/mfa-gate';
 import { OnboardingGate } from '~/components/onboarding/onboarding-gate';
 import { NotFoundPage } from '~/components/ui/not-found-page';
 import { RouteLoadError } from '~/components/ui/route-load-error';
@@ -27,14 +29,17 @@ import {
   validateChatThreadSearch,
   validateProjectSearch,
 } from '~/lib/chat-search-params';
+import { onMfaRequired } from '~/lib/mfa-required';
 import { returnPathFromSearch, signInSearch } from '~/lib/return-path';
 import { noteSessionConfirmed, onSessionEnded, SIGNED_OUT_PARAM } from '~/lib/session-ended';
 import { redirectRemovedConversation } from '~/lib/unused-conversation-route';
 import { failedVerificationCode, VERIFY_EMAIL_PAGE } from '~/lib/verify-email-link';
 import { AcceptInvitePage } from '~/routes/auth/accept-invite';
 import { LoginPage } from '~/routes/auth/login';
+import { MfaSetupPage } from '~/routes/auth/mfa-setup';
 import { ForgotPasswordPage, ResetPasswordPage } from '~/routes/auth/password-reset';
 import { SignupPage } from '~/routes/auth/signup';
+import { TwoFactorPage } from '~/routes/auth/two-factor';
 import { VerifyEmailPage } from '~/routes/auth/verify-email';
 import { ChatHomePage } from '~/routes/chat/home';
 import { ChatThreadPage } from '~/routes/chat/thread';
@@ -42,6 +47,18 @@ import { PublicSharePage } from '~/routes/share/public-share';
 
 interface SessionSnapshot {
   user: { id: string; role: string };
+  /** Absent from an API without two-step verification (before v0.14). */
+  mfa?: { limited: boolean };
+}
+
+/**
+ * A person whose role requires two-step verification, and who has not completed
+ * it in this session, may use only the setup page and sign-out: the server
+ * refuses everything else (403 MFA_ENROLMENT_REQUIRED, #399), so a page of the
+ * app would only show errors.
+ */
+function sendLimitedToSetup(session: SessionSnapshot): void {
+  if (session.mfa?.limited) throw redirect({ to: MFA_SETUP_PATH, replace: true });
 }
 
 /** The session this tab last confirmed; null once it is known to have ended. */
@@ -128,6 +145,32 @@ const loginRoute = createRoute({
   },
 });
 
+// The second step of a password sign-in (#399). Public: the person has no
+// session until the code is accepted, and is sent on when they have one.
+const twoFactorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: MFA_CHALLENGE_PATH,
+  component: TwoFactorPage,
+  beforeLoad: async ({ location }) => {
+    const session = await loadSession();
+    if (session) throw redirect({ href: returnPathFromSearch(location.searchStr) ?? '/' });
+  },
+});
+
+// Where a limited person is sent (#399): outside the app shell, enrolment and
+// sign-out only. Anyone not limited has nothing to do here.
+const mfaSetupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: MFA_SETUP_PATH,
+  component: MfaSetupPage,
+  beforeLoad: async ({ location }) => {
+    const session = await loadSession();
+    if (!session)
+      throw redirect({ to: '/auth/login', search: signInSearch(location.href) as never });
+    if (!session.mfa?.limited) throw redirect({ to: '/', replace: true });
+  },
+});
+
 const publicShareRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/share/$slug',
@@ -148,16 +191,20 @@ const authenticatedRoute = createRoute({
     // Sign-in comes back to this page afterwards (#225).
     if (!session)
       throw redirect({ to: '/auth/login', search: signInSearch(location.href) as never });
+    sendLimitedToSetup(session);
     return { session };
   },
   component: () => (
     // Wraps the shell rather than sitting inside it, so a required policy is
-    // not shown alongside a usable application.
-    <OnboardingGate>
-      <AppShell>
-        <Outlet />
-      </AppShell>
-    </OnboardingGate>
+    // not shown alongside a usable application. The second step comes first: a
+    // limited session is refused the policy's own request too (#399).
+    <MfaGate>
+      <OnboardingGate>
+        <AppShell>
+          <Outlet />
+        </AppShell>
+      </OnboardingGate>
+    </MfaGate>
   ),
   pendingComponent: FullPageSpinner,
 });
@@ -220,6 +267,7 @@ const settingsRoute = createRoute({
     const session = await loadSession();
     if (!session)
       throw redirect({ to: '/auth/login', search: signInSearch(location.href) as never });
+    sendLimitedToSetup(session);
     return { session };
   },
   component: lazyRouteComponent(
@@ -311,6 +359,7 @@ const adminRoute = createRoute({
     if (session.user.role !== 'admin' && session.user.role !== 'auditor') {
       throw redirect({ to: '/' });
     }
+    sendLimitedToSetup(session);
     return { session };
   },
   component: lazyRouteComponent(() => import('~/components/admin/admin-layout'), 'AdminLayout'),
@@ -540,6 +589,8 @@ const adminAuditRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  twoFactorRoute,
+  mfaSetupRoute,
   signupRoute,
   forgotPasswordRoute,
   resetPasswordRoute,
@@ -610,6 +661,20 @@ onSessionEnded(() => {
     to: '/auth/login',
     search: { [SIGNED_OUT_PARAM]: 1, ...signInSearch(href) } as never,
   });
+});
+
+/**
+ * The requirement started while the app was open (a role added with no grace):
+ * a request was refused with 403 MFA_ENROLMENT_REQUIRED. Wherever the person is
+ * (the shell's MfaGate looks again, but settings and administration have no such
+ * gate), go to the setup page (#399). The page itself and the other sign-in
+ * pages stay where they are.
+ */
+onMfaRequired(() => {
+  const { pathname } = router.state.location;
+  if (pathname.startsWith('/auth/') || pathname.startsWith('/share/')) return;
+  confirmedSession = null;
+  void router.navigate({ to: MFA_SETUP_PATH, replace: true });
 });
 
 declare module '@tanstack/react-router' {

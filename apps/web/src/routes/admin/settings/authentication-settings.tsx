@@ -241,7 +241,7 @@ export function AuthenticationSettingsForm({
             Verification remains required even when email delivery is unavailable. Unverified
             accounts cannot sign in until delivery is restored and they verify their address.{' '}
             <Link
-              className="text-[var(--accent-bright)] hover:underline"
+              className="text-[var(--accent-bright)] underline hover:no-underline"
               to="/admin/settings/email"
             >
               Configure and test email delivery

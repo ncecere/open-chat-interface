@@ -1,11 +1,14 @@
+import { passkeyClient } from '@better-auth/passkey/client';
 import { ssoClient } from '@better-auth/sso/client';
-import { adminClient } from 'better-auth/client/plugins';
+import { adminClient, twoFactorClient } from 'better-auth/client/plugins';
 import { createAuthClient } from 'better-auth/react';
 import { noteSigningOut } from '~/lib/session-ended';
 
 export const authClient = createAuthClient({
   basePath: '/api/auth',
-  plugins: [adminClient(), ssoClient()],
+  // twoFactorClient has no `onTwoFactorRedirect`: the sign-in page reads
+  // `twoFactorRedirect` from the response itself and goes to its own route.
+  plugins: [adminClient(), ssoClient(), twoFactorClient(), passkeyClient()],
   fetchOptions: {
     // Signing out on purpose is not a session that ended under the person
     // (#165): the requests that follow it are refused as expected.

@@ -14,6 +14,7 @@ import {
   SIDEBAR_PROJECTS_KEY,
   updateCachedConversation,
 } from '~/lib/conversation-cache';
+import { noteMfaRequiredResponse } from '~/lib/mfa-required';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { useCurrentUser } from './use-current-user';
 
@@ -140,6 +141,7 @@ export function useUploadProjectFiles(projectId: string) {
         });
         if (!response.ok) {
           void notePolicyRequiredResponse(response);
+          void noteMfaRequiredResponse(response);
           const payload = (await response.json().catch(() => null)) as {
             error?: { message?: string };
           } | null;

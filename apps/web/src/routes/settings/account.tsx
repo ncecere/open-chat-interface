@@ -5,6 +5,7 @@ import { ChangePasswordDialog, PasswordControl } from './account/change-password
 import { DeleteAccountSection } from './account/delete-account-section';
 import { DevicesDialog } from './account/devices-dialog';
 import { NameRow } from './account/name-row';
+import { TwoStepVerification } from './account/two-step';
 
 const SSO_NAME_NOTE = "From your organisation's sign-in";
 
@@ -93,6 +94,8 @@ export function SettingsAccountPage() {
         <Row label="Password" description="The password you use to sign in to this account.">
           <PasswordControl onChange={() => setPasswordOpen(true)} />
         </Row>
+
+        <TwoStepVerification />
 
         <Row
           label="Devices"

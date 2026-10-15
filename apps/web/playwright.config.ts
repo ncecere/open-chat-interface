@@ -9,6 +9,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export const FIXTURE_SPECS = ['**/long-conversation.spec.ts'];
 
+const MFA_REQUIREMENT_SPEC = '**/mfa-requirement.spec.ts';
+const CLASSIFICATION_SPEC = '**/classification.spec.ts';
+
 export default defineConfig({
   testDir: './tests/e2e',
   testIgnore: process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : [],
@@ -25,8 +28,15 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     {
       name: 'mobile-chromium',
-      // Switches the instance-wide classification mode, so it runs once, on desktop.
-      testIgnore: '**/classification.spec.ts',
+      // Two specs change an instance-wide setting (the classification mode, the MFA
+      // requirement for a role), which the desktop run sets and clears; a second project
+      // would do the same under it. Left out, never skipped. (A project's own testIgnore
+      // replaces the top-level one, so the fixture specs are repeated here.)
+      testIgnore: [
+        ...(process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : []),
+        MFA_REQUIREMENT_SPEC,
+        CLASSIFICATION_SPEC,
+      ],
       use: { ...devices['Pixel 7'] },
     },
     // The instance falls back to the dark theme, so the scans above never saw

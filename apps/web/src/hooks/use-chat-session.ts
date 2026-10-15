@@ -27,6 +27,7 @@ import {
 } from '~/lib/chat-submission';
 import { blockedSlugs } from '~/lib/classification';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import { noteMfaRequiredResponse } from '~/lib/mfa-required';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { startingModelAmong } from '~/lib/starting-model';
@@ -202,7 +203,11 @@ export function useChatSession(options: {
       const refusedStatus =
         (response.status >= 400 && response.status < 500) || response.status === 503 || notSaved;
       // Not accepted the acceptable use policy yet (#367): show the acceptance page.
-      if (!response.ok) void notePolicyRequiredResponse(response);
+      if (!response.ok) {
+        void notePolicyRequiredResponse(response);
+        // Or limited until a second step is set up (#399): the setup page.
+        void noteMfaRequiredResponse(response);
+      }
       if (sending && !response.ok && scope.request === request) {
         const sent = readRefusedSubmission(init?.body);
         if (sent && refusedStatus) refuseSubmission.current(sent);

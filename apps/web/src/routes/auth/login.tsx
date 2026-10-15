@@ -1,4 +1,4 @@
-import { instanceName } from '@oci/shared';
+import { instanceName, MFA_CHALLENGE_PATH } from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { KeyRound, ShieldCheck } from 'lucide-react';
@@ -11,6 +11,7 @@ import {
   type FieldMessage,
   useFocusAfterRender,
 } from '~/components/auth/form-error';
+import { PasskeySignInButton, usePasskeyAutofill } from '~/components/auth/passkey-sign-in';
 import { ResendVerification } from '~/components/auth/resend-verification';
 import { Wordmark } from '~/components/brand/wordmark';
 import { Button } from '~/components/ui/button';
@@ -20,7 +21,7 @@ import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
 import { answered, isServiceFailure, SIGN_IN_UNAVAILABLE } from '~/lib/auth-unavailable';
-import { returnPathFromSearch } from '~/lib/return-path';
+import { returnPathFromSearch, signInSearch } from '~/lib/return-path';
 import { SIGNED_OUT_PARAM } from '~/lib/session-ended';
 
 const WRONG_CREDENTIALS = 'Unable to sign in. Check your email and password.';
@@ -77,6 +78,8 @@ export function LoginPage() {
   // The page a signed-out visit asked for, to return to afterwards (#225);
   // only a path on this site, so the parameter cannot send anyone elsewhere.
   const [returnTo] = useState(() => returnPathFromSearch() ?? '/');
+  // The browser may offer the person's passkeys in the email field (#399).
+  const passkeyAutofill = usePasskeyAutofill(returnTo, !firstLoad);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -120,6 +123,13 @@ export function LoginPage() {
       // the error describes, or the button for a refusal that is not theirs.
       focusAfterRender(wrong ? 'email' : 'login-submit');
       setSubmitting(false);
+      return;
+    }
+
+    // The right password for a person with a second step: no session yet, the
+    // code is asked for on its own page, which comes back to `returnTo` (#399).
+    if ((result.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) {
+      await navigate({ to: MFA_CHALLENGE_PATH, search: signInSearch(returnTo) as never });
       return;
     }
 
@@ -243,7 +253,7 @@ export function LoginPage() {
                     invalid: invalidCredentials || missing.includes('email'),
                   })}
                   type="email"
-                  autoComplete="email"
+                  autoComplete={passkeyAutofill ? 'email webauthn' : 'email'}
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
@@ -302,6 +312,9 @@ export function LoginPage() {
                 </Link>
               )}
             </form>
+
+            {/* Not shown where the browser has no WebAuthn. */}
+            <PasskeySignInButton returnTo={returnTo} className="mt-3" />
 
             {status && status.ssoProviders.length > 0 && (
               <>
