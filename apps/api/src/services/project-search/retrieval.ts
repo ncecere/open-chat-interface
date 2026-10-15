@@ -3,6 +3,7 @@ import { db } from '../../db/index.js';
 import { foldSql } from '../../lib/fold.js';
 import { stripControls, tsqueryOperand } from '../../lib/text.js';
 import { isBackgroundMigrationDone } from '../migrations/readiness.js';
+import { projectReadableBy } from '../project-sharing/access.js';
 import {
   KEYWORD_DISTINCTIVE_MAX_SHARE,
   KEYWORD_DISTINCTIVE_MIN_CHUNKS,
@@ -107,9 +108,11 @@ export async function projectSearchTerms(raw: string): Promise<SearchTerm[]> {
 }
 
 /**
- * Restricts chunks to the given files of this person's project. The file ids
- * already come from an owner- and project-scoped query; checking again here
- * keeps another person's or another project's chunks out even if they did not.
+ * Restricts chunks to the given files of this project, which the person asking
+ * (`scope.userId`: the actor, not necessarily the owner) can read (v0.14). The
+ * file ids already come from an access- and project-scoped query; checking again
+ * here keeps another project's chunks, and any project the person cannot read,
+ * out even if they did not.
  */
 export function scopedChunks(
   scope: { userId: string; projectId: string; fileIds: string[] },
@@ -124,8 +127,8 @@ export function scopedChunks(
     from project_file_chunk c
     join attachment a on a.id = c.attachment_id
     where c.attachment_id = any(${textArray(scope.fileIds)})
-      and a.user_id = ${scope.userId}
       and a.project_id = ${scope.projectId}
+      and ${projectReadableBy(sql`a.project_id`, scope.userId)}
       and a.upload_pending = false
       and a.deleted_at is null
   `;
