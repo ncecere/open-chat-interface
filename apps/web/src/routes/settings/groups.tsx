@@ -12,14 +12,12 @@ import { Spinner } from '~/components/ui/spinner';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { describeManagerError, MANAGED_GROUPS_KEY } from '~/lib/groups';
-import { formatNumber } from '~/lib/i18n/format';
+import { formatDate, useT } from '~/lib/i18n';
+import { isolate } from '~/lib/projects-text';
 import { useReadOnlyLock } from '~/lib/read-only';
-import { formatDate, plural } from '~/lib/utils';
-
-const memberCountText = (group: ManagedGroup) =>
-  `${formatNumber(group.memberCount)} of ${formatNumber(group.memberLimit)} members`;
 
 function Members({ group }: { group: ManagedGroup }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const { data: me } = useCurrentUser();
   const lock = useReadOnlyLock();
@@ -58,14 +56,14 @@ function Members({ group }: { group: ManagedGroup }) {
         describeError={(failure) => {
           // A refusal says the person's groups changed under them: read them again.
           void refresh();
-          return describeManagerError(failure, 'The people could not be added.');
+          return describeManagerError(failure, t('groups.manage.addFailed'));
         }}
         onAdded={refresh}
       />
 
       <section aria-labelledby="managed-members-heading" className="flex flex-col gap-3">
         <h2 id="managed-members-heading" className="font-semibold text-xl">
-          People in {group.name}
+          {t('groups.manage.peopleIn', { name: isolate(group.name) })}
         </h2>
         <div className="relative w-full max-w-sm">
           <Search
@@ -74,8 +72,8 @@ function Members({ group }: { group: ManagedGroup }) {
           />
           <Input
             type="search"
-            aria-label="Search members"
-            placeholder="Search by name or email..."
+            aria-label={t('groups.manage.searchLabel')}
+            placeholder={t('groups.manage.searchPlaceholder')}
             className="ps-9"
             value={search}
             maxLength={320}
@@ -87,47 +85,47 @@ function Members({ group }: { group: ManagedGroup }) {
         </div>
 
         {members.isLoading ? (
-          <div role="status" aria-label="Loading members" className="py-10">
+          <div role="status" aria-label={t('groups.manage.membersLoading')} className="py-10">
             <Spinner className="mx-auto size-5" />
           </div>
         ) : !data ? (
           <div className="flex flex-col items-start gap-3">
             <p role="alert" className="text-sm text-[var(--danger)]">
-              {apiErrorMessage(members.error, 'The members could not be loaded.')}
+              {apiErrorMessage(members.error, t('groups.manage.membersLoadFailed'))}
             </p>
             <Button variant="secondary" size="sm" onClick={() => void members.refetch()}>
-              Try again
+              {t('projects.common.tryAgain')}
             </Button>
           </div>
         ) : data.members.length === 0 ? (
           <p className="text-[var(--text-muted)] text-sm">
-            {search.trim() ? 'No members match this search.' : 'Nobody is in this group yet.'}
+            {search.trim() ? t('groups.manage.noMatches') : t('groups.manage.noMembers')}
           </p>
         ) : (
           <section
             // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
             // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
             tabIndex={0}
-            aria-label="Members of this group"
+            aria-label={t('groups.manage.tableLabel')}
             className="relative overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
           >
             <table className="w-full min-w-[34rem] text-sm">
               <thead className="bg-[var(--bg-control-alt)] text-[var(--text-muted)] text-xs">
                 <tr>
                   <th scope="col" className="px-4 py-2 text-start font-medium">
-                    Name
+                    {t('groups.manage.columnName')}
                   </th>
                   <th scope="col" className="px-4 py-2 text-start font-medium">
-                    Email
+                    {t('groups.manage.columnEmail')}
                   </th>
                   <th scope="col" className="px-4 py-2 text-start font-medium">
-                    Role
+                    {t('groups.manage.columnRole')}
                   </th>
                   <th scope="col" className="px-4 py-2 text-start font-medium">
-                    Added
+                    {t('groups.manage.columnAdded')}
                   </th>
                   <th scope="col" className="px-4 py-2 text-end font-medium">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t('groups.manage.columnActions')}</span>
                   </th>
                 </tr>
               </thead>
@@ -136,11 +134,17 @@ function Members({ group }: { group: ManagedGroup }) {
                   const mine = member.userId === me?.user.id;
                   return (
                     <tr key={member.userId} className="border-[var(--border-subtle)] border-t">
-                      <td className="px-4 py-2 font-medium">{member.name}</td>
-                      <td className="px-4 py-2 text-[var(--text-secondary)]">{member.email}</td>
+                      <td dir="auto" className="px-4 py-2 font-medium">
+                        {member.name}
+                      </td>
+                      <td dir="auto" className="px-4 py-2 text-[var(--text-secondary)]">
+                        {member.email}
+                      </td>
                       <td className="px-4 py-2">
                         <Badge variant={member.role === 'manager' ? 'accent' : 'neutral'}>
-                          {member.role === 'manager' ? 'Manager' : 'Member'}
+                          {member.role === 'manager'
+                            ? t('groups.role.manager')
+                            : t('groups.role.member')}
                         </Badge>
                       </td>
                       <td className="px-4 py-2 text-[var(--text-muted)]">
@@ -156,14 +160,16 @@ function Members({ group }: { group: ManagedGroup }) {
                             locked={lock.title}
                             onClick={() => setRemoving(member)}
                           >
-                            Leave {group.name}
+                            {t('groups.manage.leaveButton', { name: isolate(group.name) })}
                           </Button>
                         ) : member.role === 'member' ? (
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={`Remove ${member.name}`}
+                            aria-label={t('groups.manage.removeMember', {
+                              name: isolate(member.name),
+                            })}
                             locked={lock.title}
                             onClick={() => setRemoving(member)}
                           >
@@ -180,9 +186,12 @@ function Members({ group }: { group: ManagedGroup }) {
         )}
 
         {data && data.total > 0 && (
-          <nav aria-label="Member list pages" className="flex items-center justify-between gap-4">
+          <nav
+            aria-label={t('groups.manage.pagesLabel')}
+            className="flex items-center justify-between gap-4"
+          >
             <p aria-live="polite" className="text-[var(--text-muted)] text-sm">
-              Showing {first}–{last} of {plural(total, 'member')}
+              {t('groups.manage.showing', { first, last, total })}
             </p>
             {total > pageSize && (
               <span className="flex items-center gap-2">
@@ -192,10 +201,10 @@ function Members({ group }: { group: ManagedGroup }) {
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                 >
-                  Previous
+                  {t('groups.manage.previous')}
                 </Button>
                 <span className="text-[var(--text-muted)] text-sm">
-                  Page {page} of {pageCount}
+                  {t('groups.manage.pageOf', { page, pages: pageCount })}
                 </span>
                 <Button
                   size="sm"
@@ -203,7 +212,7 @@ function Members({ group }: { group: ManagedGroup }) {
                   disabled={page >= pageCount}
                   onClick={() => setPage(page + 1)}
                 >
-                  Next
+                  {t('groups.manage.next')}
                 </Button>
               </span>
             )}
@@ -214,17 +223,26 @@ function Members({ group }: { group: ManagedGroup }) {
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={leaving ? `Leave ${group.name}?` : `Remove ${removing?.name ?? 'this person'}?`}
+        title={
+          leaving
+            ? t('groups.manage.leaveTitle', { name: isolate(group.name) })
+            : removing
+              ? t('groups.manage.removeTitle', { person: isolate(removing.name) })
+              : t('groups.manage.removeTitleUnnamed')
+        }
         description={
           leaving
-            ? `You will no longer manage ${group.name} or see its members, and you lose what the group gives you. An administrator can add you back.`
-            : `${removing?.name ?? 'They'} stays an account holder, and no longer has what ${group.name} gives. The change applies from their next request.`
+            ? t('groups.manage.leaveBody', { name: isolate(group.name) })
+            : removing
+              ? t('groups.manage.removeBody', {
+                  person: isolate(removing.name),
+                  name: isolate(group.name),
+                })
+              : t('groups.manage.removeBodyUnnamed', { name: isolate(group.name) })
         }
-        confirmLabel={leaving ? 'Leave group' : 'Remove from group'}
-        pendingLabel={leaving ? 'Leaving…' : 'Removing…'}
-        errorMessage={
-          leaving ? 'You could not leave the group.' : 'The person could not be removed.'
-        }
+        confirmLabel={leaving ? t('groups.manage.leaveConfirm') : t('groups.manage.removeConfirm')}
+        pendingLabel={leaving ? t('groups.manage.leavePending') : t('groups.manage.removePending')}
+        errorMessage={leaving ? t('groups.manage.leaveFailed') : t('groups.manage.removeFailed')}
         onConfirm={async () => {
           if (!removing) return;
           await api.delete(`/groups/managed/${group.id}/members/${removing.userId}`);
@@ -243,6 +261,7 @@ function Members({ group }: { group: ManagedGroup }) {
  * nothing about any group.
  */
 export function SettingsGroupsPage() {
+  const t = useT();
   const [chosen, setChosen] = useState<string | null>(null);
   const groups = useQuery({
     queryKey: MANAGED_GROUPS_KEY,
@@ -253,38 +272,35 @@ export function SettingsGroupsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Groups</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        The people in the groups you manage. Add people by their email address, or remove them. An
-        administrator sets up the group itself and appoints its managers.
-      </p>
+      <h1 className="text-2xl font-bold">{t('groups.manage.title')}</h1>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">{t('groups.manage.description')}</p>
 
       <div className="mt-8">
         {groups.isLoading ? (
-          <div className="py-16" role="status" aria-label="Loading your groups">
+          <div className="py-16" role="status" aria-label={t('groups.manage.groupsLoading')}>
             <Spinner className="mx-auto size-6" />
           </div>
         ) : groups.isError ? (
           <div className="flex flex-col items-start gap-3">
             <p role="alert" className="text-sm text-[var(--danger)]">
-              Your groups could not be loaded.
+              {t('groups.manage.groupsLoadFailed')}
             </p>
             <p className="text-xs text-[var(--text-muted)]">
-              {apiErrorMessage(groups.error, 'Check your connection and try again.')}
+              {apiErrorMessage(groups.error, t('groups.manage.checkConnection'))}
             </p>
             <Button variant="secondary" size="sm" onClick={() => void groups.refetch()}>
-              Try again
+              {t('projects.common.tryAgain')}
             </Button>
           </div>
         ) : !group ? (
-          <p className="text-sm text-[var(--text-muted)]">You do not manage any groups.</p>
+          <p className="text-sm text-[var(--text-muted)]">{t('groups.manage.noGroups')}</p>
         ) : (
           <div className="flex flex-col gap-8">
             <div className="flex flex-col gap-2">
               {list.length > 1 && (
                 <div className="w-full max-w-xs">
                   <Select
-                    aria-label="Group"
+                    aria-label={t('groups.manage.groupLabel')}
                     value={group.id}
                     onChange={setChosen}
                     options={list.map((entry) => ({ value: entry.id, label: entry.name }))}
@@ -295,7 +311,12 @@ export function SettingsGroupsPage() {
               {group.description && (
                 <p className="text-sm text-[var(--text-secondary)]">{group.description}</p>
               )}
-              <p className="text-xs text-[var(--text-muted)]">{memberCountText(group)}</p>
+              <p className="text-xs text-[var(--text-muted)]">
+                {t('groups.manage.memberCount', {
+                  count: group.memberCount,
+                  limit: group.memberLimit,
+                })}
+              </p>
             </div>
             {/* Keyed by group: a search or half-typed list is never carried to another. */}
             <Members key={group.id} group={group} />

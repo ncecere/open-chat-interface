@@ -20,6 +20,8 @@ import {
   useSharedProjects,
 } from '~/hooks/use-projects';
 import { apiErrorMessage } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
+import { isolate } from '~/lib/projects-text';
 import { cn } from '~/lib/utils';
 
 /** Names a new project and opens it. */
@@ -30,14 +32,13 @@ export function CreateProjectDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100%-2rem)]">
         <DialogHeader>
-          <DialogTitle>New project</DialogTitle>
-          <DialogDescription>
-            Group conversations under shared instructions and files.
-          </DialogDescription>
+          <DialogTitle>{t('projects.create.title')}</DialogTitle>
+          <DialogDescription>{t('projects.create.description')}</DialogDescription>
         </DialogHeader>
         {/* Mounted only while open, so every opening starts from a blank form. */}
         <CreateProjectForm onDone={() => onOpenChange(false)} />
@@ -47,6 +48,7 @@ export function CreateProjectDialog({
 }
 
 function CreateProjectForm({ onDone }: { onDone: () => void }) {
+  const t = useT();
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
   const create = useCreateProject();
@@ -65,7 +67,7 @@ function CreateProjectForm({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={(event) => void submit(event).catch(() => undefined)} noValidate>
       <div className="flex flex-col gap-4">
-        <Field label="Project name" htmlFor={nameId}>
+        <Field label={t('projects.name.label')} htmlFor={nameId}>
           <Input
             id={nameId}
             value={name}
@@ -76,9 +78,9 @@ function CreateProjectForm({ onDone }: { onDone: () => void }) {
           />
         </Field>
         <Field
-          label="Instructions (optional)"
+          label={t('projects.create.instructionsLabel')}
           htmlFor={instructionsId}
-          hint="Added to every conversation in the project. You can change them later."
+          hint={t('projects.create.instructionsHint')}
         >
           <Textarea
             id={instructionsId}
@@ -94,16 +96,16 @@ function CreateProjectForm({ onDone }: { onDone: () => void }) {
           role="alert"
           className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
-          {apiErrorMessage(create.error, 'The project could not be created.')}
+          {apiErrorMessage(create.error, t('projects.create.failed'))}
         </p>
       )}
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t('projects.common.cancel')}
         </Button>
         <Button type="submit" variant="primary" disabled={!name.trim() || create.isPending}>
           {create.isPending && <Spinner />}
-          Create project
+          {t('projects.create.submit')}
         </Button>
       </DialogFooter>
     </form>
@@ -125,14 +127,13 @@ export function MoveToProjectDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[min(40rem,calc(100dvh-2rem))] w-[calc(100%-2rem)] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Move to project</DialogTitle>
-          <DialogDescription>
-            The conversation uses the project’s instructions and files from its next reply.
-          </DialogDescription>
+          <DialogTitle>{t('projects.move.title')}</DialogTitle>
+          <DialogDescription>{t('projects.move.description')}</DialogDescription>
         </DialogHeader>
         {/* Mounted only while open, so the choice starts from the current project. */}
         <MoveToProjectForm
@@ -154,6 +155,7 @@ function MoveToProjectForm({
   currentProjectId: string | null;
   onDone: () => void;
 }) {
+  const t = useT();
   const projects = useProjects();
   // Any project the person can read takes their conversations (v0.14): the conversation stays theirs.
   const shared = useSharedProjects();
@@ -178,13 +180,16 @@ function MoveToProjectForm({
   }
 
   const options = [
-    { value: '', label: 'No project' },
+    { value: '', label: t('projects.move.none') },
     ...(projects.data ?? []).map((project) => ({ value: project.id, label: project.name })),
     ...(shared.data ?? []).map((project) => ({
       value: project.id,
       label: project.ownerName
-        ? `${project.name} (shared by ${project.ownerName})`
-        : `${project.name} (shared with you)`,
+        ? t('projects.move.sharedBy', {
+            name: isolate(project.name),
+            owner: isolate(project.ownerName),
+          })
+        : t('projects.move.sharedWithYou', { name: isolate(project.name) }),
     })),
   ];
   const unchanged = selected === (currentProjectId ?? '');
@@ -193,15 +198,15 @@ function MoveToProjectForm({
     <form noValidate onSubmit={(event) => void submit(event).catch(() => undefined)}>
       {projects.isLoading ? (
         <p className="flex items-center gap-2 py-4 text-sm text-[var(--text-muted)]">
-          <Spinner /> Loading projects…
+          <Spinner /> {t('projects.list.loading')}
         </p>
       ) : projects.error ? (
         <p role="alert" className="py-2 text-sm text-[var(--danger-on-tint)]">
-          {apiErrorMessage(projects.error, 'Projects could not be loaded.')}
+          {apiErrorMessage(projects.error, t('projects.list.loadFailed'))}
         </p>
       ) : (
         <fieldset className="m-0 min-w-0 border-0 p-0">
-          <legend className="sr-only">Project</legend>
+          <legend className="sr-only">{t('projects.move.legend')}</legend>
           <div className="flex flex-col gap-1">
             {options.map((option) => {
               const id = `${groupName}-${option.value || 'none'}`;
@@ -230,9 +235,7 @@ function MoveToProjectForm({
             })}
           </div>
           {(projects.data?.length ?? 0) === 0 && (
-            <p className="mt-2 text-xs text-[var(--text-muted)]">
-              You have no projects yet. Create one from the sidebar.
-            </p>
+            <p className="mt-2 text-xs text-[var(--text-muted)]">{t('projects.move.noProjects')}</p>
           )}
         </fieldset>
       )}
@@ -241,16 +244,16 @@ function MoveToProjectForm({
           role="alert"
           className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
-          {apiErrorMessage(move.error, 'The conversation could not be moved.')}
+          {apiErrorMessage(move.error, t('projects.move.failed'))}
         </p>
       )}
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t('projects.common.cancel')}
         </Button>
         <Button type="submit" variant="primary" disabled={unchanged || move.isPending}>
           {move.isPending && <Spinner />}
-          Move
+          {t('projects.move.submit')}
         </Button>
       </DialogFooter>
     </form>

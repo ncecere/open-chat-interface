@@ -1,5 +1,4 @@
 import {
-  type ClassificationClass,
   type ClassificationModel,
   type ClassificationResponse,
   type DataClassBlockedDetails,
@@ -23,67 +22,9 @@ export function countOf(count: number, singular: string, plural = `${singular}s`
   return count > 0 ? `${count} ${count === 1 ? singular : plural}` : null;
 }
 
-/**
- * Why a conversation or project carries a class, in the words the chips use:
- * "from the project", "from the SIS connector", "added by you". A class can
- * have several reasons.
- */
-export function reasonTexts(entry: ClassificationClass, scope: 'thread' | 'project'): string[] {
-  const texts: string[] = [];
-  for (const reason of entry.reasons) {
-    if (reason === 'project') {
-      texts.push(
-        scope === 'project'
-          ? entry.locked
-            ? 'set by an administrator'
-            : 'added by you'
-          : entry.locked
-            ? 'from the project, set by an administrator'
-            : 'from the project',
-      );
-    } else if (reason === 'connector') {
-      const names = entry.connectorNames ?? [];
-      texts.push(
-        names.length === 0
-          ? 'from a connector'
-          : `from the ${listNames(names)} ${names.length === 1 ? 'connector' : 'connectors'}`,
-      );
-    } else if (reason === 'person') {
-      texts.push('added by you');
-    } else {
-      texts.push(keptText(entry.origins ?? []));
-    }
-  }
-  return texts;
-}
-
-/** A `kept` label stays after what gave it was moved away from or deleted. */
-function keptText(origins: readonly string[]): string {
-  const connectors = origins.flatMap((origin) =>
-    origin.startsWith('connector: ') ? [origin.slice('connector: '.length)] : [],
-  );
-  const fromProject = origins.includes('project');
-  const parts = [
-    ...(fromProject ? ['its earlier project'] : []),
-    ...connectors.map((name) => `the removed ${name} connector`),
-  ];
-  return parts.length ? `kept from ${listNames(parts)}` : 'kept from before';
-}
-
-/**
- * Why this label has no remove button, in one sentence for the person.
- * Only what the person added can be removed from the conversation.
- */
-export function whyNotRemovable(entry: ClassificationClass, scope: 'thread' | 'project'): string {
-  if (scope === 'project')
-    return `${entry.name} was set by an administrator, so only an administrator can remove it.`;
-  const reasons = entry.reasons.filter((reason) => reason !== 'person');
-  if (reasons.includes('connector'))
-    return `${entry.name} comes from a connector this conversation used, so it stays as long as the connector carries it.`;
-  if (reasons.includes('project'))
-    return `${entry.name} comes from the project. Change the project’s labels to remove it.`;
-  return `${entry.name} was kept when the project or connector it came from went away. It cannot be removed.`;
-}
+// Why a class is carried, and why a label cannot be removed: the project chips'
+// wording lives with its translations (v0.14, #397).
+export { reasonTexts, whyNotRemovable } from './classification-reasons';
 
 /** Whether classification is on for this answer (`warn` or `block`); off, absent and unreadable answers are not. */
 export function isClassifying(

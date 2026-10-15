@@ -1,6 +1,7 @@
 import { DataClassLabels } from '~/components/classification/data-class-labels';
 import { useClassification, useDataClasses, useSetProjectLabels } from '~/hooks/use-classification';
 import { isClassifying } from '~/lib/classification';
+import { useT } from '~/lib/i18n';
 import { Section } from './project-sections';
 
 /**
@@ -10,6 +11,7 @@ import { Section } from './project-sections';
  * until an administrator removes it. Not shown while classification is off.
  */
 export function ProjectLabelsSection({ projectId }: { projectId: string }) {
+  const t = useT();
   const classification = useClassification({ projectId });
   const on = isClassifying(classification.data);
   const available = useDataClasses(on);
@@ -24,10 +26,7 @@ export function ProjectLabelsSection({ projectId }: { projectId: string }) {
   const ids = carried.map((entry) => entry.id);
 
   return (
-    <Section
-      title="Data classes"
-      description="Label the kind of data this project holds, such as student records. Every conversation in the project carries these labels, and only models your administrator has approved for them can answer. Conversations moved out of the project keep them."
-    >
+    <Section title={t('classify.project.title')} description={t('classify.project.description')}>
       <DataClassLabels
         scope="project"
         classes={carried}

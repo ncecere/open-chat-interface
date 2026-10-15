@@ -13,7 +13,9 @@ import {
 } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { useProjectShares, useTransferProject } from '~/hooks/use-project-sharing';
+import { useT } from '~/lib/i18n';
 import { describeShareError } from '~/lib/project-access';
+import { isolate } from '~/lib/projects-text';
 import { useReadOnlyLock } from '~/lib/read-only';
 
 type PersonShare = ProjectShare & { subject: { type: 'person' } };
@@ -33,19 +35,20 @@ function candidates(shares: ProjectShare[] | undefined): PersonShare[] {
  * and conversations stay where they are.
  */
 export function TransferProjectSection({ project }: { project: { id: string; name: string } }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const lock = useReadOnlyLock();
   return (
     <section aria-labelledby="transfer-project-heading" className="mt-12">
       <h2 id="transfer-project-heading" className="text-xl font-bold">
-        Transfer ownership
+        {t('projects.transfer.title')}
       </h2>
       <p className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]">
-        Give the project to someone who already has editor access. You stay on it as an editor.
+        {t('projects.transfer.description')}
       </p>
       <div className="mt-4">
         <Button type="button" variant="secondary" locked={lock.title} onClick={() => setOpen(true)}>
-          Transfer project…
+          {t('projects.transfer.open')}
         </Button>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -65,6 +68,7 @@ function TransferBody({
   project: { id: string; name: string };
   onDone: () => void;
 }) {
+  const t = useT();
   const shares = useProjectShares(project.id);
   const transfer = useTransferProject(project.id);
   const lock = useReadOnlyLock();
@@ -80,40 +84,50 @@ function TransferBody({
     } catch {
       return;
     }
-    toast.success(`“${project.name}” now belongs to ${target.subject.name}.`, {
-      id: `project-transferred-${project.id}`,
-      description: 'You are now an editor.',
-    });
+    toast.success(
+      t('projects.transfer.toast', {
+        project: isolate(project.name),
+        name: isolate(target.subject.name),
+      }),
+      {
+        id: `project-transferred-${project.id}`,
+        description: t('projects.transfer.toastDetail'),
+      },
+    );
     onDone();
   }
 
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Transfer “{project.name}”</DialogTitle>
+        <DialogTitle>
+          {t('projects.transfer.dialogTitle', { name: isolate(project.name) })}
+        </DialogTitle>
         <DialogDescription>
           {target
-            ? `Transfer “${project.name}” to ${target.subject.name}? ${target.subject.name} becomes the owner and can rename, delete, share and transfer the project. You stay on the project as an editor. Files and conversations stay where they are.`
-            : 'Choose who becomes the owner.'}
+            ? t('projects.transfer.confirm', {
+                project: isolate(project.name),
+                name: isolate(target.subject.name),
+              })
+            : t('projects.transfer.choose')}
         </DialogDescription>
       </DialogHeader>
 
       {shares.isLoading ? (
         <p className="flex items-center gap-2 py-2 text-sm text-[var(--text-muted)]">
-          <Spinner /> Loading…
+          <Spinner /> {t('sharing.list.loading')}
         </p>
       ) : shares.error ? (
         <p role="alert" className="py-2 text-sm text-[var(--danger-on-tint)]">
-          {describeShareError(shares.error, 'The people with access could not be loaded.')}
+          {describeShareError(shares.error, t('projects.transfer.loadFailed'), 'transfer')}
         </p>
       ) : eligible.length === 0 ? (
         <p className="py-2 text-sm text-[var(--text-muted)]">
-          Only a person you have shared the project with directly as an editor can become its owner.
-          Share it with them as an editor first, then come back.
+          {t('projects.transfer.noCandidates')}
         </p>
       ) : (
         <fieldset className="m-0 min-w-0 border-0 p-0">
-          <legend className="sr-only">New owner</legend>
+          <legend className="sr-only">{t('projects.transfer.legend')}</legend>
           <div className="flex flex-col">
             {eligible.map((share) => (
               <ChoiceRow
@@ -122,7 +136,10 @@ function TransferBody({
                 value={share.id}
                 checked={chosen === share.id}
                 onChange={setChosen}
-                label={`${share.subject.name} (${share.subject.email})`}
+                label={t('projects.transfer.candidate', {
+                  name: isolate(share.subject.name),
+                  email: share.subject.email,
+                })}
               />
             ))}
           </div>
@@ -131,13 +148,13 @@ function TransferBody({
 
       {transfer.error && (
         <p role="alert" className="mt-3 text-xs text-[var(--danger-on-tint)]">
-          {describeShareError(transfer.error, 'The project could not be transferred.')}
+          {describeShareError(transfer.error, t('projects.transfer.failed'), 'transfer')}
         </p>
       )}
 
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onDone}>
-          Cancel
+          {t('projects.common.cancel')}
         </Button>
         <Button
           type="button"
@@ -147,7 +164,7 @@ function TransferBody({
           onClick={() => void confirm()}
         >
           {transfer.isPending && <Spinner />}
-          Transfer project
+          {t('projects.transfer.submit')}
         </Button>
       </DialogFooter>
     </>

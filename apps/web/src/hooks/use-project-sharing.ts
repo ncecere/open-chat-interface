@@ -11,6 +11,8 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 import { toast } from 'sonner';
 import { api } from '~/lib/api-client';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import { translate } from '~/lib/i18n';
+import { isolate } from '~/lib/projects-text';
 
 const base = (projectId: string) => `/projects/${encodeURIComponent(projectId)}`;
 
@@ -117,12 +119,9 @@ export function useLeaveProject(projectId: string) {
       name,
     }),
     onSuccess: (result) => {
-      toast.success(`You left “${result.name}”.`, {
+      toast.success(translate('projects.leave.toast', { name: isolate(result.name) }), {
         id: `project-left-${projectId}`,
-        description:
-          result.detachedThreads > 0
-            ? 'Your conversations in it are kept in your conversation list.'
-            : undefined,
+        description: result.detachedThreads > 0 ? translate('projects.leave.toastKept') : undefined,
       });
     },
   });

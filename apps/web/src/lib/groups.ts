@@ -6,7 +6,8 @@ import {
   MICROS_PER_DOLLAR,
 } from '@oci/shared';
 import { ApiError, apiErrorMessage } from '~/lib/api-client';
-import { formatNumber } from '~/lib/i18n/format';
+import { formatList, translate } from '~/lib/i18n';
+import { isolate } from '~/lib/projects-text';
 import { plural } from '~/lib/utils';
 
 /** Every administrator query about groups; invalidating it refreshes the list, a page and its members. */
@@ -82,11 +83,11 @@ export function describeAddResult(result: AddGroupMembersResult): AddOutcome {
   const added = result.added.length;
   const summary =
     added === 0
-      ? 'Nobody was added.'
-      : `Added ${added === 1 ? '1 person' : `${formatNumber(added)} people`}. The group now has ${plural(result.memberCount, 'member')}.`;
+      ? translate('groups.add.nobodyAdded')
+      : translate('groups.add.added', { added, members: result.memberCount });
   const problems = [
-    { label: 'Already in the group', emails: result.alreadyMembers },
-    { label: 'No account with this address', emails: result.unknown },
+    { label: translate('groups.add.alreadyMembers'), emails: result.alreadyMembers },
+    { label: translate('groups.add.unknown'), emails: result.unknown },
   ].filter((entry) => entry.emails.length > 0);
   return { summary, problems };
 }
@@ -103,15 +104,36 @@ export function memberCountText(count: number): string {
 }
 
 /**
- * What a failed request on a manager's Settings page says: the same as the
- * administrator's, but a group that has gone, or that the person no longer
- * manages, is said in their words. The person lookup limit has its own
- * sentence (`Retry-After` is in seconds).
+ * What a failed request on a manager's Settings page says, in the person's
+ * language: a group that has gone, or that the person no longer manages, in
+ * their words; the person lookup limit with its wait (`Retry-After` is in
+ * seconds); and the limits and the upgrade wait by the reason the API gave.
+ * Anything else shows the server's own sentence, or the caller's fallback.
+ * (The administrator's pages stay in English: they use `describeGroupError`.)
  */
 export function describeManagerError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    if (error.status === 404) return 'You no longer manage this group.';
-    if (error.status === 403) return error.message || 'You do not manage this group.';
+    if (error.status === 429)
+      return error.retryAfterSeconds
+        ? translate('groups.error.tooManyLookupsWait', { count: error.retryAfterSeconds })
+        : translate('groups.error.tooManyLookups');
+    if (error.status === 404) return translate('groups.error.noLongerManager');
+    if (error.status === 403) return translate('groups.error.notManager');
+    const details = error.details as Partial<GroupErrorDetails> | undefined;
+    switch (groupErrorReason(error)) {
+      case GROUP_ERROR_REASONS.UPGRADE_IN_PROGRESS:
+        return translate('groups.error.upgradeInProgress');
+      case GROUP_ERROR_REASONS.MEMBER_LIMIT:
+        if (details?.limit) return translate('groups.error.memberLimit', { limit: details.limit });
+        break;
+      case GROUP_ERROR_REASONS.PERSON_GROUP_LIMIT:
+        if (details?.limit && details.emails?.length)
+          return translate('groups.error.personGroupLimit', {
+            limit: details.limit,
+            emails: formatList(details.emails.map(isolate)),
+          });
+        break;
+    }
   }
-  return describeGroupError(error, fallback);
+  return apiErrorMessage(error, fallback, GROUP_FIELD_LABELS);
 }

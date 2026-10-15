@@ -16,7 +16,9 @@ import { Spinner } from '~/components/ui/spinner';
 import { useProjectAccess } from '~/hooks/use-project-sharing';
 import { useDeleteProject } from '~/hooks/use-projects';
 import { apiErrorMessage } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 import { sharedWithText } from '~/lib/project-access';
+import { isolate } from '~/lib/projects-text';
 import { useReadOnlyLock } from '~/lib/read-only';
 
 /** The project page's sections, apart from project.tsx to keep it under 600 lines. */
@@ -53,6 +55,7 @@ export function Section({
 }
 
 export function DeleteProjectSection({ project }: { project: ProjectSummary }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const remove = useDeleteProject();
   // Who loses access (counts only), read when the dialog opens (v0.14).
@@ -71,32 +74,30 @@ export function DeleteProjectSection({ project }: { project: ProjectSummary }) {
   }
 
   return (
-    <Section
-      title="Delete project"
-      description="Conversations are kept and leave the project. Its files are deleted."
-    >
+    <Section title={t('projects.delete.title')} description={t('projects.delete.description')}>
       <Button type="button" variant="danger" locked={lock.title} onClick={() => setOpen(true)}>
         <Trash2 aria-hidden="true" />
-        Delete project
+        {t('projects.delete.button')}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="w-[calc(100%-2rem)]">
           <DialogHeader>
-            <DialogTitle>Delete “{project.name}”?</DialogTitle>
+            <DialogTitle>
+              {t('projects.delete.dialogTitle', { name: isolate(project.name) })}
+            </DialogTitle>
             <DialogDescription>
               {deleteProjectText(project.threadCount, project.fileCount)}
-              {shares &&
-                ` It is shared with ${shares}. They lose access, and their own conversations in it are kept but leave the project.`}
+              {shares && ` ${t('projects.delete.sharedNote', { shares })}`}
             </DialogDescription>
           </DialogHeader>
           {remove.error && (
             <p role="alert" className="text-xs text-[var(--danger-on-tint)]">
-              {apiErrorMessage(remove.error, 'The project could not be deleted.')}
+              {apiErrorMessage(remove.error, t('projects.delete.failed'))}
             </p>
           )}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {t('projects.common.cancel')}
             </Button>
             <Button
               type="button"
@@ -105,7 +106,7 @@ export function DeleteProjectSection({ project }: { project: ProjectSummary }) {
               onClick={() => void confirm().catch(() => undefined)}
             >
               {remove.isPending && <Spinner />}
-              Delete project
+              {t('projects.delete.button')}
             </Button>
           </DialogFooter>
         </DialogContent>

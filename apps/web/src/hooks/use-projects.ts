@@ -17,8 +17,10 @@ import {
   SIDEBAR_PROJECTS_KEY,
   updateCachedConversation,
 } from '~/lib/conversation-cache';
+import { translate } from '~/lib/i18n';
 import { noteMfaRequiredResponse } from '~/lib/mfa-required';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
+import { isolate } from '~/lib/projects-text';
 import { useCurrentUser } from './use-current-user';
 
 /** Whether this person's role may use projects; false until /me has loaded. */
@@ -153,9 +155,7 @@ export function useUpdateProject(projectId: string) {
 /** What a deleted project's notice adds: where its conversations went. */
 export function deletedProjectText(detachedThreads: number): string | undefined {
   if (detachedThreads === 0) return undefined;
-  return detachedThreads === 1
-    ? 'Its conversation is kept in your conversation list.'
-    : `Its ${detachedThreads} conversations are kept in your conversation list.`;
+  return translate('projects.delete.toastConversations', { count: detachedThreads });
 }
 
 /**
@@ -171,7 +171,7 @@ export function useDeleteProject() {
         `/projects/${encodeURIComponent(id)}`,
       ),
     onSuccess: (result, { id, name }) => {
-      toast.success(`Project “${name}” deleted.`, {
+      toast.success(translate('projects.delete.toast', { name: isolate(name) }), {
         id: `project-deleted-${id}`,
         description: deletedProjectText(result?.detachedThreads ?? 0),
       });
@@ -201,7 +201,10 @@ export function useUploadProjectFiles(projectId: string) {
           const payload = (await response.json().catch(() => null)) as {
             error?: { message?: string };
           } | null;
-          failures.push(payload?.error?.message ?? `${file.name} could not be uploaded`);
+          failures.push(
+            payload?.error?.message ??
+              translate('projects.files.fileUploadFailed', { name: isolate(file.name) }),
+          );
         }
       }
       if (failures.length > 0) throw new ApiError(422, 'UPLOAD_FAILED', failures.join(' '));
@@ -244,8 +247,12 @@ export function useMoveThread() {
     onSuccess: (result, { threadId, projectId, projectName, fromProjectName }) => {
       toast.success(
         projectId
-          ? `Conversation moved to ${projectName ? `“${projectName}”` : 'the project'}.`
-          : `Conversation moved out of ${fromProjectName ? `“${fromProjectName}”` : 'its project'}.`,
+          ? projectName
+            ? translate('projects.move.toastMovedTo', { name: isolate(projectName) })
+            : translate('projects.move.toastMovedToUnnamed')
+          : fromProjectName
+            ? translate('projects.move.toastMovedOut', { name: isolate(fromProjectName) })
+            : translate('projects.move.toastMovedOutUnnamed'),
         { id: `thread-moved-${threadId}` },
       );
       if (result?.thread) updateCachedConversation(queryClient, result.thread);
