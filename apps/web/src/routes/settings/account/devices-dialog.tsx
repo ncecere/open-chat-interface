@@ -13,8 +13,8 @@ import {
 } from '~/components/ui/dialog';
 import { Spinner } from '~/components/ui/spinner';
 import { api, apiErrorMessage } from '~/lib/api-client';
+import { formatRelativeTime, translate, useT } from '~/lib/i18n';
 import { describeUserAgent } from '~/lib/user-agent';
-import { formatRelativeTime } from '~/lib/utils';
 import { SESSIONS_KEY } from './account-helpers';
 
 function SessionRow({
@@ -26,6 +26,7 @@ function SessionRow({
   onSignOut: () => void;
   pending: boolean;
 }) {
+  const t = useT();
   const name = describeUserAgent(session.userAgent);
   return (
     <li
@@ -35,17 +36,19 @@ function SessionRow({
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-primary)]">
           {name}
-          {session.current && <Badge variant="success">This device</Badge>}
-          {session.impersonated && <Badge variant="warning">Administrator session</Badge>}
+          {session.current && <Badge variant="success">{t('settings.devices.thisDevice')}</Badge>}
+          {session.impersonated && (
+            <Badge variant="warning">{t('settings.devices.adminSession')}</Badge>
+          )}
         </p>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-          {session.ipAddress ? `${session.ipAddress} · ` : ''}Signed in{' '}
-          {formatRelativeTime(session.createdAt)} ·{' '}
+          {session.ipAddress ? `${session.ipAddress} · ` : ''}
+          {t('settings.devices.signedIn', { when: formatRelativeTime(session.createdAt) })} ·{' '}
           {/* The device you are reading this on is in use now; the server
               records activity in five-minute steps (#98). */}
           {session.current
-            ? 'Active now'
-            : `Last active ${formatRelativeTime(session.lastActiveAt)}`}
+            ? t('settings.devices.activeNow')
+            : t('settings.devices.lastActive', { when: formatRelativeTime(session.lastActiveAt) })}
         </p>
       </div>
       {!session.current && (
@@ -53,10 +56,13 @@ function SessionRow({
           variant="secondary"
           size="sm"
           disabled={pending}
-          aria-label={`Sign out ${name}, signed in ${formatRelativeTime(session.createdAt)}`}
+          aria-label={t('settings.devices.signOutLabel', {
+            name,
+            when: formatRelativeTime(session.createdAt),
+          })}
           onClick={onSignOut}
         >
-          Sign out
+          {t('settings.devices.signOut')}
         </Button>
       )}
     </li>
@@ -70,6 +76,7 @@ export function DevicesDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
   const sessions = useQuery({
@@ -83,18 +90,14 @@ export function DevicesDialog({
   const signOutOne = useMutation({
     mutationFn: (id: string) => api.delete(`/me/sessions/${encodeURIComponent(id)}`),
     onSuccess: () => {
-      setMessage('That device has been signed out.');
+      setMessage(translate('settings.devices.signedOutOne'));
       return refresh();
     },
   });
   const signOutOthers = useMutation({
     mutationFn: () => api.post<{ revoked: number }>('/me/sessions/revoke-others'),
     onSuccess: (result) => {
-      setMessage(
-        result.revoked === 1
-          ? '1 other device has been signed out.'
-          : `${result.revoked} other devices have been signed out.`,
-      );
+      setMessage(translate('settings.devices.signedOutOthers', { count: result.revoked }));
       return refresh();
     },
   });
@@ -116,24 +119,26 @@ export function DevicesDialog({
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Devices</DialogTitle>
+          <DialogTitle>{t('settings.devices.title')}</DialogTitle>
           <DialogDescription>
             {/* Sessions are read from the database on every request (no
                 cookie cache since v0.11), so signing out applies at once (#235). */}
-            Where your account is signed in. A device you sign out is signed out at once; a page
-            still open there goes to the sign-in page when it next contacts the server.
+            {t('settings.devices.description')}
           </DialogDescription>
         </DialogHeader>
         {sessions.isLoading ? (
-          <div className="py-8" role="status" aria-label="Loading devices">
+          <div className="py-8" role="status" aria-label={t('settings.devices.loading')}>
             <Spinner className="mx-auto size-6" />
           </div>
         ) : sessions.isError ? (
           <p role="alert" className="text-sm text-[var(--danger)]">
-            Your devices could not be loaded. Try again.
+            {t('settings.devices.loadFailed')}
           </p>
         ) : (
-          <ul aria-label="Signed-in devices" className="flex max-h-[50vh] flex-col overflow-y-auto">
+          <ul
+            aria-label={t('settings.devices.list')}
+            className="flex max-h-[50vh] flex-col overflow-y-auto"
+          >
             {list.map((session) => (
               <SessionRow
                 key={session.id}
@@ -149,7 +154,7 @@ export function DevicesDialog({
         </p>
         {error && (
           <p role="alert" className="text-sm text-[var(--danger)]">
-            {apiErrorMessage(error, 'That could not be done. Try again.')}
+            {apiErrorMessage(error, t('settings.devices.failed'))}
           </p>
         )}
         <DialogFooter>
@@ -159,7 +164,7 @@ export function DevicesDialog({
             onClick={() => signOutOthers.mutate()}
           >
             {signOutOthers.isPending && <Spinner />}
-            Sign out all other devices
+            {t('settings.devices.signOutOthers')}
           </Button>
         </DialogFooter>
       </DialogContent>

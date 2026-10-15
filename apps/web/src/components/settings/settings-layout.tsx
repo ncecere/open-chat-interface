@@ -16,40 +16,46 @@ import {
   useCurrentUser,
 } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
-import {
-  isApplePlatform,
-  modifierKey,
-  SHORTCUT_IDS,
-  SHORTCUTS,
-  shortcutKeys,
-} from '~/lib/keyboard-shortcuts';
+import { type MessageKey, useT } from '~/lib/i18n';
+import { isApplePlatform, modifierKey, SHORTCUT_IDS, shortcutKeys } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
 
 const TABS = [
-  { to: '/settings', label: 'Account', exact: true },
-  { to: '/settings/customization', label: 'Customization' },
-  { to: '/settings/memory', label: 'Memory' },
-  { to: '/settings/history', label: 'History' },
-  { to: '/settings/models', label: 'Models' },
-  { to: '/settings/sharing', label: 'Sharing' },
-  { to: '/settings/groups', label: 'Groups' },
-  { to: '/settings/connectors', label: 'Connectors' },
-  { to: '/settings/attachments', label: 'Attachments' },
-] as const;
+  { to: '/settings', label: 'settings.layout.tab.account', exact: true },
+  { to: '/settings/customization', label: 'settings.layout.tab.customization' },
+  { to: '/settings/memory', label: 'settings.layout.tab.memory' },
+  { to: '/settings/history', label: 'settings.layout.tab.history' },
+  { to: '/settings/models', label: 'settings.layout.tab.models' },
+  { to: '/settings/sharing', label: 'settings.layout.tab.sharing' },
+  { to: '/settings/groups', label: 'settings.layout.tab.groups' },
+  { to: '/settings/connectors', label: 'settings.layout.tab.connectors' },
+  { to: '/settings/attachments', label: 'settings.layout.tab.attachments' },
+] as const satisfies readonly { to: string; label: MessageKey; exact?: boolean }[];
+
+/** The shortcut descriptions are translated here; the key names are not. */
+const SHORTCUT_LABELS: Record<(typeof SHORTCUT_IDS)[number], MessageKey> = {
+  search: 'settings.layout.shortcut.search',
+  'new-chat': 'settings.layout.shortcut.newChat',
+  'toggle-sidebar': 'settings.layout.shortcut.toggleSidebar',
+  'model-picker': 'settings.layout.shortcut.modelPicker',
+};
 
 type Tab = (typeof TABS)[number];
 
 /** Send and New Line follow "Invert Send/New Line Behavior" (Customization). */
-function messageShortcuts(invertSend: boolean, apple: boolean) {
+function messageShortcuts(
+  invertSend: boolean,
+  apple: boolean,
+): { label: MessageKey; keys: string[] }[] {
   return invertSend
     ? [
-        { label: 'Send Message', keys: [modifierKey(apple), 'Enter'] },
-        { label: 'New Line', keys: ['Enter'] },
+        { label: 'settings.layout.shortcut.send', keys: [modifierKey(apple), 'Enter'] },
+        { label: 'settings.layout.shortcut.newLine', keys: ['Enter'] },
       ]
     : [
-        { label: 'Send Message', keys: ['Enter'] },
-        { label: 'New Line', keys: [apple ? '⇧' : 'Shift', 'Enter'] },
+        { label: 'settings.layout.shortcut.send', keys: ['Enter'] },
+        { label: 'settings.layout.shortcut.newLine', keys: [apple ? '⇧' : 'Shift', 'Enter'] },
       ];
 }
 
@@ -126,10 +132,11 @@ function Identity() {
 }
 
 function ShortcutsCard() {
+  const t = useT();
   const { invertSend } = useTheme();
   const apple = isApplePlatform();
   const shortcuts = [
-    ...SHORTCUT_IDS.map((id) => ({ label: SHORTCUTS[id].label, keys: shortcutKeys(id, apple) })),
+    ...SHORTCUT_IDS.map((id) => ({ label: SHORTCUT_LABELS[id], keys: shortcutKeys(id, apple) })),
     ...messageShortcuts(invertSend, apple),
   ];
   return (
@@ -139,11 +146,11 @@ function ShortcutsCard() {
       data-testid="shortcuts-card"
       className="hidden w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4 any-pointer-fine:block"
     >
-      <h2 className="mb-3 text-sm font-semibold">Keyboard Shortcuts</h2>
+      <h2 className="mb-3 text-sm font-semibold">{t('settings.layout.shortcuts')}</h2>
       <div className="flex flex-col gap-3">
         {shortcuts.map((shortcut) => (
           <div key={shortcut.label} className="flex items-center justify-between gap-3">
-            <span className="text-sm text-[var(--text-secondary)]">{shortcut.label}</span>
+            <span className="text-sm text-[var(--text-secondary)]">{t(shortcut.label)}</span>
             {/* Key combinations read Ctrl then K in every language. */}
             <span dir="ltr" className="flex gap-1">
               {shortcut.keys.map((key) => (
@@ -163,13 +170,11 @@ function ShortcutsCard() {
 }
 
 function HelpCard() {
+  const t = useT();
   return (
     <div className="w-full rounded-xl border border-[var(--border-inset)] bg-[var(--bg-inset)] p-4">
-      <h2 className="mb-2 text-sm font-semibold">Need help?</h2>
-      <p className="text-sm text-[var(--text-muted)]">
-        The administrator who runs this instance can reset passwords, change your role and enable
-        more models.
-      </p>
+      <h2 className="mb-2 text-sm font-semibold">{t('settings.layout.helpTitle')}</h2>
+      <p className="text-sm text-[var(--text-muted)]">{t('settings.layout.helpBody')}</p>
     </div>
   );
 }
@@ -183,6 +188,7 @@ function HelpCard() {
  * seven) to keep room for wider fonts and labels.
  */
 function SectionNav({ pathname }: { pathname: string }) {
+  const t = useT();
   const navigate = useNavigate();
   const { data } = useCurrentUser();
   const tabs = visibleTabs(pathname, data?.features, data?.settingsSummary);
@@ -190,7 +196,7 @@ function SectionNav({ pathname }: { pathname: string }) {
   return (
     // One landmark for the tabs and the menu that replaces them: the menu was
     // outside every landmark on narrow screens (#272).
-    <nav aria-label="Settings sections" className="@container">
+    <nav aria-label={t('settings.layout.sectionsNav')} className="@container">
       <div
         data-section-tabs
         className="hidden flex-nowrap gap-1 rounded-xl bg-[var(--bg-segment-track)] p-1 @[50rem]:inline-flex"
@@ -211,17 +217,17 @@ function SectionNav({ pathname }: { pathname: string }) {
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
               )}
             >
-              {tab.label}
+              {t(tab.label)}
             </Link>
           );
         })}
       </div>
       <div className="@[50rem]:hidden">
         <Select
-          aria-label="Settings section"
+          aria-label={t('settings.layout.sectionSelect')}
           value={current.to}
           onChange={(to) => void navigate({ to })}
-          options={tabs.map((tab) => ({ value: tab.to, label: tab.label }))}
+          options={tabs.map((tab) => ({ value: tab.to, label: t(tab.label) }))}
           className="h-11"
         />
       </div>
@@ -230,6 +236,7 @@ function SectionNav({ pathname }: { pathname: string }) {
 }
 
 export function SettingsLayout() {
+  const t = useT();
   const { pathname } = useLocation();
   const loaded = useFirstLoadSettled(pathname);
   const navigate = useNavigate();
@@ -253,14 +260,14 @@ export function SettingsLayout() {
             <Button variant="ghost" size="sm" asChild>
               <Link to="/">
                 <ArrowLeft className="rtl:-scale-x-100" />
-                Back to Chat
+                {t('settings.layout.backToChat')}
               </Link>
             </Button>
 
             <div className="flex items-center gap-1">
               <ThemeMenu />
               <Button variant="ghost" size="sm" onClick={handleSignOut}>
-                Sign out
+                {t('settings.layout.signOut')}
               </Button>
             </div>
           </header>
@@ -272,7 +279,10 @@ export function SettingsLayout() {
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-10">
             {/* Landmarks of their own, like the page beside them: they were
               outside every landmark, so landmark navigation skipped them (#272). */}
-            <section aria-label="Your profile" className="lg:col-start-1 lg:row-start-1">
+            <section
+              aria-label={t('settings.layout.profile')}
+              className="lg:col-start-1 lg:row-start-1"
+            >
               <Identity />
             </section>
 
@@ -287,7 +297,7 @@ export function SettingsLayout() {
                   in: on phones the cards follow the page, and were pushed down
                   in view as it filled in (#104). */}
                 <div className="relative mt-8 lg:pb-16" aria-busy={!loaded}>
-                  {!loaded && <LoadingOverlay label="Loading settings" />}
+                  {!loaded && <LoadingOverlay label={t('settings.layout.loading')} />}
                   <div className={loaded ? undefined : 'invisible'}>
                     <Outlet />
                   </div>
@@ -296,7 +306,7 @@ export function SettingsLayout() {
             </div>
 
             <aside
-              aria-label="Usage and help"
+              aria-label={t('settings.layout.usageAndHelp')}
               className={cn(
                 'flex flex-col gap-6 pb-16 lg:col-start-1 lg:row-start-2 lg:self-start',
                 !loaded && 'invisible',

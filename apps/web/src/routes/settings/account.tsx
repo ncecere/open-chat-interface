@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { useCurrentUser } from '~/hooks/use-current-user';
+import { useT } from '~/lib/i18n';
 import { ChangePasswordDialog, PasswordControl } from './account/change-password';
 import { DeleteAccountSection } from './account/delete-account-section';
 import { DevicesDialog } from './account/devices-dialog';
 import { NameRow } from './account/name-row';
 import { TwoStepVerification } from './account/two-step';
-
-const SSO_NAME_NOTE = "From your organisation's sign-in";
 
 function Section({
   title,
@@ -45,6 +44,7 @@ function Row({
 }
 
 export function SettingsAccountPage() {
+  const t = useT();
   const { data } = useCurrentUser();
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
@@ -55,54 +55,57 @@ export function SettingsAccountPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Account</h1>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Your identity and access on this instance.
-      </p>
+      <h1 className="text-2xl font-bold">{t('settings.account.title')}</h1>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">{t('settings.account.subtitle')}</p>
 
-      <Section title="Profile" className="mt-8">
+      <Section title={t('settings.account.profile')} className="mt-8">
         <div className="flex flex-col gap-3 text-sm">
           {data && <NameRow name={data.user.name} editable={nameEditable} />}
           {data && !nameEditable && viaOrganisation && (
-            <p className="-mt-2 text-xs text-[var(--text-muted)]">{SSO_NAME_NOTE}</p>
+            <p className="-mt-2 text-xs text-[var(--text-muted)]">
+              {t('settings.account.nameNoteSso')}
+            </p>
           )}
           <div className="flex justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
-            <span className="text-[var(--text-muted)]">Email</span>
+            <span className="text-[var(--text-muted)]">{t('settings.account.email')}</span>
             <span className="min-w-0 text-end">
               <span className="block truncate text-[var(--text-primary)]">{data?.user.email}</span>
               {viaOrganisation && (
                 <span className="block text-xs text-[var(--text-muted)]">
-                  Managed by your organisation
+                  {t('settings.account.emailManaged')}
                 </span>
               )}
             </span>
           </div>
           <div className="flex justify-between border-b border-[var(--border-subtle)] pb-3">
-            <span className="text-[var(--text-muted)]">Role</span>
+            <span className="text-[var(--text-muted)]">{t('settings.account.role')}</span>
             <span className="capitalize text-[var(--text-primary)]">{data?.user.role}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[var(--text-muted)]">Email verified</span>
+            <span className="text-[var(--text-muted)]">{t('settings.account.emailVerified')}</span>
             <span className="text-[var(--text-primary)]">
-              {data?.user.emailVerified ? 'Yes' : 'No'}
+              {data?.user.emailVerified ? t('settings.account.yes') : t('settings.account.no')}
             </span>
           </div>
         </div>
       </Section>
 
-      <Section title="Security & Access" className="mt-12">
-        <Row label="Password" description="The password you use to sign in to this account.">
+      <Section title={t('settings.account.security')} className="mt-12">
+        <Row
+          label={t('settings.account.password')}
+          description={t('settings.account.passwordDescription')}
+        >
           <PasswordControl onChange={() => setPasswordOpen(true)} />
         </Row>
 
         <TwoStepVerification />
 
         <Row
-          label="Devices"
-          description="See where you are signed in, and sign out of devices you no longer use."
+          label={t('settings.account.devices')}
+          description={t('settings.account.devicesDescription')}
         >
           <Button variant="secondary" size="sm" onClick={() => setDevicesOpen(true)}>
-            View Devices
+            {t('settings.account.viewDevices')}
           </Button>
         </Row>
       </Section>

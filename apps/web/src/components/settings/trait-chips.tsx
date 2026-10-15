@@ -1,8 +1,7 @@
 import { Plus } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { formatList, translate, useT } from '~/lib/i18n';
 import { MAX_TRAITS, SUGGESTED_TRAITS, withTrait } from '~/lib/traits';
-
-const listFormat = new Intl.ListFormat('en', { type: 'conjunction' });
 
 /**
  * What a change to the traits did, for the status line: "Added thorough.
@@ -13,10 +12,12 @@ export function traitChange(before: readonly string[], after: readonly string[])
   const added = after.filter((trait) => !before.includes(trait));
   const removed = before.filter((trait) => !after.includes(trait));
   if (!added.length && !removed.length)
-    return before.length >= MAX_TRAITS ? `You can choose up to ${MAX_TRAITS} traits.` : '';
+    return before.length >= MAX_TRAITS
+      ? translate('settings.traits.limit', { count: MAX_TRAITS })
+      : '';
   return [
-    added.length ? `Added ${listFormat.format(added)}.` : '',
-    removed.length ? `Removed ${listFormat.format(removed)}.` : '',
+    added.length ? translate('settings.traits.added', { list: formatList(added) }) : '',
+    removed.length ? translate('settings.traits.removed', { list: formatList(removed) }) : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -46,6 +47,7 @@ export function TraitChips({
   /** The trait field, focused when a list empties. */
   inputId: string;
 }) {
+  const t = useT();
   const rootRef = useRef<HTMLDivElement>(null);
   const refocus = useRef<{ list: ListName; index: number } | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once the pressed button's list has changed.
@@ -75,7 +77,7 @@ export function TraitChips({
     <div ref={rootRef}>
       {traits.length > 0 && (
         <ul
-          aria-label="Chosen traits"
+          aria-label={t('settings.traits.chosenList')}
           data-trait-list="chosen"
           className="mt-3 flex flex-wrap gap-2"
         >
@@ -83,7 +85,7 @@ export function TraitChips({
             <li key={trait}>
               <button
                 type="button"
-                aria-label={`Remove trait: ${trait}`}
+                aria-label={t('settings.traits.remove', { trait })}
                 onClick={() =>
                   press(
                     'chosen',
@@ -103,7 +105,7 @@ export function TraitChips({
 
       {suggestions.length > 0 && (
         <ul
-          aria-label="Suggested traits"
+          aria-label={t('settings.traits.suggestedList')}
           data-trait-list="suggested"
           className="mt-3 flex flex-wrap gap-2"
         >
@@ -111,7 +113,7 @@ export function TraitChips({
             <li key={trait}>
               <button
                 type="button"
-                aria-label={`Add trait: ${trait}`}
+                aria-label={t('settings.traits.add', { trait })}
                 onClick={() => press('suggested', index, withTrait(traits, trait))}
                 className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-control-alt)] px-2.5 py-1 text-xs text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
               >

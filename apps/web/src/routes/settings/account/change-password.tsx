@@ -20,6 +20,7 @@ import {
 } from '~/hooks/use-clear-on-edit';
 import { useCurrentUser } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
+import { translate, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 import {
   type AuthResult,
@@ -39,25 +40,26 @@ const REFUSAL_FIELDS: Record<string, string> = {
 /** Every problem with what was typed, each with its field (#320's sweep). */
 export function passwordProblems(current: string, next: string, confirm: string): FieldProblem[] {
   const problems: FieldProblem[] = [];
-  if (!current) problems.push({ fields: ['current'], text: 'Enter your current password.' });
+  if (!current)
+    problems.push({ fields: ['current'], text: translate('settings.account.enterCurrent') });
   if (next.length < PASSWORD_MIN) {
     problems.push({
       fields: ['next'],
-      text: `Your new password must be at least ${PASSWORD_MIN} characters.`,
+      text: translate('settings.account.passwordTooShort', { count: PASSWORD_MIN }),
     });
   } else if (next.length > PASSWORD_MAX) {
     problems.push({
       fields: ['next'],
-      text: `Your new password must be at most ${PASSWORD_MAX} characters.`,
+      text: translate('settings.account.passwordTooLong', { count: PASSWORD_MAX }),
     });
   } else if (current && next === current) {
     problems.push({
       fields: ['next'],
-      text: 'Choose a password different from your current one.',
+      text: translate('settings.account.passwordSame'),
     });
   }
   if (next !== confirm) {
-    problems.push({ fields: ['confirm'], text: 'The new passwords do not match.' });
+    problems.push({ fields: ['confirm'], text: translate('settings.account.passwordMismatch') });
   }
   return problems;
 }
@@ -69,6 +71,7 @@ export function ChangePasswordDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   // A password change is refused while read-only: off with the reason, so nobody
   // types a password to be told no (#353).
@@ -94,14 +97,16 @@ export function ChangePasswordDialog({
         newPassword: next,
         revokeOtherSessions: revokeOthers,
       })) as AuthResult;
-      const message = authErrorMessage(result, 'Your password could not be changed. Try again.');
+      const message = authErrorMessage(result, translate('settings.account.passwordChangeFailed'));
       if (message) throw Object.assign(new Error(message), { code: result.error?.code });
     },
     onSuccess: () => {
       setDone(
-        revokeOthers
-          ? 'Your password has been changed and your other devices have been signed out.'
-          : 'Your password has been changed.',
+        translate(
+          revokeOthers
+            ? 'settings.account.passwordChangedSignedOut'
+            : 'settings.account.passwordChanged',
+        ),
       );
       setCurrent('');
       setNext('');
@@ -143,9 +148,9 @@ export function ChangePasswordDialog({
         confirmDiscard={!done && Boolean(current || next || confirm)}
       >
         <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
+          <DialogTitle>{t('settings.account.changePassword')}</DialogTitle>
           <DialogDescription id={`${formId}-description`}>
-            Use at least {PASSWORD_MIN} characters. You will stay signed in on this device.
+            {t('settings.account.changePasswordDescription', { count: PASSWORD_MIN })}
           </DialogDescription>
         </DialogHeader>
         {done ? (
@@ -155,13 +160,17 @@ export function ChangePasswordDialog({
             </p>
             <DialogFooter>
               <Button variant="accent" onClick={() => reset(false)}>
-                Done
+                {t('settings.account.done')}
               </Button>
             </DialogFooter>
           </>
         ) : (
           <form ref={form} onSubmit={submit} noValidate className="flex flex-col gap-4">
-            <Field label="Current password" htmlFor={`${formId}-current`} error={at('current')}>
+            <Field
+              label={t('settings.account.currentPassword')}
+              htmlFor={`${formId}-current`}
+              error={at('current')}
+            >
               <Input
                 id={`${formId}-current`}
                 {...invalidFieldProps(`${formId}-current`, at('current'))}
@@ -172,10 +181,10 @@ export function ChangePasswordDialog({
               />
             </Field>
             <Field
-              label="New password"
+              label={t('settings.account.newPassword')}
               htmlFor={`${formId}-new`}
               error={at('next')}
-              hint={`${PASSWORD_MIN} to ${PASSWORD_MAX} characters.`}
+              hint={t('settings.account.passwordRange', { min: PASSWORD_MIN, max: PASSWORD_MAX })}
             >
               <Input
                 id={`${formId}-new`}
@@ -187,7 +196,11 @@ export function ChangePasswordDialog({
                 onChange={(event) => setNext(event.target.value)}
               />
             </Field>
-            <Field label="Confirm new password" htmlFor={`${formId}-confirm`} error={at('confirm')}>
+            <Field
+              label={t('settings.account.confirmPassword')}
+              htmlFor={`${formId}-confirm`}
+              error={at('confirm')}
+            >
               <Input
                 id={`${formId}-confirm`}
                 {...invalidFieldProps(`${formId}-confirm`, at('confirm'))}
@@ -205,7 +218,7 @@ export function ChangePasswordDialog({
                 onChange={(event) => setRevokeOthers(event.target.checked)}
                 className="size-4 accent-[var(--accent)]"
               />
-              Sign out of all other devices
+              {t('settings.account.signOutOthers')}
             </label>
             {error && (
               <p role="alert" className="whitespace-pre-line text-sm text-[var(--danger)]">
@@ -214,7 +227,7 @@ export function ChangePasswordDialog({
             )}
             <DialogFooter className="mt-2">
               <Button type="button" variant="ghost" onClick={() => reset(false)}>
-                Cancel
+                {t('settings.account.cancel')}
               </Button>
               <Button
                 type="submit"
@@ -223,7 +236,7 @@ export function ChangePasswordDialog({
                 disabled={change.isPending}
               >
                 {change.isPending && <Spinner />}
-                Change password
+                {t('settings.account.changePassword')}
               </Button>
             </DialogFooter>
           </form>
@@ -235,6 +248,7 @@ export function ChangePasswordDialog({
 
 /** What the Password row shows: the change button, or why there is none. */
 export function PasswordControl({ onChange }: { onChange: () => void }) {
+  const t = useT();
   const { data } = useCurrentUser();
   const lock = useReadOnlyLock();
   const signIn = data?.signIn;
@@ -242,15 +256,15 @@ export function PasswordControl({ onChange }: { onChange: () => void }) {
   if (signIn.password) {
     return (
       <Button variant="secondary" size="sm" locked={lock.title} onClick={onChange}>
-        Change Password
+        {t('settings.account.changePasswordButton')}
       </Button>
     );
   }
   return (
     <p className="text-sm text-[var(--text-muted)]">
       {signIn.credential
-        ? 'Email and password sign-in is turned off on this instance.'
-        : "Your password is managed by your organisation's sign-in."}
+        ? t('settings.account.localAuthDisabled')
+        : t('settings.account.passwordManaged')}
     </p>
   );
 }
