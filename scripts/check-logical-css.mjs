@@ -16,6 +16,8 @@
 //    the same string is deliberate and passes.
 //  - Style objects: marginLeft paddingLeft borderLeft* ... textAlign: 'left',
 //    float, and `left`/`right` inside a `style={{ }}`.
+//  - `:dir()` in a class or a stylesheet: the CSS build compiles it to `:lang()`,
+//    which does not mean the same thing.
 //  - Icons that point (a chevron, an arrow, back, send, sign out, the sidebar
 //    toggle, "open in new") must carry an `rtl:` class (`rtl:-scale-x-100`, or
 //    `rtl:rotate-180` for one that also turns): <ChevronRight />, <ArrowLeft />
@@ -108,6 +110,18 @@ function baseOf(token) {
  * `rtl:`/`ltr:` counterpart of its kind there is a deliberate pair.
  */
 export function physicalUtility(token, siblings = []) {
+  // `:dir()` is compiled to `:lang()` for older browsers (Tailwind's floor is
+  // Chrome 111; `:dir()` is 120), and `:lang()` matches the language of the
+  // page, not the direction of the text: a rule that was meant for an Arabic
+  // list on an English page never applies. Use `[dir=rtl]` (the app writes
+  // `dir` on what it lays out) or Tailwind's `rtl:` variant.
+  if (/:dir\(/.test(token)) {
+    return {
+      utility: ':dir()',
+      advice:
+        '[dir=rtl] / [dir=ltr] attribute selectors, or rtl: (the CSS build rewrites :dir() to :lang())',
+    };
+  }
   const { variants, utility } = baseOf(token);
   // Prose that happens to start like one: 'right-to-left', 'left-to-right'.
   if (/^(?:left|right)-to-(?:left|right)$/.test(utility)) return null;
@@ -340,6 +354,13 @@ export function findInCss(content) {
         line,
         utility: match[1],
         advice: 'the logical property (…-inline-start / -end)',
+      });
+    }
+    if (/:dir\(/.test(text)) {
+      found.push({
+        line,
+        utility: ':dir()',
+        advice: '[dir=rtl] attribute selectors (the CSS build rewrites :dir() to :lang())',
       });
     }
     for (const match of text.matchAll(CSS_VALUES)) {

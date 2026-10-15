@@ -100,6 +100,24 @@ describe('a reply with right-to-left text', () => {
     expect(classes).toContain('[&_:not(pre)>code]:[unicode-bidi:isolate]');
   });
 
+  it('marks an item that reads the other way from its list, so its marker can sit inside its text', async () => {
+    // A `:dir()` selector would do it, but the CSS build compiles `:dir()` to `:lang()`.
+    await render('- English first\n- عنصر عربي\n- English again');
+    const marked = [...container.querySelectorAll('li')].map((item) =>
+      item.hasAttribute('data-opposite-direction'),
+    );
+    expect(marked).toEqual([false, true, false]);
+    expect(container.querySelector('ul')?.getAttribute('dir')).toBe('ltr');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await render('- عنصر عربي\n- English item\n- عنصر آخر');
+    expect(
+      [...container.querySelectorAll('li')].map((item) =>
+        item.hasAttribute('data-opposite-direction'),
+      ),
+    ).toEqual([false, true, false]);
+  });
+
   it('applies to a person’s own message too (maths off) and to a share page’s (safe-link policy)', async () => {
     await render('اكتب لي جملتين.\n\n1. أول\n2. ثان', false);
     expect(container.querySelector('p')?.getAttribute('dir')).toBe('auto');

@@ -60,6 +60,20 @@ function mark(node: HastNode): void {
     } else if (CONTAINERS.has(node.tagName)) {
       const direction = firstStrongDirection(words(node));
       if (direction) node.properties = { dir: direction, ...node.properties };
+      // An item that reads the other way from its list (an Arabic item in an
+      // English list) is marked, so the marker can sit inside its own text. A
+      // `:dir()` selector would do it, but the CSS toolchain compiles `:dir()`
+      // to `:lang()` for older browsers, which matches the language, not the
+      // direction: it is marked here instead.
+      if (direction && (node.tagName === 'ul' || node.tagName === 'ol')) {
+        for (const item of node.children ?? []) {
+          if (item.type !== 'element' || item.tagName !== 'li') continue;
+          const own = firstStrongDirection(words(item));
+          if (own && own !== direction) {
+            item.properties = { ...item.properties, dataOppositeDirection: '' };
+          }
+        }
+      }
     }
   }
   for (const child of node.children ?? []) mark(child);

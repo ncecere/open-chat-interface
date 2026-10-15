@@ -144,7 +144,8 @@ function ShortcutsCard() {
         {shortcuts.map((shortcut) => (
           <div key={shortcut.label} className="flex items-center justify-between gap-3">
             <span className="text-sm text-[var(--text-secondary)]">{shortcut.label}</span>
-            <span className="flex gap-1">
+            {/* Key combinations read Ctrl then K in every language. */}
+            <span dir="ltr" className="flex gap-1">
               {shortcut.keys.map((key) => (
                 <kbd
                   key={key}

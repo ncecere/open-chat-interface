@@ -357,11 +357,14 @@ export const MARKDOWN_PROSE = cn(
   // from the right (#360); Streamdown's nested lists add a left one to undo.
   '[&_ul]:list-outside [&_ol]:list-outside [&_ul]:ps-6 [&_ol]:ps-6',
   // `pl-0` stays physical: it undoes Streamdown's own physical `[li_&]:pl-6`.
-  '[&_ul:dir(rtl)]:pl-0 [&_ol:dir(rtl)]:pl-0',
+  // Attribute selectors, not `:dir()`: the CSS toolchain compiles `:dir()` to
+  // `:lang()`, which matches the language of the page, not the direction of the
+  // text (markdown-direction.ts writes `dir` on lists and quotes).
+  '[&_ul[dir=rtl]]:pl-0 [&_ol[dir=rtl]]:pl-0',
   // An item that reads the other way from its list (an Arabic item in an
   // English list) keeps its marker inside its own text: outside, the marker
   // would fall in the list's unpadded side.
-  '[&_:is(ul,ol):dir(ltr)>li:dir(rtl)]:list-inside [&_:is(ul,ol):dir(rtl)>li:dir(ltr)]:list-inside',
+  '[&_li[data-opposite-direction]]:list-inside',
   // A task's checkbox sits where the bullet would, so its text hangs too:
   // 16 px box, 4 px margin and the space after it fill the 24 px indent.
   '[&_.task-list-item_input]:-ms-6 [&_.task-list-item_input]:w-4',
@@ -372,8 +375,8 @@ export const MARKDOWN_PROSE = cn(
   '[&_th]:text-start',
   // `border-l-0` and `pl-0` stay physical: they undo Streamdown's own physical
   // `border-l-4 pl-4`; the bar and the padding come back on the start side.
-  '[&_blockquote:dir(rtl)]:border-l-0 [&_blockquote:dir(rtl)]:border-s-4',
-  '[&_blockquote:dir(rtl)]:pl-0 [&_blockquote:dir(rtl)]:ps-4',
+  '[&_blockquote[dir=rtl]]:border-l-0 [&_blockquote[dir=rtl]]:border-s-4',
+  '[&_blockquote[dir=rtl]]:pl-0 [&_blockquote[dir=rtl]]:ps-4',
 );
 
 // Cache at the wrapper boundary, before normalization and the lazy renderer.

@@ -65,6 +65,8 @@ describe('which class tokens are physical', () => {
     'bg-left',
     'bg-linear-to-r',
     '[margin-left:4px]',
+    '[&_ul:dir(rtl)]:ps-0',
+    'md:[&_:is(ul,ol):dir(ltr)>li:dir(rtl)]:list-inside',
     '[padding-right:var(--x)]',
     '[text-align:left]',
     '[border-top-left-radius:4px]',
@@ -114,6 +116,7 @@ describe('which class tokens are physical', () => {
     'ltr:pr-4',
     'md:rtl:left-0',
     'rtl:-scale-x-100',
+    '[&_ul[dir=rtl]]:ps-0',
     // Words and tokens that only look like utilities.
     'left',
     'right',
@@ -268,6 +271,28 @@ describe('icons that point', () => {
       `),
       [],
     );
+  });
+});
+
+describe(':dir() selectors', () => {
+  it('are refused in classes and in CSS, with the reason', () => {
+    const [hit] = findInSource('a.tsx', 'const a = "[&_blockquote:dir(rtl)]:ps-4";');
+    assert.equal(hit.utility, ':dir()');
+    assert.match(hit.advice, /\[dir=rtl\]/);
+    assert.deepEqual(
+      findInCss('.a:dir(rtl) { color: red }').map((item) => item.utility),
+      [':dir()'],
+    );
+  });
+
+  it('allow the attribute selectors that do the same job', () => {
+    assert.deepEqual(
+      found(
+        'const a = "[&_blockquote[dir=rtl]]:ps-4 [&_li[data-opposite-direction]]:list-inside";',
+      ),
+      [],
+    );
+    assert.deepEqual(findInCss('.a[dir=rtl] { color: red }'), []);
   });
 });
 

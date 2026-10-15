@@ -157,7 +157,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                         </span>
                       )}
                       {item.shortcut && (
-                        <span className="hidden shrink-0 gap-1 sm:flex" data-shortcut>
+                        <span dir="ltr" className="hidden shrink-0 gap-1 sm:flex" data-shortcut>
                           {item.shortcut.map((key) => (
                             <kbd
                               key={key}

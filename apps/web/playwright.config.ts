@@ -11,6 +11,10 @@ export const FIXTURE_SPECS = ['**/long-conversation.spec.ts'];
 
 const MFA_REQUIREMENT_SPEC = '**/mfa-requirement.spec.ts';
 const CLASSIFICATION_SPEC = '**/classification.spec.ts';
+// language.spec.ts changes the instance's enabled languages, and both set their own
+// viewports (320, 768, 1280 px): a second project would only repeat them, or fight
+// over the setting.
+const LANGUAGE_SPECS = ['**/language.spec.ts', '**/rtl.spec.ts'];
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -28,14 +32,15 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     {
       name: 'mobile-chromium',
-      // Two specs change an instance-wide setting (the classification mode, the MFA
-      // requirement for a role), which the desktop run sets and clears; a second project
+      // Specs that change an instance-wide setting (the classification mode, the MFA
+      // requirement for a role, the enabled languages), which the desktop run sets and clears; a second project
       // would do the same under it. Left out, never skipped. (A project's own testIgnore
       // replaces the top-level one, so the fixture specs are repeated here.)
       testIgnore: [
         ...(process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : []),
         MFA_REQUIREMENT_SPEC,
         CLASSIFICATION_SPEC,
+        ...LANGUAGE_SPECS,
       ],
       use: { ...devices['Pixel 7'] },
     },

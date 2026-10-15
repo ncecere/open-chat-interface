@@ -174,17 +174,65 @@ number ever selects. `=0` and other exact matches may be added freely.
 4. Add the keys to `es.json` and `ar.json` too (a draft is fine, it is beta),
    or `pnpm lint` fails.
 5. Convert physical Tailwind utilities in the same files to logical ones so the
-   page mirrors: `ml-`/`mr-` to `ms-`/`me-`, `pl-`/`pr-` to `ps-`/`pe-`,
-   `left-`/`right-` to `start-`/`end-`, `text-left`/`text-right` to
-   `text-start`/`text-end`, `border-l/r` to `border-s/e`, `rounded-l/r` to
-   `rounded-s/e`. Icons that point (chevrons, arrows, back, send) get
-   `rtl:-scale-x-100`; others do not. User text gets `dir="auto"`, code blocks
-   stay `dir="ltr"`.
+   page mirrors (see [Right to left](#right-to-left)); `pnpm lint` fails on one.
 6. Test the component rendered in `en`, `es`, `ar` and `en-XA` (`activateLocale`
    from `lib/i18n/state`).
 
 Do not translate: model names, the instance's branding text, server data, user
 text.
+
+## Right to left
+
+A page mirrors when its spacing, alignment and positions are **logical**
+(start and end), not physical (left and right). `scripts/check-logical-css.mjs`
+(in `pnpm lint`, tested by `scripts/check-logical-css.test.mjs`) fails on a new
+physical one anywhere under `apps/web/src`, the administration console included
+(it stays English but must not be half mirrored):
+
+| Not this | This |
+| --- | --- |
+| `ml-` `mr-` `pl-` `pr-` | `ms-` `me-` `ps-` `pe-` |
+| `left-` `right-` | `start-` `end-` |
+| `text-left` `text-right` | `text-start` `text-end` |
+| `border-l` `border-r` (and `-*`) | `border-s` `border-e` |
+| `rounded-l` `-r` `-tl` `-tr` `-bl` `-br` | `rounded-s` `-e` `-ss` `-se` `-es` `-ee` |
+| `float-left`, `scroll-ml-` | `float-start`, `scroll-ms-` |
+| `marginLeft`, `paddingRight`, `textAlign: 'left'`, `left` in a `style` | `marginInlineStart`, `paddingInlineEnd`, `'start'`, `insetInlineStart` |
+| `margin-left:` in CSS | `margin-inline-start:` |
+
+`space-x-*`, `divide-x-*` and `gap-*` are already logical in Tailwind 4.3.
+
+- **A translate** (`-translate-x-1/2` to centre, a slide in or out) needs an
+  `rtl:` counterpart in the same string: `start-1/2 -translate-x-1/2
+  rtl:translate-x-1/2`. `translate-x-0` is the same both ways. A gradient or
+  mask toward `left`/`right` gets an `rtl:` one turned round.
+- **Icons that point** mirror: `rtl:-scale-x-100` on a chevron, arrow, back,
+  send, sign-out, sidebar toggle or open-in-new (the list is `DIRECTION_ICONS` in
+  the check, which fails on one without an `rtl:` class). One that also
+  rotates (a disclosure chevron: `rotate-90` open) uses `rtl:rotate-180` for
+  the closed state instead: a flipped chevron turned 90 degrees points up. Icons
+  that do not point (plus, clock, play, refresh) are not mirrored.
+- **Do not use `:dir()`** in a class or a stylesheet: the CSS build (Tailwind's
+  browser floor is Chrome 111, `:dir()` is 120) rewrites it to `:lang()`, which
+  matches the language of the page, not the direction of the text. Use
+  `[dir=rtl]` (the app writes `dir` on lists and quotes) or `rtl:`. The check
+  fails on it.
+- **User text gets `dir="auto"`** where it is rendered (a title, a file name, a
+  project name, a memory, a snippet); inside a translated sentence wrap it in
+  `<bdi>` so the sentence is not reordered by it. **Code stays left to right**:
+  `<pre dir="ltr">`; Markdown code blocks and inline code are `dir="ltr"` and
+  `unicode-bidi: isolate` (`markdown.tsx`, `markdown-direction.ts`). Key
+  combinations (`Ctrl K`) are `dir="ltr"`. The composer is `dir="auto"`.
+- **Keys and geometry that mean a side** follow the page: in right-to-left Left
+  is "next" in a tab strip, the artifact panel is docked on the left and its
+  separator widens with Right, a submenu opens with Left (Radix reads `dir` from
+  a prop, so `DropdownMenu` and `SelectRoot` in `components/ui` pass it), and
+  `scrollLeft` is zero at the start and counts down. Use `useLocale().dir` or
+  `getComputedStyle(element).direction`.
+- **What must stay physical** is listed with a reason in
+  `scripts/i18n/physical-css-allowlist.json` (a card placed against a window
+  edge it was measured against; undoing Streamdown's own physical padding). The
+  count per file only goes down.
 
 ## Reviewing a beta catalog
 
