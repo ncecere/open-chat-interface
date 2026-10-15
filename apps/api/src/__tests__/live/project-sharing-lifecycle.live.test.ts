@@ -113,6 +113,7 @@ const { errorHandler } = await import('../../middleware/error-handler.js');
 const { reconcileAccessLeftovers } = await import('../../services/project-sharing/reconcile.js');
 const { lifecycleJobs } = await import('../../services/jobs/index.js');
 const { indexProjectFile } = await import('../../services/project-search/indexing.js');
+const { accountSharingImpact } = await import('../../services/project-sharing/impact.js');
 
 describe.skipIf(!available)('live: project sharing lifecycle', () => {
   let live: LiveDatabase;
@@ -731,6 +732,19 @@ describe.skipIf(!available)('live: project sharing lifecycle', () => {
     it('deleting an owner removes the project, its shares and every file, detaches other people’s conversations, and says how many', async () => {
       const admin = await h.person('Admin', 'admin');
       const w = await world();
+      // The dialogs say what is about to happen to other people.
+      expect(await accountSharingImpact(w.owner.id)).toEqual({
+        sharedProjects: 1,
+        otherConversations: 2,
+        othersFiles: 1,
+        filesHandedToOwners: 0,
+      });
+      expect(await accountSharingImpact(w.editor.id)).toEqual({
+        sharedProjects: 0,
+        otherConversations: 0,
+        othersFiles: 0,
+        filesHandedToOwners: 1,
+      });
       expect((await removeAccount(admin, w.owner.id)).status).toBe(200);
       expect(await h.filesOf(w.project.id)).toEqual([]);
       const shares = await pool.db.execute(

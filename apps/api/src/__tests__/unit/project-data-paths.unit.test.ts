@@ -44,6 +44,14 @@ const FILES: Record<string, Entry> = {
     via: 'getReadableAttachment',
     why: 'GET /:id/content serves an own file or a live project file the caller can read; the other routes list and delete own files.',
   },
+  'routes/admin/users.ts': {
+    class: 'U',
+    why: 'Only adds sharing-impact, counts about the account being deleted for the administrator’s dialog; administrators still read no project content.',
+  },
+  'routes/me.ts': {
+    class: 'U',
+    why: 'Only adds the person’s own sharing-impact counts for the delete-account dialog.',
+  },
   'routes/index.ts': { class: 'U', why: 'Only mounts the project routes; no query.' },
   'routes/admin/embeddings.ts': {
     class: 'U',
@@ -138,6 +146,10 @@ const FILES: Record<string, Entry> = {
   'services/project-sharing/holds.ts': {
     class: 'U',
     why: 'Legal-hold lookups for deleting project data (the actor’s and the uploader’s); asks nothing about access.',
+  },
+  'services/project-sharing/impact.ts': {
+    class: 'U',
+    why: 'Counts for the account-deletion dialogs (shared projects, other people’s conversations and files); no names or content, asked about the account being deleted.',
   },
   'services/project-sharing/upgrade-guard.ts': {
     class: 'U',

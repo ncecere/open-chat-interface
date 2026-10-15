@@ -801,6 +801,43 @@ describe.skipIf(!available)('live: project access matrix', () => {
     });
   }
 
+  it('has a matrix row for every route that takes a project, so a new one cannot be forgotten', () => {
+    // Every route under /api/projects, the file content route, and the thread routes
+    // that take a project id, each mapped to the row(s) that exercise it. A route
+    // missing here fails: add it to the matrix (SPEC-groups.md) before it ships.
+    const manifest: Record<string, Row[]> = {
+      'GET /': ['list'],
+      'GET /sidebar': ['list'],
+      'POST /': [],
+      'GET /:id': ['read'],
+      'PATCH /:id': ['rename', 'instructions'],
+      'DELETE /:id': ['delete'],
+      'GET /:id/files': ['files'],
+      'POST /:id/files': ['upload'],
+      'DELETE /:id/files/:fileId': ['remove-file'],
+      'GET /:id/access': ['access-info'],
+      'GET /:id/shares': ['share-list'],
+      'POST /:id/shares': ['share-add'],
+      'PATCH /:id/shares/:shareId': ['share-change'],
+      'DELETE /:id/shares/:shareId': ['share-remove'],
+      'POST /:id/transfer': ['transfer'],
+      'POST /:id/leave': ['leave'],
+    };
+    const mounted = projectRoutes.routes
+      .filter((route) => route.method !== 'ALL')
+      .map((route) => `${route.method} ${route.path}`);
+    expect([...new Set(mounted)].sort()).toEqual(Object.keys(manifest).sort());
+    for (const rows of Object.values(manifest)) {
+      for (const row of rows) expect(Object.keys(MATRIX)).toContain(row);
+    }
+    // The routes outside /api/projects that take a project: a file's content, and
+    // a conversation started in or moved to a project, or listed by it.
+    expect(attachmentRoutes.routes.map((route) => `${route.method} ${route.path}`)).toContain(
+      'GET /:id/content',
+    );
+    expect(Object.keys(MATRIX)).toEqual(expect.arrayContaining(['files', 'own-thread']));
+  });
+
   it('has a cell for every action and every person', () => {
     for (const row of Object.keys(MATRIX) as Row[])
       expect(MATRIX[row], row).toHaveLength(ACTORS.length);

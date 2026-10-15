@@ -305,6 +305,23 @@ export const PROJECT_SHARE_AUDIT_ACTIONS = [
   'project.access.revoked',
 ] as const;
 
+/**
+ * `GET /api/admin/users/:id/sharing-impact` and `GET /api/me/sharing-impact`
+ * (v0.14): what deleting the account does to other people, for the
+ * confirmation dialogs. Counts only.
+ */
+export const accountSharingImpactSchema = z.object({
+  /** Projects the account owns that are shared with someone. */
+  sharedProjects: z.number().int().nonnegative(),
+  /** Other people's conversations in the account's projects: kept, but they leave the project. */
+  otherConversations: z.number().int().nonnegative(),
+  /** Files other people added to the account's projects: deleted with them. */
+  othersFiles: z.number().int().nonnegative(),
+  /** Finished files the account added to other people's projects: handed to those owners. */
+  filesHandedToOwners: z.number().int().nonnegative(),
+});
+export type AccountSharingImpact = z.infer<typeof accountSharingImpactSchema>;
+
 export type ProjectShare = z.infer<typeof projectShareSchema>;
 export type ProjectAccessInfo = z.infer<typeof projectAccessInfoSchema>;
 export type CreateProjectShareInput = z.infer<typeof createProjectShareSchema>;
