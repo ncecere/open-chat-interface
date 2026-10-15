@@ -9,10 +9,14 @@ import {
   useDebouncedValue,
   useThreadSearch,
 } from '~/hooks/use-thread-search';
+import { useLocale, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /** One result: the title, an archived flag, and the best matching lines. */
 export function SearchResultContent({ result }: { result: ThreadSearchResult }) {
+  const t = useT();
+  // The label is in the language of the page; the snippet keeps its own direction.
+  const { dir } = useLocale();
   return (
     <>
       <span className="flex min-w-0 items-center gap-2">
@@ -21,7 +25,7 @@ export function SearchResultContent({ result }: { result: ThreadSearchResult }) 
         </span>
         {result.thread.archived && (
           <Badge variant="outline" className="shrink-0 py-0 font-medium">
-            Archived
+            {t('shell.search.archived')}
           </Badge>
         )}
       </span>
@@ -31,10 +35,10 @@ export function SearchResultContent({ result }: { result: ThreadSearchResult }) 
           dir="auto"
           className="mt-0.5 line-clamp-2 text-xs leading-snug text-[var(--text-muted)]"
         >
-          {/* The label is English whatever the snippet's language; skipped by
-              dir="auto", which reads the snippet's own first letter (#360). */}
-          <span dir="ltr" className="font-medium">
-            {match.role === 'user' ? 'You: ' : 'Reply: '}
+          {/* The label follows the page's direction whatever the snippet's language;
+              skipped by dir="auto", which reads the snippet's own first letter (#360). */}
+          <span dir={dir} className="font-medium">
+            {t(match.role === 'user' ? 'shell.search.you' : 'shell.search.reply')}{' '}
           </span>
           <HighlightedText text={match.snippet} />
         </span>
@@ -51,8 +55,9 @@ export function ThreadSearchResultList({
   results: ThreadSearchResult[];
   activeThreadId?: string;
 }) {
+  const t = useT();
   return (
-    <ul aria-label="Search results" className="flex flex-col gap-0.5">
+    <ul aria-label={t('shell.search.results')} className="flex flex-col gap-0.5">
       {results.map((result) => (
         <li key={result.thread.id}>
           <Link
@@ -78,6 +83,7 @@ export function ThreadSearchResultList({
  * the conversation at its best-matching message.
  */
 export function ThreadSearchResults({ query }: { query: string }) {
+  const t = useT();
   const trimmed = query.trim();
   const debounced = useDebouncedValue(trimmed);
   const settled = debounced === trimmed;
@@ -90,12 +96,12 @@ export function ThreadSearchResults({ query }: { query: string }) {
     <div className="flex flex-col gap-2">
       {/* Always mounted, so screen readers hear each settled count. */}
       <p role="status" aria-live="polite" className="sr-only">
-        {isError ? 'Search failed.' : announcement}
+        {isError ? t('shell.search.failed') : announcement}
       </p>
 
       {isError ? (
         <p className="px-2 py-8 text-center text-xs text-[var(--text-muted)]">
-          Search is unavailable right now. Try again in a moment.
+          {t('shell.search.unavailable')}
         </p>
       ) : !results ? (
         <div className="py-8">
@@ -104,7 +110,7 @@ export function ThreadSearchResults({ query }: { query: string }) {
       ) : results.length === 0 ? (
         !pending && (
           <p className="px-2 py-8 text-center text-xs text-[var(--text-muted)]">
-            No conversations matched.
+            {t('shell.search.noMatches')}
           </p>
         )
       ) : (

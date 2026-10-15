@@ -64,7 +64,7 @@
     {
       "file": "apps/web/src/components/layout/top-bar.tsx",
       "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+      "reason": "Reads the browser's time zone name for the export link; nothing is shown to a person."
     },
     {
       "file": "apps/web/src/components/settings/storage-meter.tsx",
@@ -94,7 +94,7 @@
     {
       "file": "apps/web/src/lib/read-only.ts",
       "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+      "reason": "The maintenance time needs weekday, day, month and zone name together, which the formatter's styles do not offer; it is given the language the app is showing."
     },
     {
       "file": "apps/web/src/lib/utils.ts",

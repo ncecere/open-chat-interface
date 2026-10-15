@@ -3,6 +3,7 @@
   "directories": [
     "apps/web/src/components/brand",
     "apps/web/src/components/command-palette",
+    "apps/web/src/components/layout",
     "apps/web/src/components/ui"
   ]
 }

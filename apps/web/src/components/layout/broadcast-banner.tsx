@@ -4,6 +4,7 @@ import { AlertTriangle, Info, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { InlineMarkdown } from '~/components/ui/inline-markdown';
 import { api } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 const LEVEL_STYLES: Record<ActiveBroadcast['level'], string> = {
@@ -90,6 +91,7 @@ export function useBroadcastsSettled(): boolean {
  * dismissed instead of disappearing on a timer.
  */
 export function BroadcastBanner() {
+  const t = useT();
   const queryClient = useQueryClient();
 
   const { data } = useBroadcasts();
@@ -144,7 +146,7 @@ export function BroadcastBanner() {
             {broadcast.dismissable && (
               <button
                 type="button"
-                aria-label={`Dismiss: ${broadcast.title}`}
+                aria-label={t('shell.broadcast.dismiss', { title: broadcast.title })}
                 onClick={() => dismiss.mutate(broadcast.id)}
                 className="shrink-0 rounded p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
               >
