@@ -20,8 +20,12 @@ jobs:
     name: Application checks
     runs-on: ubuntu-24.04
     # The full run (static checks, coverage with live services, the browser
-    # suite) took 22-26 minutes at v0.9.1; leave room as the suites grow.
-    timeout-minutes: 45
+    # suite) took 22-26 minutes at v0.9.1. At v0.14 it takes 43 minutes on a
+    # fast runner and about 50 on a slow one: the browser step alone runs 495
+    # tests on two workers, 28 minutes or more. A 45-minute limit cancelled a
+    # run with no failure, 429 tests in and 66 to go. The suite should be split
+    # into jobs that run side by side; until then, leave room for a slow runner.
+    timeout-minutes: 75
     services:
       postgres:
         image: pgvector/pgvector:pg17
