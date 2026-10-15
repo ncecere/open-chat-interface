@@ -69,7 +69,9 @@ export function SettingsAccountPage() {
           <div className="flex justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
             <span className="text-[var(--text-muted)]">{t('settings.account.email')}</span>
             <span className="min-w-0 text-end">
-              <span className="block truncate text-[var(--text-primary)]">{data?.user.email}</span>
+              <span className="block [overflow-wrap:anywhere] text-[var(--text-primary)]">
+                {data?.user.email}
+              </span>
               {viaOrganisation && (
                 <span className="block text-xs text-[var(--text-muted)]">
                   {t('settings.account.emailManaged')}

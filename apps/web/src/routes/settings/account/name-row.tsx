@@ -131,7 +131,7 @@ export function NameRow({ name, editable }: { name: string; editable: boolean })
             {t('settings.account.saved')}
           </span>
         )}
-        <span className="truncate text-[var(--text-primary)]">{name}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere] text-[var(--text-primary)]">{name}</span>
         {editable ? (
           <Button
             ref={editRef}
