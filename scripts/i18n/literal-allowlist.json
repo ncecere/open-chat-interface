@@ -1,0 +1,4 @@
+{
+  "description": "Text that stays a literal inside a migrated directory, each with the reason: a brand mark, a code sample, a symbol. file and text must match exactly; an entry that no longer matches fails the check.",
+  "entries": []
+}
