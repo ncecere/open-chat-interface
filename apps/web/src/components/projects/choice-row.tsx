@@ -48,7 +48,8 @@ export function ChoiceRow({
           {label}
         </label>
         {hint && (
-          <p id={hintId} className="text-xs text-[var(--text-muted)]">
+          // Secondary, not muted: the chosen row is tinted, and muted text on the tint is under 4.5:1.
+          <p id={hintId} className="text-xs text-[var(--text-secondary)]">
             {hint}
           </p>
         )}

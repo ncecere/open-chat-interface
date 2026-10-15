@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { describeViolations, scan, signIn, storeThemeForProject } from './accessibility.helpers';
 import { withGroup } from './fixtures/groups';
+import { openSidebar, withSharingScene } from './fixtures/sharing';
 
 /**
  * WCAG 2.2 AA scans: sign-in, share, introduction, chat home and settings
@@ -153,6 +154,106 @@ test.describe('WCAG 2.2 AA: authenticated surfaces', () => {
       await expect(page.getByRole('region', { name: 'Members of this group' })).toBeVisible();
 
       const results = await scan(page);
+      expect(describeViolations(results), describeViolations(results)).toBe('');
+    });
+  });
+});
+
+test.describe('WCAG 2.2 AA: project sharing (v0.14)', () => {
+  test('the Share dialog, for a person and for a group, has no violations', async ({
+    browser,
+    page,
+  }) => {
+    await signIn(page);
+    await withSharingScene(browser, page, async ({ owned, editor }) => {
+      await withGroup(page, async (group) => {
+        await page.goto(`/projects/${owned.id}`);
+        await page.getByRole('button', { name: 'Share', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: `Share “${owned.name}”` });
+        await expect(dialog.getByRole('list', { name: 'Who has access' })).toContainText(
+          editor.name,
+        );
+        let results = await scan(page);
+        expect(describeViolations(results), describeViolations(results)).toBe('');
+
+        // The group form, its picker open, and a refusal showing.
+        await dialog.getByRole('radio', { name: 'A group' }).check();
+        await dialog.getByRole('combobox', { name: 'Group' }).click();
+        await expect(page.getByRole('option', { name: group.name })).toBeVisible();
+        results = await scan(page);
+        expect(describeViolations(results), describeViolations(results)).toBe('');
+        await page.keyboard.press('Escape');
+        await dialog.getByRole('radio', { name: 'A person' }).check();
+        await dialog.getByLabel('Their email address').fill('not an address');
+        await dialog.getByRole('button', { name: 'Share project' }).click();
+        await expect(dialog.getByRole('alert')).toBeVisible();
+        results = await scan(page);
+        expect(describeViolations(results), describeViolations(results)).toBe('');
+      });
+    });
+  });
+
+  test('Shared with me, on the Projects page and in the sidebar, has no violations', async ({
+    browser,
+    page,
+  }) => {
+    await signIn(page);
+    await withSharingScene(browser, page, async ({ shared, owner }) => {
+      await page.goto('/projects');
+      await expect(page.getByRole('heading', { name: 'Projects', level: 1 })).toBeVisible();
+      const section = page.getByRole('region', { name: 'Shared with me' });
+      await expect(section).toContainText(shared.name);
+      await expect(section).toContainText(owner.name);
+      let results = await scan(page);
+      expect(describeViolations(results), describeViolations(results)).toBe('');
+
+      await openSidebar(page);
+      await expect(page.getByRole('list', { name: 'Shared with me' }).first()).toContainText(
+        shared.name,
+      );
+      results = await scan(page);
+      expect(describeViolations(results), describeViolations(results)).toBe('');
+    });
+  });
+
+  test("a viewer's project page, on every tab, has no violations", async ({ browser, page }) => {
+    await signIn(page);
+    await withSharingScene(browser, page, async ({ shared, owner }) => {
+      await page.goto(`/projects/${shared.id}`);
+      await expect(page.getByRole('heading', { name: shared.name, level: 1 })).toBeVisible();
+      await expect(page.getByText(`Shared by ${owner.name} · Viewer`)).toBeVisible();
+      for (const tab of ['Conversations', 'Instructions', 'Files', 'Settings']) {
+        await page.getByRole('tab', { name: tab }).click();
+        await expect(page.getByRole('tab', { name: tab, selected: true })).toBeVisible();
+        if (tab === 'Files') await expect(page.getByText('Added by')).toBeVisible();
+        if (tab === 'Settings')
+          await expect(page.getByRole('button', { name: 'Leave project' })).toBeVisible();
+        const results = await scan(page);
+        expect(describeViolations(results), `${tab}: ${describeViolations(results)}`).toBe('');
+      }
+    });
+  });
+
+  test('the Transfer dialog and the Leave confirmation have no violations', async ({
+    browser,
+    page,
+  }) => {
+    await signIn(page);
+    await withSharingScene(browser, page, async ({ owned, shared, editor }) => {
+      await page.goto(`/projects/${owned.id}?tab=settings`);
+      await page.getByRole('button', { name: 'Transfer project…' }).click();
+      const dialog = page.getByRole('dialog', { name: `Transfer “${owned.name}”` });
+      await dialog.getByRole('radio', { name: new RegExp(editor.name) }).check();
+      await expect(dialog).toContainText(`${editor.name} becomes the owner`);
+      let results = await scan(page);
+      expect(describeViolations(results), describeViolations(results)).toBe('');
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+
+      await page.goto(`/projects/${shared.id}?tab=settings`);
+      await page.getByRole('button', { name: 'Leave project' }).click();
+      await expect(page.getByRole('dialog', { name: `Leave “${shared.name}”?` })).toBeVisible();
+      results = await scan(page);
       expect(describeViolations(results), describeViolations(results)).toBe('');
     });
   });
