@@ -107,4 +107,4 @@ export function recordStatements(pool: ReturnType<typeof createDatabase>) {
 
 /** What a statement text says about classification: any of its tables. */
 export const TOUCHES_CLASSIFICATION =
-  /data_class|thread_connector_use|project_data_class|thread_data_class|model_data_class|connector_data_class/;
+  /\b(data_class|thread_connector_use|project_data_class|thread_data_class|model_data_class|connector_data_class)\b/;
