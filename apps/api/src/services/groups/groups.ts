@@ -18,6 +18,7 @@ import { getDefaultOrganizationId } from '../organization.js';
 import { diffSettings } from '../settings-diff.js';
 import { auditRevocations, countGroupSharedProjects, onGroupDeleting } from './access-changes.js';
 import { type GroupActor, memberCounts } from './membership.js';
+import { isNameClash } from './name-clash.js';
 
 const NO_GROUP = 'Group not found';
 
@@ -26,22 +27,6 @@ function nameTaken(name: string) {
   return conflict(`A group named “${name}” already exists.`, {
     reason: GROUP_ERROR_REASONS.NAME_TAKEN,
   });
-}
-
-function isNameClash(error: unknown): boolean {
-  let cause = error;
-  while (cause && typeof cause === 'object') {
-    if (
-      'code' in cause &&
-      cause.code === '23505' &&
-      'constraint_name' in cause &&
-      cause.constraint_name === 'group_name_unique'
-    ) {
-      return true;
-    }
-    cause = 'cause' in cause ? cause.cause : undefined;
-  }
-  return false;
 }
 
 async function grantCounts(

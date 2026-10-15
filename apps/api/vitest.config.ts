@@ -68,6 +68,7 @@ export default defineConfig({
         // limits, the grants and the budget rule that adds groups to roles.
         'src/services/groups/membership.ts': { statements: 100, branches: 95, functions: 100 },
         'src/services/groups/groups.ts': { statements: 95, branches: 90, functions: 100 },
+        'src/services/groups/name-clash.ts': { statements: 100, branches: 100, functions: 100 },
         'src/services/groups/grants.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/groups/usage.ts': { statements: 95, branches: 90, functions: 100 },
         'src/services/groups/upgrade-guard.ts': { statements: 95, branches: 90, functions: 100 },
