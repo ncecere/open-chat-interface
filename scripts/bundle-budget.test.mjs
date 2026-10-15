@@ -84,12 +84,14 @@ describe('the initial JavaScript budget', () => {
     assert.match(result.stderr, /Load it lazily/);
   });
 
-  it('is the committed budget that the repository holds: v0.13.1 plus 8 kB', async () => {
+  it('is the committed budget that the repository holds: v0.13.1 plus 24 kB (raised from 8 kB in v0.14, with the reason in the file)', async () => {
     const { default: committed } = await import('../apps/web/scripts/bundle-budget.json', {
       with: { type: 'json' },
     });
     assert.equal(committed.baseline, 'v0.13.1');
-    assert.equal(committed.allowedGrowthGzipBytes, 8_192);
+    assert.equal(committed.allowedGrowthGzipBytes, 24_576);
+    // A raise has to say why, and has to keep the rule that translated strings are split by route.
+    assert.match(committed.description, /split the catalogs by route or area/);
     assert.ok(committed.baselineGzipBytes > 300_000);
   });
 });
