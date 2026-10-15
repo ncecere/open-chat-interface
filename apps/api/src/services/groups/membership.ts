@@ -17,7 +17,7 @@ import { conflict, forbidden, notFound } from '../../lib/errors.js';
 import { containsPattern } from '../../lib/like.js';
 import { recordAudit } from '../audit.js';
 import { getDefaultOrganizationId } from '../organization.js';
-import { onGroupMembersRemoved } from './access-changes.js';
+import { auditRevocations, onGroupMembersRemoved } from './access-changes.js';
 
 /** Where a lookup runs: the pool, or the transaction that must see its own writes. */
 export type GroupExecutor = Pick<typeof db, 'select'>;
@@ -512,9 +512,10 @@ export async function removeGroupMember(params: {
     await tx
       .delete(schema.groupMember)
       .where(and(eq(schema.groupMember.groupId, groupId), eq(schema.groupMember.userId, userId)));
-    await onGroupMembersRemoved(tx, groupId, [userId]);
-    return { group, email: row.email, role: row.role };
+    const revoked = await onGroupMembersRemoved(tx, groupId, [userId]);
+    return { group, email: row.email, role: row.role, revoked };
   });
+  await auditRevocations(result.revoked);
 
   await recordAudit({
     actorUserId: actor.id,

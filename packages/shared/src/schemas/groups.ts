@@ -15,8 +15,6 @@ export const MAX_MANAGERS_PER_GROUP = 20;
 export const MAX_GROUPS_PER_PERSON = 50;
 /** Email addresses in one "add members" request. */
 export const MAX_EMAILS_PER_ADD = 200;
-/** Shares on one project; a group counts one (project sharing, same limits file). */
-export const MAX_SHARES_PER_PROJECT = 50;
 /** Projects shared directly with one person (the sidebar lists at most this many). */
 export const MAX_INBOUND_SHARES_PER_PERSON = 100;
 /** Email lookups and share writes a person may make a minute (rate-limit buckets `person-lookup`, `project-share`). */

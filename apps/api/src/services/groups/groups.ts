@@ -16,7 +16,7 @@ import { containsPattern } from '../../lib/like.js';
 import { recordAudit } from '../audit.js';
 import { getDefaultOrganizationId } from '../organization.js';
 import { diffSettings } from '../settings-diff.js';
-import { countGroupSharedProjects, onGroupDeleting } from './access-changes.js';
+import { auditRevocations, countGroupSharedProjects, onGroupDeleting } from './access-changes.js';
 import { type GroupActor, memberCounts } from './membership.js';
 
 const NO_GROUP = 'Group not found';
@@ -317,9 +317,10 @@ export async function deleteGroup(actor: GroupActor, id: string): Promise<Delete
     );
     // Members, budget and model grants (and project shares) cascade.
     await tx.delete(schema.group).where(eq(schema.group.id, id));
-    await afterDelete?.();
+    const revoked = (await afterDelete?.()) ?? [];
     return {
       group,
+      revoked,
       removed: {
         members: members.length,
         policies: policies!.value,
@@ -329,6 +330,7 @@ export async function deleteGroup(actor: GroupActor, id: string): Promise<Delete
     };
   });
 
+  await auditRevocations(result.revoked);
   await recordAudit({
     actorUserId: actor.id,
     actorEmail: actor.email,
