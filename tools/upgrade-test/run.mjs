@@ -221,15 +221,8 @@ async function main() {
       ? `no usage events seeded: ${R.seed.usage.skipped}`
       : `seeded ${R.seed.usage.events} usage events (${R.seed.usage.tableSize}; ${R.seed.usage.fromReplies} for seeded replies, ${R.seed.usage.deletedAccounts} of deleted accounts, ${R.seed.usage.models} models, ${R.seed.usage.pending} unsettled) in ${(R.seed.usage.totalMs / 1000).toFixed(1)} s`,
   );
-  // Project sharing and groups (v0.14): people, shares and a group made while FROM serves.
   R.sharing = { steps: [] };
   let sharing;
-  try {
-    sharing = await seedSharing({ env, bases, origin, emails: people, log });
-  } catch (error) {
-    sharing = { skipped: `seeding failed: ${error.message}` };
-    R.sharing.steps.push({ name: 'sharing: seeding', ok: false, ms: 0, detail: error.message });
-  }
   // The release under test must look newer than FROM to the mixed-version guard.
   // A checkout not yet bumped has FROM's own version; then its replicas say they are the next minor.
   const [fromMajor, fromMinor] = fromTag.replace(/^v/, '').split('.').map(Number);
@@ -342,6 +335,15 @@ async function main() {
     );
 
     // --- FROM on the new schema --------------------------------------------
+    // Project sharing and groups (v0.14): people, shares and a group made while FROM
+    // serves, on the schema that has the tables (so after the pre-deploy migrations).
+    try {
+      sharing = await seedSharing({ env, bases, origin, emails: people, log });
+    } catch (error) {
+      sharing = { skipped: `seeding failed: ${error.message}` };
+      R.sharing.steps.push({ name: 'sharing: seeding', ok: false, ms: 0, detail: error.message });
+    }
+
     setPhase('smoke-old');
     R.smokeOld = await runSmoke({
       bases,

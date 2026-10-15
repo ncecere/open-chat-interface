@@ -11,6 +11,8 @@ PostgreSQL, with Drizzle. Schema in `packages/db/src/schema/`, migrations in
 | `chat.ts` | threads, messages, attachments, share links |
 | `provider.ts` | providers and the model catalogue |
 | `usage.ts` | usage events, quotas, audit log |
+| `groups.ts` | groups, members, group budgets and model access (0053) |
+| `project-shares.ts` | a project shared with a person or a group (0054) |
 | `lifecycle.ts` | retention, storage policies, jobs, saved views, reports |
 | `organization.ts` | the organisation and its settings |
 
@@ -242,6 +244,71 @@ answer for the life of the process and a false one for 30 seconds; a
 database that cannot answer reads as not ready. An index needs no flag when
 the query is the same with or without it: the planner uses it once it is
 valid.
+
+## Project sharing
+
+`project_share` (migration 0054, v0.14) names a project, one subject (a person
+or a group, exactly one column, checked), and a permission (`viewer` or
+`editor`). Ownership stays `project.user_id`. Every foreign key cascades (a
+`created_by` is `SET NULL`): a previous-release replica deleting a project or an
+account is never blocked by rows it cannot see, and deleting a project removes
+its shares.
+
+**One function decides.** `projectAccess(executor, projectId, userId)`
+(`services/project-sharing/access.ts`) returns `owner | editor | viewer | null`:
+the owner, else the highest permission among the shares naming the person or any
+group in `group_member` for them. `projectReadableBy(projectId, userId)` and
+`projectEditableBy` are its raw-SQL twins (an `EXISTS`), used where a query said
+`a.user_id = <person>`; `project-access.live.test.ts` compares the three on
+generated data. `null` is answered 404 (existence never leaks), too little
+permission with access 403. A new query that touches project data must be added
+to `__tests__/unit/project-data-paths.unit.test.ts` with its class (A: access
+aware, O: owner only on purpose, S: system, U: unchanged) and a reason, which the
+test checks; the matrix in `project-access-matrix.live.test.ts` has a row for
+every route that takes a project.
+
+**Invariants** (the tests enforce them).
+
+- **I-1** Every finished project file belongs to the project's owner or to
+  someone who currently has editor access. Unfinished uploads stay with their
+  uploader until they complete.
+- **I-2** A person's conversation points at a project only if they can read it.
+  Reads re-check anyway, so a missed repair leaks nothing.
+- **I-3** No answer about shares or group membership is cached across requests.
+
+**Ending access.** Every event that ends access (a share removed or downgraded,
+leaving, a transfer, a group deleted or a member removed) calls
+`reconcileProject(tx, projectId)` in the same transaction, with the project row
+locked first. It clears `thread.project_id` for people with no access (raw SQL,
+so `updated_at` does not move and recents do not reorder) and moves finished
+files of anyone who is no longer an editor to the owner, setting both
+`storage_usage` rows to the authoritative totals of their files, locked in user-id
+order. It never refuses for lack of allowance (as a fork never does, see
+[Files in forks and edits](#files-in-forks-and-edits)). The job
+`projects.reconcile-access` (every minute) repeats it for leftovers. Code that
+removes group members or deletes groups must call `projectsTouchedBy` /
+`projectsSharedWithGroup` and `reconcileProject` too (or rely on the job). Deleting
+an account hands the files its person added to other people's projects to their
+owners first (`handOverFilesOf`); the cascade on `attachment.user_id` would
+otherwise delete another person's content.
+
+**Lock order**, extending the one in `services/projects.ts`: the acting person's
+`user` row (`KEY SHARE`), the project row (`FOR UPDATE`), thread rows (by id),
+then `storage_usage` rows by user id. Transfer locks the two user rows in id
+order, then the project. Group changes: the group row, then user rows by id.
+Counting a limit (50 shares per project, 100 direct inbound shares per person)
+happens under the project row lock, and the target person's row is locked
+`FOR NO KEY UPDATE` for the inbound count, so concurrent shares cannot both pass.
+
+**Legal hold.** Deleting a project or a project file is refused when the actor
+or the uploader of any affected file is on hold. Handing files to the owner is
+not a deletion and is allowed. `project_share` deletions are configuration
+(`legal-hold-paths.unit.test.ts`).
+
+**Rolling upgrade.** Creating a share (and a transfer, and group grants) is
+refused with 409 while a live replica heartbeat reports an older version
+(`services/project-sharing/upgrade-guard.ts`); see
+[Upgrading to v0.14](../OPERATIONS.md#upgrading-to-v014).
 
 ## Usage rollups
 

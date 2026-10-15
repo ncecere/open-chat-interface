@@ -446,7 +446,7 @@ export async function checkNewRelease(ctx, log) {
     );
     const sidebar = await viewer.request('viewer sidebar', 'GET', '/api/projects/sidebar');
     const entry = sidebar.json.shared.find((p) => p.id === ctx.project);
-    if (!entry || !entry.recentThreads.some((t) => t.id === ctx.viewerThread))
+    if (!entry?.recentThreads.some((t) => t.id === ctx.viewerThread))
       throw new Error('the recipient’s own conversation is not under the shared project');
     if (entry.recentThreads.some((t) => t.id === ctx.memberThread))
       throw new Error('another person’s conversation is listed');

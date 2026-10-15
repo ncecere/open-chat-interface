@@ -396,15 +396,22 @@ Generated from 44 route files.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/projects` | The signed-in person's projects by name, with conversation and file counts. |
+| GET | `/api/projects` | The signed-in person's own projects by name, with conversation and file counts, and `shared` (v0.14): the projects shared with them. |
 | POST | `/api/projects` | Creates a project, up to the per-person limit. |
-| GET | `/api/projects/:id` | One of the person's projects; 404 for anyone else's. |
-| PATCH | `/api/projects/:id` | Renames a project or changes its instructions; only the sent fields change. |
-| DELETE | `/api/projects/:id` | Conversations are detached and kept; files are deleted and their storage released; 409 while the owner is on legal hold. |
-| GET | `/api/projects/:id/files` | The project's files, oldest first. |
+| GET | `/api/projects/:id` | A project the person owns or can read, with what they may do (`access`); 404 when they have no access. |
+| PATCH | `/api/projects/:id` | Renames a project (owner) or changes its instructions (owner or editor); only the sent fields change. 403 with access but too little permission. |
+| DELETE | `/api/projects/:id` | Owner only. Conversations are detached and kept; files are deleted and their storage released; 409 while the owner, or anyone who added a file, is on legal hold. |
+| GET | `/api/projects/:id/files` | The project's files, oldest first, for anyone who can read it; each says who added it. |
 | POST | `/api/projects/:id/files` | Uploads through the same validation and storage path as chat attachments, so it also needs attachments to be allowed for the role and the instance, shares the upload rate limit, and counts against the storage allowance. |
-| DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright, releasing its storage at once; 409 while the owner is on legal hold. |
-| GET | `/api/projects/sidebar` | The sidebar's project tree: each project with its conversation count and up to five newest unpinned conversations. |
+| DELETE | `/api/projects/:id/files/:fileId` | Removes the file outright, releasing its storage at once. Owner or editor, any file; 409 while the actor or the person who added it is on legal hold. |
+| GET | `/api/projects/:id/access` | What the caller may do with the project and how widely it is shared, as counts (v0.14). |
+| GET | `/api/projects/:id/shares` | The people and groups the project is shared with. Owner only. |
+| POST | `/api/projects/:id/shares` | Shares with a person (exact email) or a group the owner belongs to, as viewer or editor. Owner only; 409 while an older replica serves; 429 past 30 a minute. |
+| PATCH | `/api/projects/:id/shares/:shareId` | Changes a share's permission. Owner only. |
+| DELETE | `/api/projects/:id/shares/:shareId` | Removes a share. Owner only; conversations of people who lose access leave the project, their files go to the owner. |
+| POST | `/api/projects/:id/transfer` | Hands the project to a direct editor. Owner only. |
+| POST | `/api/projects/:id/leave` | Gives up the caller's own direct share. 409 for the owner and for access only through a group. |
+| GET | `/api/projects/sidebar` | The sidebar's project tree: each project with its conversation count and up to five newest unpinned conversations, and `shared` (v0.14): the same for projects shared with the person (their own conversations only). |
 
 ## `routes/share-links.ts`
 

@@ -74,7 +74,7 @@ per person) -> 429 `RATE_LIMITED` with `Retry-After`.
   storage, role limits and rate limit; the 20-file cap is per project.
 - `DELETE /api/projects/:id/files/:fileId` -> `{ ok: true }`. Owner or editor removes any file. 409 `legal_hold`
   when the actor or the uploader is on hold.
-- `GET /api/attachments/:id/content`: own file, or a live project file the caller can read (viewer or better).
+- `GET /api/attachments/:id/content`: an own message file, or a live file of a project the caller can read (viewer or better), whoever added it. Someone other than the owner also needs the role's `projects` switch (403) and the attachment switches.
 - `POST /api/threads {projectId}` and `PATCH /api/threads/:id {projectId}` accept a project the caller can read at
   any level; the thread stays the caller's. 404 without access.
 
@@ -102,6 +102,21 @@ per person) -> 429 `RATE_LIMITED` with `Retry-After`.
   The target must hold a direct editor share; the old owner becomes a direct editor.
 - `POST /api/projects/:id/leave` (editor or viewer with a direct share) -> `{ ok, detachedThreads, movedFiles }`.
   409 `leave_via_group` when access is only through a group; 409 for the owner.
+
+### Account-deletion dialogs
+
+- `GET /api/admin/users/:id/sharing-impact` (administrator; auditor may read) and
+  `GET /api/me/sharing-impact` -> `AccountSharingImpact`:
+  `{ sharedProjects, otherConversations, othersFiles, filesHandedToOwners }`. Counts
+  for the delete dialogs: shared projects the account owns, other people's
+  conversations in them (kept, they leave the project), files other people added to
+  them (deleted with them), and files the account added to others' projects (kept,
+  handed to those owners).
+
+### Account-scoped lists in `/api/attachments`
+
+`GET /api/attachments` lists the caller's own uploads only; a project's name is
+shown only while the caller can still read the project.
 
 ### Not in this note
 
