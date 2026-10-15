@@ -52,9 +52,26 @@ The workflow does not create GitHub Releases.
      be able to finish them.
    - `pnpm lint:migrations` and the rolling-upgrade test (which runs
      `migrate --post` and waits for background migrations) pass.
-6. Merge the release-preparation pull request only after GitHub Actions CI
+6. **A minor release only: run the accessibility audit** against a seeded instance built from
+   the release candidate (it changes the instance's settings and adds accounts, so use a
+   disposable one; [how](dev/accessibility-audit.md)), then regenerate and commit the report:
+
+   ```bash
+   pnpm a11y:audit --base-url http://127.0.0.1:4173   # E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD set
+   pnpm a11y:report --version X.Y.Z --final           # writes docs/accessibility/acr.md
+   ```
+
+   Commit `docs/accessibility/evidence.json` and `acr.md`. Update the report's version and date
+   (the command does), and any row that changed: read the diff of `acr.md`, add or refresh the
+   inspections in `docs/accessibility/inspections.md` that the changed code makes stale, and
+   record each new defect in `docs/accessibility/findings.md` with its criterion, route,
+   severity and a fix. The report is linked from the docs
+   ([`docs/accessibility/acr.md`](accessibility/acr.md)). A test fails when the report's version
+   is more than one minor release behind the application's. A report still headed DRAFT is not
+   releasable. Patch releases do not need a new audit.
+7. Merge the release-preparation pull request only after GitHub Actions CI
    passes. Review audit findings and any skipped live tests.
-7. Configure branch protection or a ruleset requiring review and CI on `main`,
+8. Configure branch protection or a ruleset requiring review and CI on `main`,
    and restrict creation, updates, and deletion of `v*` tags to release
    maintainers where your GitHub plan supports it. These are recommendations,
    not confirmation that protection is configured; verify the settings before

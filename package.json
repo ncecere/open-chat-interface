@@ -43,7 +43,9 @@
     "db:seed:demo": "pnpm --filter @oci/db seed:demo",
     "docs:shots": "pnpm --filter @oci/web docs:shots",
     "docs:api": "node scripts/generate-api-reference.mjs",
-    "audit:structure": "node scripts/audit-structure.mjs"
+    "audit:structure": "node scripts/audit-structure.mjs",
+    "a11y:audit": "node scripts/a11y-audit/cli.mjs",
+    "a11y:report": "node scripts/a11y-audit/report.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
