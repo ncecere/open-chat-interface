@@ -30,6 +30,20 @@ background job (`conversation.trash`, `conversation.delete`,
 others). Each names what was deleted, whose it was and why, never its
 content; see [deletion events](compliance.md#deletion-events).
 
+**Data classification** (v0.14) — an administrator's changes to the
+[data classes](data-classification.md#the-audit-log-and-metrics)
+(`data_class.create`, `.update`, `.retire`, `.delete`, `model.data_classes.update`,
+`connector.data_classes.update`, `settings.classification.update`), who labelled
+a project (`project.data_classes.update`) and a person's own labels
+(`thread.data_class.add`, `.remove`), and what the check decided:
+`classification.block` when something was refused and `classification.warn`
+when Warn let it through. They carry ids and the class names as they were at the
+time, the place (`point`), the kind of destination, the model's slug and the
+tool id, and never a message, a title, a tool's arguments or its results. The
+administrator's changes are kept regardless of the audit retention period; the
+rest follow it. Searching for `classification.warn` shows what Block would have
+refused, which is how to decide when to switch.
+
 Only outcomes are recorded. No credentials, no tokens, no request bodies.
 
 ### Searching it

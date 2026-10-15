@@ -140,6 +140,12 @@ switch alone decides. Governance follows the features projects reuse:
 - **Retention** applies to conversations, not projects: an inactive
   conversation in a project is trashed as usual, and the project stays.
   Deleting a project detaches its conversations; it never deletes them.
+- **Data classes** (v0.14): an owner can label a project with
+  [data classes](data-classification.md), and so can an administrator (from the
+  person's page; that label is locked). Every conversation in the project
+  carries them. Changing a project's labels *is* written to the audit log
+  (`project.data_classes.update`, by owner or administrator), unlike the rest of
+  a project, because it is a statement about what data is handled where.
 - **Audit**: like conversations and share links, creating, changing and
   deleting projects is personal content and is not written to the audit log.
 - **Export** includes each project's name, instructions and files.
@@ -481,7 +487,11 @@ entries are kept. Each field shows
   and security changes are kept regardless: account creation, edits and
   deletion, role changes (including bulk role, ban and unban), provider and
   single sign-on changes, sign-in policy changes, webhook endpoint changes,
-  backup and compliance export settings changes, and legal holds.
+  backup and compliance export settings changes, and legal holds. So are
+  the [data classification](data-classification.md) changes an administrator
+  makes (classes, approvals of models, what connectors carry, the mode and the
+  services' approvals); a person's own labels and the refusals and warnings
+  follow the normal period.
 
 People on [legal hold](compliance.md#legal-hold) are skipped by conversation,
 trash, audit and memory retention until the hold is lifted.

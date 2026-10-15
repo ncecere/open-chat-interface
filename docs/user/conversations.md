@@ -181,6 +181,10 @@ This is a practical way to work: start somewhere fast and cheap, and move to a
 more capable model at the point the question turns difficult. Each reply records
 which model produced it, so the conversation stays readable afterwards.
 
+If your institution uses [data classes](#data-classes), the model list may show
+some models as **Not approved for** a class your conversation carries. They stay
+in the list, greyed out, and cannot be chosen; pick one that is approved.
+
 ## Reconnecting to a reply
 
 A live reply can usually reconnect, but its replay cache has a size limit and
@@ -258,6 +262,49 @@ removed from the conversation, its text goes back into the message box, and
 the page says **Your message could not be saved, so it is back in the message
 box. Send it again.** Anything you typed while the page was checking is kept,
 after the returned text.
+
+## Data classes
+
+If your institution has set up data classification, a conversation can carry
+**data classes**: names such as "Student records" for the kind of data it holds.
+They appear as chips under the top of the conversation, each with the reason:
+
+- **from the project**: the conversation is in a project that is labelled with
+  the class (set by the project's owner, or locked by an administrator).
+- **from the SIS connector**: the conversation has used that
+  [connector](connectors.md), whose results carry the class. Once used, always:
+  the conversation holds that data from then on.
+- **added by you**: you labelled it with **Add label**. Only these have a
+  remove button (an **×**).
+- **kept from its earlier project** or **kept from the removed … connector**: the
+  class came with the conversation when it was moved out of a project, or the
+  project or connector was deleted. A label is never lost as a side effect, and
+  forking a conversation copies it, so these cannot be removed here.
+
+Your administrator approves each model for the classes it may receive. The model
+picker shows a model that is not approved as **Not approved for *class***, in
+words, and you cannot choose it (it can still be reached with the arrow keys,
+and a screen reader reads the reason). The box above your message says so if the
+model you are on is not approved, before you send anything.
+
+If a message is refused anyway (a label was added in another tab, say), it is
+**not sent**, its text goes back into the message box, and the page names the
+class that is missing and lists the models that are approved, as buttons.
+Choose one and send the same text again.
+
+When your institution is trying the feature out (**Warn** mode) nothing is
+refused: the message is sent, a note above the reply says the conversation
+carries a class the model is not approved for, and your administrator can see it.
+A tool that runs, or a web search that is made, in Warn mode is recorded for the
+administrator but does not add a note to the reply; if a tool brings in a class,
+the new chip appears when the reply finishes.
+
+A label does not recall a message already sent: if you label a conversation
+after it went to a model that is not approved, the next message is refused, the
+earlier one is not taken back. Memory notes are never written from a
+conversation that carries a class, and its share links stop working while it is
+labelled (see [Sharing](sharing.md#conversations-with-data-classes)). Labels
+are not part of a downloaded export.
 
 ## Long conversations
 

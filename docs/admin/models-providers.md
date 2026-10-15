@@ -50,6 +50,16 @@ anything.
   cannot read one and get a reply that never mentions it.
 - **Visible to roles** — which roles see it. This is how an expensive model is
   kept to the people who need it.
+- **Approved for** (v0.14) — the [data classes](data-classification.md) this
+  model may receive. A new model is approved for **nothing**: with the words
+  "No class: this model cannot receive labelled content". That is a decision,
+  not an omission, so it is stated in the form. An unlabelled conversation is
+  not affected. Changes are saved with the model and recorded as
+  `model.data_classes.update`. It is a statement about the provider behind the
+  model that OCI cannot verify: approve a model only for classes your agreement
+  with its provider covers. The choices are the classes defined under **Data
+  classes**; a retired class stays listed while it is chosen, because it still
+  counts.
 - **Context window** — the tokens the model accepts, input and output together,
   used to budget provider input. Set it in **Edit model** (whole tokens, up to
   10,000,000; thousands separators are fine). Blank means unknown, and OCI then
