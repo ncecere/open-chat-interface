@@ -2,17 +2,17 @@ import { type MemoryEntry, type MemoryState, normalizeMemoryContent } from '@oci
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Brain } from 'lucide-react';
 import { type FormEvent, useId, useLayoutEffect, useRef, useState } from 'react';
-import { LoadError } from '~/components/admin/admin-ui';
 import { useReportUnsaved } from '~/components/admin/unsaved-changes';
+import { LoadError } from '~/components/settings/load-error';
 import { Button } from '~/components/ui/button';
 import { Textarea } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { Switch } from '~/components/ui/switch';
 import { api, apiErrorMessage } from '~/lib/api-client';
 import { keepFocusWhenRemoved } from '~/lib/focus-return';
+import { formatRelativeTime, useT } from '~/lib/i18n';
 import { fetchMemory, MEMORY_QUERY_KEY } from '~/lib/memory';
 import { useReadOnlyLock } from '~/lib/read-only';
-import { formatRelativeTime } from '~/lib/utils';
 
 function useMemoryMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
   const queryClient = useQueryClient();
@@ -30,11 +30,12 @@ function useMemoryMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
  * limit is heard with the field, not only seen (#310).
  */
 function Counted({ id, value, max }: { id: string; value: string; max: number }) {
+  const t = useT();
   const length = normalizeMemoryContent(value).length;
   return (
     <span id={id} className={length > max ? 'text-[var(--danger)]' : 'text-[var(--text-muted)]'}>
-      {length}/{max}
-      <span className="sr-only"> characters</span>
+      {t('settings.memory.counter', { count: length, max })}
+      <span className="sr-only"> {t('settings.memory.characters')}</span>
     </span>
   );
 }
@@ -44,10 +45,11 @@ function Counted({ id, value, max }: { id: string; value: string; max: number })
  * disabled Save or Add, rather than by a red counter alone (#310).
  */
 function OverLimit({ id, length, max }: { id: string; length: number; max: number }) {
+  const t = useT();
   if (length <= max) return null;
   return (
     <p id={id} role="alert" className="text-sm text-[var(--danger)]">
-      A memory can be at most {max} characters; this one has {length}. Shorten it to save it.
+      {t('settings.memory.overLimit', { max, length })}
     </p>
   );
 }
@@ -69,6 +71,7 @@ function MemoryRow({
   canEdit: boolean;
   maxChars: number;
 }) {
+  const t = useT();
   // Every change to a memory is refused while read-only (#353).
   const lock = useReadOnlyLock();
   const [editing, setEditing] = useState(false);
@@ -142,7 +145,7 @@ function MemoryRow({
           }}
         >
           <label htmlFor={editId} className="sr-only">
-            Edit memory
+            {t('settings.memory.editTextLabel')}
           </label>
           <Textarea
             ref={editorRef}
@@ -161,7 +164,7 @@ function MemoryRow({
             <Counted id={`${editId}-count`} value={draft} max={maxChars} />
             <span className="flex-1" />
             <Button type="button" variant="ghost" size="sm" onClick={cancelEdit}>
-              Cancel
+              {t('settings.memory.cancel')}
             </Button>
             <Button
               type="submit"
@@ -172,7 +175,7 @@ function MemoryRow({
               aria-describedby={length > maxChars ? `${editId}-error` : undefined}
             >
               {save.isPending && <Spinner />}
-              Save
+              {t('settings.memory.save')}
             </Button>
           </div>
           <OverLimit id={`${editId}-error`} length={length} max={maxChars} />
@@ -184,8 +187,12 @@ function MemoryRow({
               {entry.content}
             </p>
             <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              {entry.source === 'tool' ? 'Saved by a model' : 'Added by you'} · updated{' '}
-              {formatRelativeTime(entry.updatedAt)}
+              {t(
+                entry.source === 'tool'
+                  ? 'settings.memory.savedByModel'
+                  : 'settings.memory.addedByYou',
+                { when: formatRelativeTime(entry.updatedAt) },
+              )}
             </p>
           </div>
           <div className="flex shrink-0 gap-1">
@@ -194,26 +201,26 @@ function MemoryRow({
                 ref={editRef}
                 variant="ghost"
                 size="sm"
-                aria-label={`Edit memory: ${entry.content}`}
+                aria-label={t('settings.memory.editLabel', { content: entry.content })}
                 locked={lock.title}
                 onClick={() => {
                   setDraft(entry.content);
                   setEditing(true);
                 }}
               >
-                Edit
+                {t('settings.memory.edit')}
               </Button>
             )}
             {/* Asks first, as Delete all does: it cannot be undone (#101). */}
             {confirmingDelete ? (
               <>
                 <span className="self-center text-xs text-[var(--text-secondary)]">
-                  Delete this memory?
+                  {t('settings.memory.deletePrompt')}
                 </span>
                 <Button
                   variant="danger"
                   size="sm"
-                  aria-label={`Confirm: delete memory: ${entry.content}`}
+                  aria-label={t('settings.memory.deleteConfirmLabel', { content: entry.content })}
                   locked={lock.title}
                   disabled={remove.isPending}
                   onClick={() => {
@@ -223,7 +230,7 @@ function MemoryRow({
                   }}
                 >
                   {remove.isPending && <Spinner />}
-                  Delete
+                  {t('settings.memory.delete')}
                 </Button>
                 <Button
                   ref={cancelRef}
@@ -231,7 +238,7 @@ function MemoryRow({
                   size="sm"
                   onClick={() => setConfirmingDelete(false)}
                 >
-                  Cancel
+                  {t('settings.memory.cancel')}
                 </Button>
               </>
             ) : (
@@ -239,11 +246,11 @@ function MemoryRow({
                 ref={deleteRef}
                 variant="ghost"
                 size="sm"
-                aria-label={`Delete memory: ${entry.content}`}
+                aria-label={t('settings.memory.deleteLabel', { content: entry.content })}
                 locked={lock.title}
                 onClick={() => setConfirmingDelete(true)}
               >
-                Delete
+                {t('settings.memory.delete')}
               </Button>
             )}
           </div>
@@ -251,7 +258,7 @@ function MemoryRow({
       )}
       {error && (
         <p role="alert" className="text-sm text-[var(--danger)]">
-          {apiErrorMessage(error, 'The memory could not be changed. Try again.')}
+          {apiErrorMessage(error, t('settings.memory.saveChangeFailed'))}
         </p>
       )}
     </li>
@@ -259,6 +266,7 @@ function MemoryRow({
 }
 
 function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) {
+  const t = useT();
   const [draft, setDraft] = useState('');
   const lock = useReadOnlyLock();
   const add = useMemoryMutation((content: string) => api.post('/memory', { content }));
@@ -276,7 +284,7 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-2">
       <label htmlFor="memory-new" className="text-sm font-medium">
-        Add a memory
+        {t('settings.memory.addLabel')}
       </label>
       <Textarea
         id="memory-new"
@@ -284,7 +292,7 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
         {...countedFieldProps('memory-new', over)}
         value={draft}
         disabled={full}
-        placeholder="For example: I teach first-year chemistry and prefer short answers."
+        placeholder={t('settings.memory.placeholder')}
         onChange={(event) => {
           setDraft(event.target.value);
           add.reset();
@@ -303,13 +311,13 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
           aria-describedby={over ? 'memory-new-error' : full ? 'memory-full' : undefined}
         >
           {add.isPending && <Spinner />}
-          Add
+          {t('settings.memory.add')}
         </Button>
       </div>
       <OverLimit id="memory-new-error" length={length} max={maxChars} />
       {add.error && (
         <p role="alert" className="text-sm text-[var(--danger)]">
-          {apiErrorMessage(add.error, 'The memory could not be saved. Try again.')}
+          {apiErrorMessage(add.error, t('settings.memory.saveAddFailed'))}
         </p>
       )}
     </form>
@@ -317,6 +325,7 @@ function AddMemoryForm({ maxChars, full }: { maxChars: number; full: boolean }) 
 }
 
 function DeleteAll({ count }: { count: number }) {
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
   const lock = useReadOnlyLock();
   const removeAll = useMemoryMutation(() => api.delete('/memory'));
@@ -344,8 +353,7 @@ function DeleteAll({ count }: { count: number }) {
         <>
           <p className="text-sm text-[var(--text-secondary)]">
             {/* Not "Delete all 1 memory?" (#254). */}
-            {count === 1 ? 'Delete your one memory?' : `Delete all ${count} memories?`} This cannot
-            be undone.
+            {t('settings.memory.deleteAllPrompt', { count })}
           </p>
           <Button
             variant="danger"
@@ -361,10 +369,10 @@ function DeleteAll({ count }: { count: number }) {
             }}
           >
             {removeAll.isPending && <Spinner />}
-            Delete all memories
+            {t('settings.memory.deleteAllConfirm')}
           </Button>
           <Button ref={cancelRef} variant="ghost" size="sm" onClick={() => setConfirming(false)}>
-            Cancel
+            {t('settings.memory.cancel')}
           </Button>
         </>
       ) : (
@@ -375,12 +383,12 @@ function DeleteAll({ count }: { count: number }) {
           locked={lock.title}
           onClick={() => setConfirming(true)}
         >
-          Delete all…
+          {t('settings.memory.deleteAllOpen')}
         </Button>
       )}
       {removeAll.error && (
         <p role="alert" className="w-full text-sm text-[var(--danger)]">
-          {apiErrorMessage(removeAll.error, 'Your memories could not be deleted. Try again.')}
+          {apiErrorMessage(removeAll.error, t('settings.memory.deleteAllFailed'))}
         </p>
       )}
     </div>
@@ -388,6 +396,7 @@ function DeleteAll({ count }: { count: number }) {
 }
 
 function MemoryContent({ state }: { state: MemoryState }) {
+  const t = useT();
   const lock = useReadOnlyLock();
   const toggle = useMemoryMutation((enabled: boolean) =>
     api.put<MemoryState>('/memory/settings', { enabled }),
@@ -399,19 +408,17 @@ function MemoryContent({ state }: { state: MemoryState }) {
     <>
       {!available && (
         <p role="note" className="mt-4 text-sm text-[var(--warning)]">
-          Memory is not available to you: your administrator has not switched it on for your role or
-          for this instance. You can still review, export and delete what is stored.
+          {t('settings.memory.unavailable')}
         </p>
       )}
 
       <div className="mt-6 flex items-start justify-between gap-6 rounded-xl border border-[var(--border-subtle)] px-4 py-3">
         <div>
           <label htmlFor="memory-enabled" className="text-sm font-medium">
-            Use memory
+            {t('settings.memory.use')}
           </label>
           <p id="memory-enabled-description" className="mt-1 text-sm text-[var(--text-muted)]">
-            When on, your memories are included in your conversations, and models that use tools can
-            save and remove them. Temporary chats never read or save memories.
+            {t('settings.memory.useDescription')}
           </p>
         </div>
         <Switch
@@ -427,7 +434,7 @@ function MemoryContent({ state }: { state: MemoryState }) {
       </div>
       {toggle.error && (
         <p role="alert" className="mt-2 text-sm text-[var(--danger)]">
-          {apiErrorMessage(toggle.error, 'The setting could not be saved. Try again.')}
+          {apiErrorMessage(toggle.error, t('settings.memory.toggleFailed'))}
         </p>
       )}
 
@@ -436,7 +443,7 @@ function MemoryContent({ state }: { state: MemoryState }) {
           <AddMemoryForm maxChars={limits.maxChars} full={full} />
           {full && (
             <p id="memory-full" className="mt-2 text-sm text-[var(--text-muted)]">
-              You have reached the limit of {limits.maxEntries} memories. Delete some to add more.
+              {t('settings.memory.full', { max: limits.maxEntries })}
             </p>
           )}
         </div>
@@ -444,15 +451,15 @@ function MemoryContent({ state }: { state: MemoryState }) {
 
       <section className="mt-8" aria-labelledby="memory-list-title">
         <h2 id="memory-list-title" className="text-lg font-semibold">
-          Saved memories{' '}
+          {t('settings.memory.listTitle')}{' '}
           <span className="text-sm font-normal text-[var(--text-muted)]">
-            {entries.length} of {limits.maxEntries}
+            {t('settings.memory.listCount', { count: entries.length, max: limits.maxEntries })}
           </span>
         </h2>
         {entries.length === 0 ? (
           <div className="mt-6 flex flex-col items-center gap-3 text-center">
             <Brain className="size-8 text-[var(--text-muted)]" aria-hidden="true" />
-            <p className="text-sm text-[var(--text-muted)]">Nothing is remembered about you.</p>
+            <p className="text-sm text-[var(--text-muted)]">{t('settings.memory.nothing')}</p>
           </div>
         ) : (
           <ul className="mt-2 flex flex-col">
@@ -477,24 +484,23 @@ function MemoryContent({ state }: { state: MemoryState }) {
  * them, newest first, to add, edit and delete.
  */
 export function SettingsMemoryPage() {
+  const t = useT();
   const memory = useQuery({ queryKey: MEMORY_QUERY_KEY, queryFn: fetchMemory });
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Memory</h1>
+      <h1 className="text-2xl font-bold">{t('settings.memory.title')}</h1>
       <p className="mt-1 max-w-2xl text-sm text-[var(--text-muted)]">
-        Short notes about you that are included in your conversations, newest first, so you do not
-        have to repeat yourself. Every note is listed here; they are included in your data export,
-        and your administrator may delete notes that have not changed for a while.
+        {t('settings.memory.description')}
       </p>
 
       {memory.isLoading ? (
-        <div className="py-16" role="status" aria-label="Loading memory">
+        <div className="py-16" role="status" aria-label={t('settings.memory.loading')}>
           <Spinner className="mx-auto size-6" />
         </div>
       ) : memory.isError || !memory.data ? (
         // Announced, with Try again, as every list's load error (#245).
-        <LoadError title="Memory could not be loaded." query={memory} className="mt-8" />
+        <LoadError title={t('settings.memory.loadError')} query={memory} className="mt-8" />
       ) : (
         <MemoryContent state={memory.data} />
       )}
