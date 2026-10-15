@@ -11,6 +11,8 @@ import {
 import { FOCUS_RING } from '~/components/ui/focus-ring';
 import { apiErrorMessage } from '~/lib/api-client';
 import { reasonTexts, whyNotRemovable } from '~/lib/classification';
+import { formatList, useT } from '~/lib/i18n';
+import { isolate } from '~/lib/projects-text';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
@@ -43,6 +45,7 @@ export function DataClassLabels({
   error?: unknown;
   className?: string;
 }) {
+  const t = useT();
   const noteId = useId();
   // Labelling changes the conversation: off while read-only, with the reason (#331).
   const lock = useReadOnlyLock();
@@ -54,7 +57,7 @@ export function DataClassLabels({
     <div className={cn('flex flex-col gap-1.5', className)}>
       <div className="flex flex-wrap items-center gap-2">
         <ul
-          aria-label="Data classes"
+          aria-label={t('classify.labels.listLabel')}
           className="m-0 flex list-none flex-wrap items-center gap-2 p-0"
         >
           {classes.map((entry) => {
@@ -66,15 +69,15 @@ export function DataClassLabels({
                 className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-strong)] bg-[var(--bg-control)] py-0.5 ps-2.5 pe-2 text-xs"
               >
                 <ShieldAlert className="size-3.5 shrink-0 text-[var(--text-muted)]" aria-hidden />
-                <span className="font-semibold text-[var(--text-primary)]">{entry.name}</span>
+                <bdi className="font-semibold text-[var(--text-primary)]">{entry.name}</bdi>
                 <span className="text-[var(--text-muted)]">
                   <span aria-hidden="true">· </span>
-                  {reasonTexts(entry, scope).join(', ')}
+                  {formatList(reasonTexts(entry, scope))}
                 </span>
                 {canRemove ? (
                   <button
                     type="button"
-                    aria-label={`Remove the ${entry.name} label`}
+                    aria-label={t('classify.labels.remove', { name: isolate(entry.name) })}
                     aria-disabled={lock.title ? true : undefined}
                     title={lock.title}
                     disabled={pending && !lock.title}
@@ -103,16 +106,16 @@ export function DataClassLabels({
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label="Add label"
+                aria-label={t('classify.labels.add')}
                 locked={lock.title}
                 disabled={pending}
                 className="h-7 gap-1 rounded-full px-2.5 text-xs"
               >
                 <Plus aria-hidden />
-                Add label
+                {t('classify.labels.add')}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" aria-label="Data classes you can add">
+            <DropdownMenuContent align="start" aria-label={t('classify.labels.addMenuLabel')}>
               {addable.map((entry) => (
                 <DropdownMenuItem key={entry.id} onSelect={() => onAdd(entry.id)}>
                   {entry.name}
@@ -126,13 +129,13 @@ export function DataClassLabels({
       {fixed.length > 0 && (
         <p id={noteId} className="m-0 text-xs text-[var(--text-muted)]">
           {scope === 'project'
-            ? 'Labels an administrator set stay until an administrator removes them.'
-            : 'Labels that come from the project or a connector cannot be removed here; change the project’s labels to remove those.'}
+            ? t('classify.labels.fixedProject')
+            : t('classify.labels.fixedThread')}
         </p>
       )}
       {error ? (
         <p role="alert" className="m-0 text-xs text-[var(--danger-on-tint)]">
-          {apiErrorMessage(error, 'The label could not be changed.')}
+          {apiErrorMessage(error, t('classify.labels.changeFailed'))}
         </p>
       ) : null}
     </div>

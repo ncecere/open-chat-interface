@@ -10,9 +10,10 @@ import { useCurrentUser } from '~/hooks/use-current-user';
 import { useProjectsOverview } from '~/hooks/use-projects';
 import { apiErrorMessage } from '~/lib/api-client';
 import { usePageTitle } from '~/lib/document-title';
+import { useT } from '~/lib/i18n';
 import { accessLabel, accessOf } from '~/lib/project-access';
+import { isolate } from '~/lib/projects-text';
 import { useReadOnlyLock } from '~/lib/read-only';
-import { plural } from '~/lib/utils';
 
 /**
  * Every project the person can open (v0.14): the ones they own, and below
@@ -21,24 +22,25 @@ import { plural } from '~/lib/utils';
  * whole list, at any length.
  */
 export function ProjectsPage() {
+  const t = useT();
   const { data: me } = useCurrentUser();
   const overview = useProjectsOverview(Boolean(me?.features.projects));
   const lock = useReadOnlyLock();
   const [creating, setCreating] = useState(false);
   const unavailable = Boolean(me) && !me?.features.projects;
-  usePageTitle(unavailable ? null : 'Projects');
+  usePageTitle(unavailable ? null : t('projects.list.title'));
 
   if (unavailable) {
     return (
       <UnavailableState
-        title="Projects unavailable"
+        title={t('projects.common.unavailableTitle')}
         actions={
           <Button asChild>
-            <Link to="/">New chat</Link>
+            <Link to="/">{t('projects.common.newChat')}</Link>
           </Button>
         }
       >
-        Projects are not available for your role.
+        {t('projects.common.unavailableBody')}
       </UnavailableState>
     );
   }
@@ -46,7 +48,7 @@ export function ProjectsPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-4 md:pt-6">
       <header className="flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-bold leading-tight">Projects</h1>
+        <h1 className="text-2xl font-bold leading-tight">{t('projects.list.title')}</h1>
         <Button
           type="button"
           variant="primary"
@@ -54,32 +56,33 @@ export function ProjectsPage() {
           onClick={() => setCreating(true)}
         >
           <Plus aria-hidden="true" />
-          New project
+          {t('projects.list.newProject')}
         </Button>
       </header>
 
       {!me || overview.isLoading ? (
         <p className="mt-8 flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          <Spinner /> Loading projects…
+          <Spinner /> {t('projects.list.loading')}
         </p>
       ) : overview.error || !overview.data ? (
         <div className="mt-8 flex flex-col items-start gap-3">
           <p role="alert" className="text-sm text-[var(--danger-on-tint)]">
-            {apiErrorMessage(overview.error, 'Projects could not be loaded.')}
+            {apiErrorMessage(overview.error, t('projects.list.loadFailed'))}
           </p>
           <Button type="button" onClick={() => void overview.refetch()}>
-            Try again
+            {t('projects.common.tryAgain')}
           </Button>
         </div>
       ) : (
         <>
-          <ProjectGroup title="Your projects" projects={overview.data.projects}>
-            You have no projects of your own yet. Create one to group conversations under shared
-            instructions and files.
+          <ProjectGroup title={t('projects.list.yoursTitle')} projects={overview.data.projects}>
+            {t('projects.list.yoursEmpty')}
           </ProjectGroup>
-          <ProjectGroup title="Shared with me" projects={overview.data.shared ?? []}>
-            Nothing has been shared with you yet. When someone shares a project with you, it appears
-            here.
+          <ProjectGroup
+            title={t('projects.list.sharedTitle')}
+            projects={overview.data.shared ?? []}
+          >
+            {t('projects.list.sharedEmpty')}
           </ProjectGroup>
         </>
       )}
@@ -99,6 +102,7 @@ function ProjectGroup({
   /** What an empty group says. */
   children: string;
 }) {
+  const t = useT();
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="mt-10">
@@ -126,8 +130,20 @@ function ProjectGroup({
                   </span>
                   <span className="block text-xs text-[var(--text-muted)]">
                     {accessOf(project) === 'owner'
-                      ? `${plural(project.threadCount, 'conversation')} · ${plural(project.fileCount, 'file')}`
-                      : `${project.ownerName ? `${project.ownerName} · ` : ''}${accessLabel(accessOf(project))} · ${plural(project.fileCount, 'file')}`}
+                      ? t('projects.list.ownedMeta', {
+                          conversations: project.threadCount,
+                          files: project.fileCount,
+                        })
+                      : project.ownerName
+                        ? t('projects.list.sharedMeta', {
+                            owner: isolate(project.ownerName),
+                            access: accessLabel(accessOf(project)),
+                            files: project.fileCount,
+                          })
+                        : t('projects.list.sharedMetaNoOwner', {
+                            access: accessLabel(accessOf(project)),
+                            files: project.fileCount,
+                          })}
                   </span>
                 </span>
               </Link>

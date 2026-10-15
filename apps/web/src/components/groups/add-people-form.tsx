@@ -17,12 +17,14 @@ import { Spinner } from '~/components/ui/spinner';
 import { problemsAt, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { api } from '~/lib/api-client';
 import { type AddOutcome, describeAddResult, GROUP_FIELD_LABELS, parseEmails } from '~/lib/groups';
+import { formatList, type Translate, useT } from '~/lib/i18n';
 import { validationProblems } from '~/lib/validation-issues';
 
-const ROLE_OPTIONS = GROUP_MEMBER_ROLES.map((role) => ({
-  value: role,
-  label: role === 'manager' ? 'Manager' : 'Member',
-}));
+const roleOptions = (t: Translate) =>
+  GROUP_MEMBER_ROLES.map((role) => ({
+    value: role,
+    label: role === 'manager' ? t('groups.role.manager') : t('groups.role.member'),
+  }));
 
 /** One address is an email address by the same rule the server applies. */
 const isEmail = (value: string) => z.string().email().max(320).safeParse(value).success;
@@ -47,6 +49,7 @@ export function AddPeopleForm({
   /** Runs after a request the server accepted, so the page can read the group again. */
   onAdded: (result: AddGroupMembersResult) => unknown;
 }) {
+  const t = useT();
   const [text, setText] = useState('');
   const [role, setRole] = useState<GroupMemberRoleName>('member');
   const [outcome, setOutcome] = useState<AddOutcome | null>(null);
@@ -75,7 +78,7 @@ export function AddPeopleForm({
       setProblems([
         {
           fields: ['text'],
-          text: `Not an email address: ${invalid.join(', ')}. Separate addresses with commas, spaces or new lines.`,
+          text: t('groups.add.notAnEmail', { emails: formatList(invalid) }),
         },
       ]);
       return;
@@ -98,9 +101,9 @@ export function AddPeopleForm({
   return (
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-3">
       <Field
-        label="Add people by email"
+        label={t('groups.add.label')}
         htmlFor="member-emails"
-        hint={`One address per line, or separated by commas. Up to ${MAX_EMAILS_PER_ADD} at a time. They must already have an account.`}
+        hint={t('groups.add.hint', { max: MAX_EMAILS_PER_ADD })}
         error={error}
       >
         <Textarea
@@ -117,20 +120,20 @@ export function AddPeopleForm({
       <div className="flex flex-wrap items-end gap-3">
         {withRole && (
           <div className="w-44">
-            <Field label="Role for the new people" htmlFor="member-role">
+            <Field label={t('groups.add.roleLabel')} htmlFor="member-role">
               <Select
                 id="member-role"
-                aria-label="Role for the new people"
+                aria-label={t('groups.add.roleLabel')}
                 value={role}
                 onChange={(next) => setRole(next as GroupMemberRoleName)}
-                options={ROLE_OPTIONS}
+                options={roleOptions(t)}
               />
             </Field>
           </div>
         )}
         <Button type="submit" variant="primary" disabled={add.isPending}>
           {add.isPending && <Spinner />}
-          Add people
+          {t('groups.add.submit')}
         </Button>
       </div>
 
