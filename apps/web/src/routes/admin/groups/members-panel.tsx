@@ -1,39 +1,25 @@
 import {
-  type AddGroupMembersResult,
   type AdminGroupDetail,
-  addGroupMembersSchema,
   GROUP_MEMBER_ROLES,
   type GroupMember,
   type GroupMemberRoleName,
   type GroupMembersPage,
-  MAX_EMAILS_PER_ADD,
 } from '@oci/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Trash2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
-import { z } from 'zod';
+import { useState } from 'react';
 import { EditOnly, useAdminAccess } from '~/components/admin/admin-access';
 import { EmptyState, LoadError } from '~/components/admin/admin-ui';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
+import { AddPeopleForm } from '~/components/groups/add-people-form';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Field, invalidFieldProps } from '~/components/ui/field';
-import { Input, Textarea } from '~/components/ui/input';
+import { Input } from '~/components/ui/input';
 import { Select } from '~/components/ui/select';
 import { Spinner } from '~/components/ui/spinner';
-import { problemsAt, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { api } from '~/lib/api-client';
-import {
-  ADMIN_GROUPS_KEY,
-  type AddOutcome,
-  describeAddResult,
-  describeGroupError,
-  GROUP_FIELD_LABELS,
-  groupDetailKey,
-  parseEmails,
-} from '~/lib/groups';
+import { ADMIN_GROUPS_KEY, describeGroupError, groupDetailKey } from '~/lib/groups';
 import { formatDate, plural } from '~/lib/utils';
-import { validationProblems } from '~/lib/validation-issues';
 
 const ROLE_OPTIONS = GROUP_MEMBER_ROLES.map((role) => ({
   value: role,
@@ -41,123 +27,6 @@ const ROLE_OPTIONS = GROUP_MEMBER_ROLES.map((role) => ({
 }));
 
 const ROLE_LABEL: Record<GroupMemberRoleName, string> = { member: 'Member', manager: 'Manager' };
-
-/** One address is an email address by the same rule the server applies. */
-const isEmail = (value: string) => z.string().email().max(320).safeParse(value).success;
-
-function AddPeople({ group }: { group: AdminGroupDetail }) {
-  const queryClient = useQueryClient();
-  const [text, setText] = useState('');
-  const [role, setRole] = useState<GroupMemberRoleName>('member');
-  const [outcome, setOutcome] = useState<AddOutcome | null>(null);
-  const [problems, setProblems] = useFieldProblems({ text, role });
-  const error = problemsAt(problems, 'text');
-  const elsewhere = problems.find((problem) => problem.fields.length === 0)?.text ?? null;
-
-  const add = useMutation({
-    mutationFn: (body: { emails: string[]; role: GroupMemberRoleName }) =>
-      api.post<AddGroupMembersResult>(`/admin/groups/${group.id}/members`, body),
-    onSuccess: async (result) => {
-      setOutcome(describeAddResult(result));
-      // What had no account stays to be corrected; everything else is done.
-      setText(result.unknown.join('\n'));
-      await queryClient.invalidateQueries({ queryKey: ADMIN_GROUPS_KEY });
-    },
-    onError: (failure) =>
-      setProblems([
-        { fields: [], text: describeGroupError(failure, 'The people could not be added.') },
-      ]),
-  });
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setProblems([]);
-    setOutcome(null);
-    const entries = parseEmails(text);
-    const invalid = entries.filter((entry) => !isEmail(entry));
-    if (invalid.length > 0) {
-      setProblems([
-        {
-          fields: ['text'],
-          text: `Not an email address: ${invalid.join(', ')}. Separate addresses with commas, spaces or new lines.`,
-        },
-      ]);
-      return;
-    }
-    const result = addGroupMembersSchema.safeParse({ emails: entries, role });
-    if (!result.success) {
-      setProblems(
-        validationProblems(result.error.issues, GROUP_FIELD_LABELS).map(({ text: sentence }) => ({
-          fields: ['text'],
-          text: sentence,
-        })),
-      );
-      return;
-    }
-    add.mutate(result.data);
-  }
-
-  return (
-    <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <Field
-        label="Add people by email"
-        htmlFor="member-emails"
-        hint={`One address per line, or separated by commas. Up to ${MAX_EMAILS_PER_ADD} at a time. They must already have an account.`}
-        error={error}
-      >
-        <Textarea
-          id="member-emails"
-          {...invalidFieldProps('member-emails', error)}
-          rows={3}
-          value={text}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => setText(event.target.value)}
-        />
-      </Field>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-44">
-          <Field label="Role for the new people" htmlFor="member-role">
-            <Select
-              id="member-role"
-              aria-label="Role for the new people"
-              value={role}
-              onChange={(next) => setRole(next as GroupMemberRoleName)}
-              options={ROLE_OPTIONS}
-            />
-          </Field>
-        </div>
-        <Button type="submit" variant="primary" disabled={add.isPending}>
-          {add.isPending && <Spinner />}
-          Add people
-        </Button>
-      </div>
-
-      {elsewhere && (
-        <p
-          role="alert"
-          className="rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
-        >
-          {elsewhere}
-        </p>
-      )}
-
-      <div data-testid="add-outcome" role="status" className="text-sm">
-        {outcome && (
-          <>
-            <p className="text-[var(--text-secondary)]">{outcome.summary}</p>
-            {outcome.problems.map((entry) => (
-              <p key={entry.label} className="mt-1 text-xs text-[var(--text-muted)]">
-                <span className="font-medium">{entry.label}:</span> {entry.emails.join(', ')}
-              </p>
-            ))}
-          </>
-        )}
-      </div>
-    </form>
-  );
-}
 
 function RoleCell({ group, member }: { group: AdminGroupDetail; member: GroupMember }) {
   const queryClient = useQueryClient();
@@ -229,6 +98,7 @@ function RemoveMember({
 
 /** The members tab: search, add by email with a role, change a role, remove, pages. */
 export function MembersPanel({ group }: { group: AdminGroupDetail }) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [removing, setRemoving] = useState<GroupMember | null>(null);
@@ -251,7 +121,12 @@ export function MembersPanel({ group }: { group: AdminGroupDetail }) {
   return (
     <div className="flex flex-col gap-8">
       <EditOnly>
-        <AddPeople group={group} />
+        <AddPeopleForm
+          path={`/admin/groups/${group.id}/members`}
+          withRole
+          describeError={(failure) => describeGroupError(failure, 'The people could not be added.')}
+          onAdded={() => queryClient.invalidateQueries({ queryKey: ADMIN_GROUPS_KEY })}
+        />
       </EditOnly>
 
       <section aria-labelledby="group-members-heading" className="flex flex-col gap-3">

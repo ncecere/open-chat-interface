@@ -110,6 +110,13 @@ describe('the group page', () => {
     expect(document.querySelector('#group-settings-name')).not.toBeNull();
   });
 
+  it('opens on Members when the address names a section there is not', async () => {
+    await render({ path: '/admin/groups/group-1?tab=nonsense' });
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+      'Members',
+    );
+  });
+
   it('says so, with a way back, when the group is gone', async () => {
     api.get.mockRejectedValue(new ApiError(404, 'NOT_FOUND', 'Group not found'));
     await render();

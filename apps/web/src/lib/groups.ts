@@ -100,3 +100,17 @@ export function formatCost(micros: number): string {
 export function memberCountText(count: number): string {
   return plural(count, 'member');
 }
+
+/**
+ * What a failed request on a manager's Settings page says: the same as the
+ * administrator's, but a group that has gone, or that the person no longer
+ * manages, is said in their words. The person lookup limit has its own
+ * sentence (`Retry-After` is in seconds).
+ */
+export function describeManagerError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    if (error.status === 404) return 'You no longer manage this group.';
+    if (error.status === 403) return error.message || 'You do not manage this group.';
+  }
+  return describeGroupError(error, fallback);
+}
