@@ -1,5 +1,6 @@
 import type { ApiErrorBody, ReadOnlyStatus } from '@oci/shared';
 import type { FieldProblem } from '~/hooks/use-clear-on-edit';
+import { MFA_ENROLMENT_REQUIRED, noteMfaRequired } from '~/lib/mfa-required';
 import { notePolicyRequired, POLICY_ACCEPTANCE_REQUIRED } from '~/lib/policy-required';
 import { noteReadOnlyRefusal, readOnlyMessage } from '~/lib/read-only';
 import { noteUnauthorized } from '~/lib/session-ended';
@@ -131,6 +132,9 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
       // the gate looks again and shows the acceptance page.
       if (response.status === 403 && (code as string) === POLICY_ACCEPTANCE_REQUIRED)
         notePolicyRequired();
+      // A session limited until a second step is set up (#399): the gate looks
+      // again and the setup page is shown.
+      if (response.status === 403 && (code as string) === MFA_ENROLMENT_REQUIRED) noteMfaRequired();
     } catch {
       // Non-JSON error responses keep the status text.
     }
