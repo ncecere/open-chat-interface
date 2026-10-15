@@ -28,6 +28,11 @@ interface OwnerShareLink {
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  /**
+   * Not readable while the conversation carries a data class (v0.14, #395);
+   * it works again once the label is gone.
+   */
+  paused?: boolean;
 }
 
 interface ThreadMessage {
@@ -76,6 +81,7 @@ function ShareLinkRow({
   onRevoke: () => void;
 }) {
   const status = statusOf(link);
+  const paused = Boolean(link.paused) && status === 'active';
   const url = shareUrl(link.slug);
   // Copying is reading; revoking is a change, off while read-only (#331).
   const lock = useReadOnlyLock();
@@ -85,8 +91,11 @@ function ShareLinkRow({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={status === 'active' ? 'success' : 'neutral'} className="capitalize">
-              {status}
+            <Badge
+              variant={paused ? 'warning' : status === 'active' ? 'success' : 'neutral'}
+              className="capitalize"
+            >
+              {paused ? 'paused' : status}
             </Badge>
             <span className="text-xs text-[var(--text-muted)]">
               {link.upToMessageId ? 'Snapshot' : 'Live'} · {link.viewCount}{' '}
@@ -104,6 +113,12 @@ function ShareLinkRow({
             Created {formatDate(link.createdAt)}
             {link.expiresAt ? ` · Expires ${formatDate(link.expiresAt)}` : ' · No expiration'}
           </p>
+          {paused && (
+            <p className="mt-1 text-xs text-[var(--text-secondary)]" data-share-paused>
+              Paused: this conversation carries a data class, so the link shows nothing for now. It
+              works again if the label is removed.
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -112,7 +127,7 @@ function ShareLinkRow({
             size="icon-sm"
             variant="ghost"
             aria-label="Copy share link"
-            disabled={!url || status !== 'active'}
+            disabled={!url || status !== 'active' || paused}
             onClick={onCopy}
           >
             {copied ? <Check className="text-[var(--success)]" /> : <Copy />}
@@ -152,6 +167,8 @@ export function ShareThreadDialog({
   const [formError, setFormError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
+  // Said when the link was made in warn mode for a conversation that carries a class (v0.14, #395).
+  const [notice, setNotice] = useState<string | null>(null);
   // Revoking asks first, as Settings → Sharing does (#252): one click beside
   // Copy took down a link already sent out, and it cannot be turned back on.
   const [revoking, setRevoking] = useState<OwnerShareLink | null>(null);
@@ -177,11 +194,12 @@ export function ShareThreadDialog({
 
   const create = useMutation({
     mutationFn: (body: { upToMessageId: string | null; expiresAt: string | null }) =>
-      api.post<{ link: OwnerShareLink }>(
+      api.post<{ link: OwnerShareLink; notice?: string }>(
         `/share-links/threads/${encodeURIComponent(threadId)}`,
         body,
       ),
     onSuccess: async (response) => {
+      setNotice(response.notice ?? null);
       setCutoffId('');
       setExpiresAt('');
       setFormError(null);
@@ -212,6 +230,7 @@ export function ShareThreadDialog({
 
   function submit() {
     setFormError(null);
+    setNotice(null);
     create.reset();
 
     let expiration: string | null = null;
@@ -328,6 +347,15 @@ export function ShareThreadDialog({
             role="alert"
           >
             {formError ?? apiErrorMessage(create.error, 'Failed to create share link.')}
+          </p>
+        )}
+        {notice && (
+          <p
+            className="mt-3 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-3 py-2 text-xs text-[var(--text-secondary)]"
+            role="status"
+            data-share-notice
+          >
+            {notice}
           </p>
         )}
         {copyError && (

@@ -1,18 +1,26 @@
-import { type Attachment, REASONING_EFFORTS, type ReasoningEffort } from '@oci/shared';
+import {
+  type Attachment,
+  type ClassificationResponse,
+  REASONING_EFFORTS,
+  type ReasoningEffort,
+} from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { UIMessage } from 'ai';
 import { ArrowDown, Clock } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ThreadArtifactsProvider } from '~/components/artifacts/artifacts-provider';
+import { BlockedSendNotice } from '~/components/chat/classification-note';
 import { CompactionFailureNotice } from '~/components/chat/compaction-failure-notice';
 import { Composer } from '~/components/chat/composer';
+import { ConversationLabels } from '~/components/chat/conversation-labels';
 import { ConversationLoadError } from '~/components/chat/conversation-load-error';
 import { preloadMarkdownRenderer, useMarkdownRendererReady } from '~/components/chat/markdown';
 import { MessageList } from '~/components/chat/message-list';
 import { FullPageSpinner } from '~/components/ui/spinner';
 import { type ChatScrollTarget, useChatScroll } from '~/hooks/use-chat-scroll';
 import { useChatSession } from '~/hooks/use-chat-session';
+import { useClassification } from '~/hooks/use-classification';
 import { useCompaction } from '~/hooks/use-compaction';
 import { useHistoryPages } from '~/hooks/use-history-pages';
 import { useOpenConversation } from '~/hooks/use-open-conversation';
@@ -22,6 +30,7 @@ import { useBranchMessage, useForkMessage } from '~/hooks/use-threads';
 import { useRemoveUnusedConversation } from '~/hooks/use-unused-conversation';
 import { ApiError, chatErrorText } from '~/lib/api-client';
 import { getInitialHistory, type HistoryIsland } from '~/lib/chat-history';
+import { blockedDetailsOf } from '~/lib/classification';
 import { usePageTitle } from '~/lib/document-title';
 import { conversationChoice } from '~/lib/starting-model';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
@@ -115,9 +124,12 @@ function ThreadConversation({
   carriedFocus,
   temporary,
   projectId,
+  classification,
   target,
 }: {
   threadId: string;
+  /** What the conversation's data classes allow each model; absent while off (v0.14, #395). */
+  classification: ClassificationResponse | undefined;
   /** The conversation's project, if any, for the composer's Project files control. */
   projectId: string | null;
   initialMessages: UIMessage[];
@@ -153,6 +165,7 @@ function ThreadConversation({
     initialEffort: pendingBranch?.effort ?? carriedEffort ?? recorded.effort,
     initialWebSearch: carriedSearch,
     temporary,
+    classification,
   });
   const { send, stop, regenerate, selectedModel, effort: selectedEffort } = session;
   // Its first message refused and nothing saved: not left in the history as
@@ -343,6 +356,12 @@ function ThreadConversation({
     !session.recovery.resuming &&
     session.status !== 'streaming' &&
     session.status !== 'submitted';
+  // A send refused by data classification names the missing classes and the
+  // models that are approved (v0.14, #395).
+  const blockedSend =
+    session.error && !session.notice && !session.recovery.error
+      ? blockedDetailsOf(session.error)
+      : null;
 
   return (
     <ThreadArtifactsProvider
@@ -354,6 +373,7 @@ function ThreadConversation({
       {/* The conversation's name, for the tab and as the page's heading (#110). */}
       <h1 className="sr-only">{pageName}</h1>
       <div className="flex h-full flex-col">
+        <ConversationLabels threadId={threadId} classification={classification} />
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={scroll.scrollRef}
@@ -392,19 +412,31 @@ function ThreadConversation({
                 waitingOnServer ||
                 replies.error) && (
                 <div className="mx-auto max-w-[42rem] space-y-2 px-4 pb-4">
-                  {(session.notice || session.recovery.error || session.error || replies.error) && (
-                    <p
-                      role="alert"
-                      className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
-                    >
-                      {/* A message that turned out not to be saved (#326). */}
-                      {session.notice ||
-                        session.recovery.error ||
-                        (session.error && chatErrorText(session.error)) ||
-                        replies.error ||
-                        'Something went wrong generating a response.'}
-                    </p>
+                  {blockedSend && session.error && (
+                    <BlockedSendNotice
+                      message={chatErrorText(session.error)}
+                      details={blockedSend}
+                      models={session.models}
+                      onChoose={session.selectModel}
+                    />
                   )}
+                  {!blockedSend &&
+                    (session.notice ||
+                      session.recovery.error ||
+                      session.error ||
+                      replies.error) && (
+                      <p
+                        role="alert"
+                        className="rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
+                      >
+                        {/* A message that turned out not to be saved (#326). */}
+                        {session.notice ||
+                          session.recovery.error ||
+                          (session.error && chatErrorText(session.error)) ||
+                          replies.error ||
+                          'Something went wrong generating a response.'}
+                      </p>
+                    )}
                   {waitingOnServer && (
                     <p role="status" className="text-sm text-[var(--text-muted)]">
                       {/* Just after Stop, the server is still saving the stopped
@@ -472,6 +504,7 @@ function ThreadConversation({
           models={session.models}
           selectedModel={session.selectedModel}
           onSelectModel={session.selectModel}
+          classification={classification}
           effort={session.effort}
           onEffortChange={session.setEffort}
           webSearch={session.webSearch}
@@ -542,6 +575,10 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
     if (data && !isError) setTemporary(data.thread.temporary);
   }, [data, isError, setTemporary]);
 
+  // The classes the conversation carries and which models may take them
+  // (v0.14, #395); one cheap answer with nothing in it while classification is off.
+  const classification = useClassification({ threadId }).data;
+
   // The Markdown renderer loads beside the history, and a conversation with
   // replies opens once both are here: on a slow connection its replies showed
   // as Markdown source for 1-2 s, then jumped as code blocks and tables
@@ -590,6 +627,7 @@ function ThreadLoader({ threadId, target }: { threadId: string; target?: ChatScr
       carriedFocus={carriedFocus}
       temporary={data.thread.temporary}
       projectId={data.thread.projectId ?? null}
+      classification={classification}
       target={target}
     />
   );

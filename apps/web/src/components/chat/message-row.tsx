@@ -6,6 +6,7 @@ import { useArtifacts } from '~/components/artifacts/artifacts-context';
 import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { ReplyMarkdown } from '~/components/artifacts/reply-content';
 import { CapacityNote, CapacityWait, capacityWaitOf } from '~/components/chat/capacity-wait';
+import { DataClassificationNote } from '~/components/chat/data-classification-note';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
 import { MessageActions } from '~/components/chat/message-actions';
 import { attachmentsOf, MessageAttachments } from '~/components/chat/message-attachments';
@@ -169,6 +170,7 @@ export const MessageRow = memo(function MessageRow({
           Earlier conversation context was omitted to fit the input limit.
         </p>
       )}
+      <DataClassificationNote message={message} />
       <ProjectSearchNote message={message} />
       {capacity &&
         (streaming ? (

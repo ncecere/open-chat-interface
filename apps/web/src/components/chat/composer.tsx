@@ -2,6 +2,7 @@ import { MESSAGE_TEXT_MAX_LENGTH } from '@oci/shared';
 import { ArrowUp, Square } from 'lucide-react';
 import { type KeyboardEvent, memo, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { AttachmentChips } from '~/components/chat/attachment-chips';
+import { ComposerClassificationNote } from '~/components/chat/classification-note';
 import { ComposerConnectHint } from '~/components/chat/composer-connect-hint';
 import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/composer-options';
 import { ProjectFilesControl } from '~/components/chat/project-files-control';
@@ -57,6 +58,7 @@ export const Composer = memo(function Composer({
   attachments = [],
   onAttachFiles,
   loading = false,
+  classification,
   onRemoveAttachment,
   placeholder = 'Type your message here...',
   autoFocus = false,
@@ -116,6 +118,7 @@ export const Composer = memo(function Composer({
   return (
     <div className="mx-auto w-full max-w-[47rem] px-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-3 md:pb-0">
       <ComposerConnectHint selectedModel={selectedModel} />
+      <ComposerClassificationNote classification={classification} selectedModel={selectedModel} />
       <div className="rounded-[1.25rem] border border-[var(--border-strong)] bg-[var(--bg-control)] px-4 pb-4 pt-5 focus-within:outline focus-within:outline-1 focus-within:-outline-offset-1 focus-within:outline-[var(--accent-bright)] md:rounded-b-none md:border-b-0">
         <AttachmentChips
           items={attachments}
@@ -166,6 +169,7 @@ export const Composer = memo(function Composer({
             attachmentsPausedReason={readOnly.active ? readOnlyShortReason(readOnly) : undefined}
             onAttachFiles={onAttachFiles}
             loading={loading}
+            classification={classification}
           />
           {projectId && attachmentsAvailable !== false && onExcludedProjectFilesChange && (
             <ProjectFilesControl

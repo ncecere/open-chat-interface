@@ -1,5 +1,10 @@
 import { useChat } from '@ai-sdk/react';
-import type { Attachment, CatalogModel, ReasoningEffort } from '@oci/shared';
+import type {
+  Attachment,
+  CatalogModel,
+  ClassificationResponse,
+  ReasoningEffort,
+} from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DefaultChatTransport,
@@ -20,10 +25,11 @@ import {
   readChatSubmission,
   readRefusedSubmission,
 } from '~/lib/chat-submission';
+import { blockedSlugs } from '~/lib/classification';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
-import { startingModel } from '~/lib/starting-model';
+import { startingModelAmong } from '~/lib/starting-model';
 import { requestStop } from '~/lib/stop-request';
 import { approvalResponsesOf, denyUnansweredApprovals } from '~/lib/tool-approvals';
 
@@ -85,6 +91,11 @@ export function useChatSession(options: {
   initialEffort?: ReasoningEffort;
   initialWebSearch?: boolean;
   temporary?: boolean;
+  /**
+   * What the conversation's data classes allow each model (v0.14, #395), read
+   * by the page; absent while classification is off or not yet loaded.
+   */
+  classification?: ClassificationResponse | undefined;
 }) {
   const queryClient = useQueryClient();
   const modelsQuery = useModels();
@@ -222,9 +233,12 @@ export function useChatSession(options: {
   // rather than stored, so a default that arrives after the catalog still
   // applies, and a model withdrawn from the catalog falls through silently.
   const personalDefault = currentUser?.chat?.defaultModelSlug;
+  // Never a default the conversation's data classes forbid (v0.14, #395).
+  const classification = options.classification;
+  const unapproved = useMemo(() => blockedSlugs(classification), [classification]);
   const selectedModel = useMemo(
-    () => startingModel(models, chosenSlug, personalDefault),
-    [models, chosenSlug, personalDefault],
+    () => startingModelAmong(models, unapproved, chosenSlug, personalDefault),
+    [models, unapproved, chosenSlug, personalDefault],
   );
   const modelSlug = selectedModel?.slug ?? null;
 
@@ -328,6 +342,8 @@ export function useChatSession(options: {
       }
       // The reply reorders the sidebar and may have given the conversation a title.
       void invalidateConversationLists(queryClient);
+      // A connector tool it used may have added a label (v0.14, #395).
+      void queryClient.invalidateQueries({ queryKey: ['classification'] });
     },
   });
 
