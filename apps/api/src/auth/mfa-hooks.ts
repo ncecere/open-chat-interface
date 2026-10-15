@@ -1,4 +1,6 @@
+import { eq, schema } from '@oci/db';
 import { APIError, getSessionFromCtx } from 'better-auth/api';
+import { db } from '../db/index.js';
 import { claimCode, releaseCode } from '../services/limits/code-replay.js';
 import { hasCredentialAccount } from '../services/mfa/credential.js';
 import { normaliseRecoveryCode, normaliseTotpCode } from './mfa.js';
@@ -116,4 +118,35 @@ export async function mfaAfter(ctx: MfaHookContext): Promise<void> {
   const claim = ctx.context.mfaClaim;
   if (!claim) return;
   if (statusOf(ctx.context.returned) >= 400) await releaseCode(claim.userId, claim.code);
+}
+
+/** The address a verification link is for, read from the token without verifying it (the endpoint verifies it). */
+export function emailFromVerificationToken(token: unknown): string | null {
+  if (typeof token !== 'string') return null;
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
+    );
+    return typeof payload?.email === 'string' ? payload.email.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the link's address belongs to somebody with the second step on. The
+ * first verification of an address signs the person in (`autoSignInAfterVerification`),
+ * with no second step: a mailbox is not a second factor. For such a person the
+ * hook turns that sign-in off for the request; they sign in with the password and
+ * the code. Reading the token unverified can only switch auto sign-in off.
+ */
+export async function verificationLinkIsForEnrolled(token: unknown): Promise<boolean> {
+  const email = emailFromVerificationToken(token);
+  if (!email) return false;
+  const [row] = await db
+    .select({ enabled: schema.user.twoFactorEnabled })
+    .from(schema.user)
+    .where(eq(schema.user.email, email))
+    .limit(1);
+  return row?.enabled === true;
 }

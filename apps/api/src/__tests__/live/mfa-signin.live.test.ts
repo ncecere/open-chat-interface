@@ -478,6 +478,37 @@ describe.skipIf(!available)('live: two-step verification', { timeout: 60_000 }, 
     });
   });
 
+  describe('the way in that is not the password', () => {
+    it('does not sign in, by the first verification of an address, somebody who has the second step on', async () => {
+      const { createEmailVerificationToken } = await import('better-auth/api');
+      const secret = (await auth.$context).secret;
+      const who = await enrolled();
+      await pool.db
+        .update(schema.user)
+        .set({ emailVerified: false })
+        .where(eq(schema.user.id, who.id));
+      const link = `/api/auth/verify-email?token=${await createEmailVerificationToken(secret, who.email)}`;
+      const client = browser();
+      const response = await client.request(link);
+      expect(response.status).toBeLessThan(400);
+      expect(client.sessionCookie).toBeUndefined();
+      const [user] = await pool.db.select().from(schema.user).where(eq(schema.user.id, who.id));
+      expect(user?.emailVerified).toBe(true);
+      // The same link for somebody without it still signs in, as before (the control).
+      const plain = await person();
+      await pool.db
+        .update(schema.user)
+        .set({ emailVerified: false })
+        .where(eq(schema.user.id, plain.id));
+      const control = browser();
+      await control.request(
+        `/api/auth/verify-email?token=${await createEmailVerificationToken(secret, plain.email)}`,
+      );
+      expect(control.sessionCookie).toBeTruthy();
+      expect(await sessionMethod(control)).toBe('other');
+    });
+  });
+
   describe('recovery codes', () => {
     it('signs in once with a recovery code, says how many are left, and refuses it the second time', async () => {
       const who = await enrolled();

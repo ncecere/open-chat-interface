@@ -23,7 +23,12 @@ import { recordAuthEvent, recordRecoveryCodeUsed } from './audit.js';
 import { deliverVerificationEmail } from './email-verification.js';
 import { logBetterAuth } from './log.js';
 import { authMethodFor, MFA_LOCKOUT_ATTEMPTS, MFA_LOCKOUT_SECONDS } from './mfa.js';
-import { type MfaHookContext, mfaAfter, mfaBefore } from './mfa-hooks.js';
+import {
+  type MfaHookContext,
+  mfaAfter,
+  mfaBefore,
+  verificationLinkIsForEnrolled,
+} from './mfa-hooks.js';
 import { ac, roles } from './permissions.js';
 import {
   enforceAuthRequestPolicy,
@@ -258,6 +263,23 @@ export const auth = betterAuth({
       // the replay guard, and passkeys only for accounts with a password.
       if (MFA_HOOK_PATHS.has(ctx.path)) {
         return mfaBefore(ctx as unknown as MfaHookContext);
+      }
+      // Verifying an address signs the person in once; for somebody with the
+      // second step on that would skip it, so it does not (auth/mfa-hooks.ts).
+      if (ctx.path === '/verify-email' && (await verificationLinkIsForEnrolled(ctx.query?.token))) {
+        return {
+          context: {
+            context: {
+              options: {
+                ...ctx.context.options,
+                emailVerification: {
+                  ...ctx.context.options.emailVerification,
+                  autoSignInAfterVerification: false,
+                },
+              },
+            },
+          },
+        };
       }
       if (ctx.path === '/change-password' || ctx.path === '/update-user') {
         const session = await getSessionFromCtx(ctx).catch(() => null);
