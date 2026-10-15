@@ -45,7 +45,7 @@ export function AddPeopleForm({
   withRole: boolean;
   describeError: (error: unknown) => string;
   /** Runs after a request the server accepted, so the page can read the group again. */
-  onAdded: (result: AddGroupMembersResult) => void | Promise<unknown>;
+  onAdded: (result: AddGroupMembersResult) => unknown;
 }) {
   const [text, setText] = useState('');
   const [role, setRole] = useState<GroupMemberRoleName>('member');
