@@ -399,6 +399,13 @@ export const userPreference = pgTable(
      * default. Checked against what the role allows whenever they are used.
      */
     defaultModelSlug: text('default_model_slug'),
+    /**
+     * The language the person chose for the web app (migration 0055, v0.14):
+     * one of the tags in packages/shared `SUPPORTED_LOCALES`, validated by the
+     * API rather than the database. Null means no choice: the instance default
+     * or the browser's language applies. A v0.13 replica ignores it.
+     */
+    locale: text('locale'),
     defaultEffort: text('default_effort').$type<ReasoningEffort>(),
     /**
      * When the introduction was completed. Null means it has not been shown,
