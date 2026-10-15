@@ -23,6 +23,6 @@ export async function describeClassification(input: {
   return {
     mode,
     classes: classes.map(toClassificationClass),
-    models: await modelStatuses(input.role, classes, mode),
+    models: await modelStatuses({ userId: input.userId, role: input.role }, classes, mode),
   };
 }

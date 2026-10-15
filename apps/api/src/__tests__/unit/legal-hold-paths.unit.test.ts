@@ -218,6 +218,7 @@ const PATHS: Record<string, { hold: 'checked' | 'exempt'; how: string }> = {
   'services/classification/store.ts threadDataClass': {
     hold: 'exempt',
     how: 'Only a label the person added to their own conversation; the conversation and its messages are untouched, and thread.data_class.remove is audited.',
+  },
   // Groups (v0.14): who belongs to a group, and what a group grants, are configuration. No
   // record of anyone's conversations, files or usage is removed with them.
   'services/groups/groups.ts group': {

@@ -113,7 +113,9 @@ export async function guardModel(gate: ModelGate): Promise<Decision> {
     threadId: gate.threadId,
   });
   if (decision.outcome !== 'block') return decision;
-  const approvedModels = (await modelStatuses(gate.user.role, decision.classes, 'block'))
+  const approvedModels = (
+    await modelStatuses({ userId: gate.user.id, role: gate.user.role }, decision.classes, 'block')
+  )
     .filter((candidate) => candidate.status === 'ok')
     .map(({ slug, displayName }) => ({ slug, displayName }));
   throw new AppError(

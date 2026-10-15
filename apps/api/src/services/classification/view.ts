@@ -3,10 +3,9 @@ import type {
   ClassificationClass,
   ClassificationMode,
   ClassificationModel,
-  UserRole,
 } from '@oci/shared';
 import { db } from '../../db/index.js';
-import { listAvailableModels } from '../models.js';
+import { listAvailableModels, type ModelViewer } from '../models.js';
 import type { ResolvedClass } from './resolve.js';
 
 /** A class as the chips and settings show it. */
@@ -45,11 +44,11 @@ async function approvalsByModel(modelIds: readonly string[]): Promise<Map<string
  * is approved for nothing until an administrator says otherwise.
  */
 export async function modelStatuses(
-  role: UserRole,
+  viewer: ModelViewer,
   classes: readonly ResolvedClass[],
   mode: ClassificationMode,
 ): Promise<ClassificationModel[]> {
-  const models = await listAvailableModels(role);
+  const models = await listAvailableModels(viewer);
   const approvals = await approvalsByModel(models.map((model) => model.id));
   return models.map((model) => {
     const approved = approvals.get(model.id) ?? new Set<string>();
