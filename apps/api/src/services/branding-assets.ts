@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { MIN_INSTALL_LOGO_PX } from '@oci/shared';
 import { validationFailed } from '../lib/errors.js';
 import { getStorageDriver } from './storage/index.js';
 
@@ -33,6 +34,73 @@ function detectImageType(bytes: Buffer): string | null {
     return 'image/webp';
   }
   return null;
+}
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/**
+ * The size a PNG declares in its first chunk (IHDR), or null when the bytes
+ * are not a PNG that starts as the format requires. Only the header is read:
+ * the logo was type-checked by its bytes when it was stored.
+ */
+function pngSize(bytes: Buffer): { width: number; height: number } | null {
+  if (bytes.length < 24 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return null;
+  if (bytes.subarray(12, 16).toString('ascii') !== 'IHDR') return null;
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+
+/**
+ * The size of a logo the installed app can use as its icon, or null.
+ *
+ * Home screens and app switchers draw the icon square and large, so only a
+ * PNG that is square and at least 512 px qualifies (the size Chromium asks
+ * for); anything else keeps the bundled icons, and is never stretched or
+ * cropped. The bytes decide, not the stored type: SVG never qualifies.
+ */
+export function installableLogoFromBytes(
+  bytes: Buffer,
+  mimeType: string | null,
+): { width: number; height: number } | null {
+  if (mimeType !== 'image/png') return null;
+  const size = pngSize(bytes);
+  if (!size || size.width !== size.height || size.width < MIN_INSTALL_LOGO_PX) return null;
+  return size;
+}
+
+// A logo's key is random and never rewritten (a replacement is a new key), so
+// what was read from it stays true; bounded so a long-lived process that sees
+// many replacements does not grow.
+const installableLogoCache = new Map<string, { width: number; height: number } | null>();
+const INSTALLABLE_LOGO_CACHE_MAX = 16;
+
+/**
+ * Whether the configured logo can be the installed app's icon, and its size.
+ *
+ * Null for no logo, an external URL (it cannot be checked, and an icon must
+ * be same-origin), a type other than PNG, a size that is too small or not
+ * square, and a logo that cannot be read: a logo that cannot be used never
+ * breaks the manifest, which falls back to the bundled icons.
+ */
+export async function installableLogo(branding: {
+  logoUrl: string | null;
+  logoMimeType: string | null;
+}): Promise<{ width: number; height: number } | null> {
+  const key = branding.logoUrl;
+  if (!key || !isManagedLogoKey(key) || branding.logoMimeType !== 'image/png') return null;
+  if (installableLogoCache.has(key)) return installableLogoCache.get(key) ?? null;
+
+  let size: { width: number; height: number } | null;
+  try {
+    const driver = await getStorageDriver();
+    size = installableLogoFromBytes(await driver.get(key), branding.logoMimeType);
+  } catch {
+    // Storage unavailable or the object is gone: not cached, so the next
+    // request looks again.
+    return null;
+  }
+  if (installableLogoCache.size >= INSTALLABLE_LOGO_CACHE_MAX) installableLogoCache.clear();
+  installableLogoCache.set(key, size);
+  return size;
 }
 
 export interface StoredLogo {

@@ -6,6 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark light" />
     <title>Open Chat Interface</title>
+    <!-- Installable app (#400): the instance serves the manifest (its name,
+         colours and icons). DocumentBranding keeps the theme colour and the
+         home-screen title in step with Branding; these are the defaults. -->
+    <link rel="manifest" href="/api/manifest.webmanifest" />
+    <meta name="theme-color" content="#0f0f0f" data-brand-theme-color />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Open Chat I" data-brand-app-title />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <!-- Blocking on purpose: sets the stored theme before the first paint. -->
     <script src="/theme-init.js"></script>
     <!-- The Turns mark (oci-assets logo/turns). DocumentBranding points these

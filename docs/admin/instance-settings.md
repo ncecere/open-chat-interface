@@ -158,6 +158,7 @@ each person's operating system preference.
 | Sign-in, sign-up, invitation and password-reset pages | Yes | Yes | Yes |
 | Sidebar and the mobile drawer | Yes (or short name) | Yes | Yes |
 | Browser tab | Title: *page · name* (*Sign in · Acme AI*, *Branding · Admin · Acme AI*; a shared conversation shows its title) | Tab icon, when the logo is uploaded or a root-relative path | — |
+| Installed app (home screen or desktop) | Name and short name (at most 12 characters) | Icon, when the logo is a PNG that is square and at least 512 px; otherwise the OCI icons | Title-bar and splash colours |
 | Shared conversation pages | Header | Header | Yes |
 | Verification, password-reset and invitation emails | Subject, body and the sender's display name | — | — |
 | Scheduled usage reports | Subject and body | — | — |
@@ -177,6 +178,40 @@ with `PATCH /api/admin/settings`; it overrides the theme for diagrams only, and
 iOS), scaled by the browser, so a square logo works best. A logo linked from
 another site keeps the Open Chat Interface icon: the browser would otherwise
 fetch a third-party image for every tab.
+
+**Installed app.** The instance serves a web app manifest at
+`/api/manifest.webmanifest`, so people can add OCI to a phone's home screen or a
+computer's desktop (users: [Installing the app](../user/installing.md)). It is
+public, like the sign-in page, and contains only the name, colours and icon
+addresses; nothing else from Branding or from the instance is in it. Browsers
+may keep it for five minutes, and decide for themselves when to look again, so
+a change reaches an installed app after a while (an iPhone or iPad copies the
+name and icon when the app is added, so people there add it again).
+
+- **Name.** The app name; the short name, or the first 12 characters of the
+  name when there is none, is what phones show under the icon. Longer short
+  names are cut to 12.
+- **Colours.** The splash screen is the page colour of the default theme
+  (light, or dark for dark and system: a manifest is the same for every
+  visitor and cannot follow a person's device). The title bar takes the accent
+  of a blue, violet or emerald colour theme (`#155dfc`, `#7f22fe`, `#007a55`),
+  and the page colour for neutral, which has no hue. While the app runs, the
+  browser's bar follows the light or dark mode the person is in.
+- **Icons.** The bundled OCI icons (192 and 512 px, and a maskable 512 px)
+  unless you have uploaded a logo that is a **PNG, square, and at least 512 px
+  on a side**; then that logo is the app's icon, at its own size. A JPEG, WebP,
+  a PNG that is smaller or not square, a logo linked from another site (an icon
+  must come from your own address) and a logo that cannot be read all keep the
+  bundled icons: they would be blurred, stretched or cropped. Nothing breaks
+  and nothing tells you, so check the app's icon after changing the logo. A
+  logo with transparent corners is drawn on the launcher's own background, so
+  give it a solid or padded background if it looks bare.
+  iPhones and iPads use the home-screen icon instead (the tab icon rule above,
+  any uploaded logo type), and the OCI icon when there is no logo.
+- **Language.** English until instance languages exist.
+- **No offline mode.** OCI never stores pages or conversations on a device for
+  offline use, and registers no service worker. The proxy headers this needs
+  are in [Production operations](../OPERATIONS.md#the-installable-app).
 
 **What does not follow it:**
 

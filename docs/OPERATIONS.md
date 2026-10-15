@@ -219,6 +219,41 @@ no trustworthy address to record. The Helm chart routes everything to the web
 Service and, with its default NetworkPolicy, lets only the web pods connect to
 the API.
 
+## The installable app
+
+OCI can be installed to a home screen or desktop (users: [Installing the
+app](user/installing.md)). It adds no service and no setting. The instance
+serves a manifest at `/api/manifest.webmanifest`, and there is no service
+worker: Chromium does not need one to offer installing, and without one
+nothing of OCI is kept on a device for offline use. With the network down an
+installed app shows the browser's own error.
+
+The bundled Caddy configuration (`docker/Caddyfile`, which the Helm chart's web
+pods run too, so the chart needs no change) does what this needs. If you
+front OCI with your own proxy, or replace the web container, do the same:
+
+- **Let the manifest through, unauthenticated.** `GET /api/manifest.webmanifest`
+  must reach the API without a login or an access-control page in front of it
+  (a browser fetches it without cookies), and keep its
+  `Content-Type: application/manifest+json` and `Cache-Control: public,
+  max-age=300`. Behind a single-sign-on proxy that redirects anonymous
+  requests, the manifest is redirected too, and the browser then offers no
+  install.
+- **Allow it in the Content-Security-Policy.** The shipped policy names
+  `manifest-src 'self'` (the manifest and the icons are on your own address).
+  A policy that sets `manifest-src` or `default-src` to something narrower stops the
+  browser reading the manifest.
+- **Revalidate the pages.** Every page is `index.html`; send
+  `Cache-Control: no-cache` for it under every path (`/`, `/auth/login`, and
+  the rest), not only `/index.html`, and for the files in `/icons/`. Files in
+  `/assets/` have hashed names and may be cached for a year. Without this a
+  browser may reuse its copy of the page by heuristic freshness, so an
+  installed app opened offline can show an old page rather than the browser's
+  error, and after an upgrade a page that points at assets that are gone. The
+  bundled Caddy configuration did not send it for pages other than
+  `/index.html` before v0.14.
+- **Serve `/icons/*.png` as `image/png`** from the web container's files.
+
 ## Sign-in limits
 
 OCI limits how fast credentials and tokens can be tried (v0.11). Its limits
