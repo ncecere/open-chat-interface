@@ -165,6 +165,8 @@ const FILE = {
 interface Fixture {
   id: string;
   name: string;
+  /** This project's instruction canary: unique, so a project an actor came to own never muddies another's. */
+  instr: string;
   files: { owner: string; editor: string; groupEditor: string };
   shares: { editor: string; viewer: string; groupEditor: string; groupViewer: string };
   threads: Record<'owner' | 'editor' | 'viewer', string>;
@@ -374,7 +376,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
     seq += 1;
     const created = await call('owner', 'POST', '/projects', {
       name: `Matrix ${seq}`,
-      instructions: `Follow ${INSTR} always.`,
+      instructions: `Follow ${INSTR}-${seq} always.`,
     });
     expect(created.status, created.text).toBe(201);
     const id = created.json.project.id as string;
@@ -423,6 +425,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
     return {
       id,
       name: `Matrix ${seq}`,
+      instr: `${INSTR}-${seq}`,
       files,
       shares,
       threads: {
@@ -508,7 +511,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
       const project = response.json.project;
       const bad: string[] = [];
       if (actor !== 'owner' && project.ownerName !== PEOPLE.owner.name) bad.push('ownerName');
-      if (project.instructions !== `Follow ${INSTR} always.`) bad.push('instructions');
+      if (project.instructions !== `Follow ${fx.instr} always.`) bad.push('instructions');
       if (/@example\.com/.test(response.text)) bad.push('email');
       return `200:${project.access}${bad.length ? `:BAD(${bad})` : ''}`;
     },
@@ -541,7 +544,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
       const inInput = [FILE.owner, FILE.editor, FILE.groupEditor].map((c) =>
         result.text.includes(c),
       );
-      const instr = system.includes(INSTR);
+      const instr = system.includes(fx.instr);
       if (instr && inInput.every(Boolean)) return 'context';
       if (!instr && inInput.every((v) => !v)) return 'none';
       return `partial(instr=${instr},files=${inInput})`;
@@ -699,7 +702,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
       return `200:${after.status === 404 ? 'gone' : 'STILL-THERE'}`;
     },
 
-    async export(actor, _fx) {
+    async export(actor, fx) {
       const response = await appFor(actor).request('/api/me/export');
       if (response.status !== 200) return `status ${response.status}`;
       const entries = unzipSync(new Uint8Array(await response.arrayBuffer()));
@@ -709,7 +712,7 @@ describe.skipIf(!available)('live: project access matrix', () => {
       const found = (['owner', 'editor', 'groupEditor'] as const).filter((who) =>
         everything.includes(FILE[who]),
       );
-      if (actor !== 'owner' && everything.includes(INSTR)) return 'INSTRUCTIONS-LEAKED';
+      if (actor !== 'owner' && everything.includes(fx.instr)) return 'INSTRUCTIONS-LEAKED';
       return found.length ? found.join('+') : 'none';
     },
   };
@@ -786,7 +789,13 @@ describe.skipIf(!available)('live: project access matrix', () => {
             : row === 'use-search'
               ? large
               : readOnly;
-          expect(await CELLS[row](actor, fixture)).toBe(MATRIX[row][index]);
+          const observed = await CELLS[row](actor, fixture);
+          // A cell that changed its own project (a transfer makes the editor its owner)
+          // leaves nothing behind for the cells that read whole accounts, such as the export.
+          if (DESTRUCTIVE.includes(row)) {
+            await pool.db.execute(sql`delete from project where id = ${fixture.id}`);
+          }
+          expect(observed).toBe(MATRIX[row][index]);
         });
       }
     });

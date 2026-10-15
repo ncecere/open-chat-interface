@@ -42,11 +42,12 @@ export function meetsAccess(level: ProjectAccessLevel | null, minimum: ProjectAc
  * Groups are read from `group_member` in the same statement, so a member removed
  * a moment ago has lost the access in the same instant.
  */
-function namesPerson(share: string, userId: string): SqlFragment {
-  return sql`(${sql.raw(share)}."subject_user_id" = ${userId}
+function namesPerson(share: string, userId: SqlFragment | string): SqlFragment {
+  const person = idSql(userId);
+  return sql`(${sql.raw(share)}."subject_user_id" = ${person}
     or ${sql.raw(share)}."subject_group_id" in (
       select "gm_access"."group_id" from "group_member" as "gm_access"
-      where "gm_access"."user_id" = ${userId}))`;
+      where "gm_access"."user_id" = ${person}))`;
 }
 
 /** An id to SQL: a column expression stays as it is, a string becomes a bound parameter. */
@@ -93,11 +94,14 @@ export async function projectAccess(
  * index lookups (`project_share_person_unique`, `project_share_group_unique`,
  * `group_member_user_idx`).
  */
-export function projectReadableBy(projectId: SqlFragment | string, userId: string): SqlFragment {
+export function projectReadableBy(
+  projectId: SqlFragment | string,
+  userId: SqlFragment | string,
+): SqlFragment {
   return sql`exists (
     select 1 from "project" as "pr_access"
     where "pr_access"."id" = ${idSql(projectId)}
-      and ("pr_access"."user_id" = ${userId}
+      and ("pr_access"."user_id" = ${idSql(userId)}
         or exists (
           select 1 from "project_share" as "ps_access"
           where "ps_access"."project_id" = "pr_access"."id"
@@ -106,11 +110,14 @@ export function projectReadableBy(projectId: SqlFragment | string, userId: strin
 }
 
 /** As `projectReadableBy`, for the people who may change files and instructions: the owner and editors. */
-export function projectEditableBy(projectId: SqlFragment | string, userId: string): SqlFragment {
+export function projectEditableBy(
+  projectId: SqlFragment | string,
+  userId: SqlFragment | string,
+): SqlFragment {
   return sql`exists (
     select 1 from "project" as "pe_access"
     where "pe_access"."id" = ${idSql(projectId)}
-      and ("pe_access"."user_id" = ${userId}
+      and ("pe_access"."user_id" = ${idSql(userId)}
         or exists (
           select 1 from "project_share" as "pes_access"
           where "pes_access"."project_id" = "pe_access"."id"

@@ -1,17 +1,30 @@
 import {
   createProjectSchema,
+  createProjectShareSchema,
   DEFAULT_MAX_FILE_BYTES,
   DEFAULT_MAX_FILES_PER_MESSAGE,
+  transferProjectSchema,
   updateProjectSchema,
+  updateProjectShareSchema,
 } from '@oci/shared';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { clientIp } from '../lib/client-ip.js';
 import { rateLimited, validationFailed } from '../lib/errors.js';
 import { type AppBindings, currentUser, requireAuth } from '../middleware/context.js';
 import { parseBody } from '../middleware/validate.js';
 import { assertAttachmentUseAllowed } from '../services/attachments/index.js';
 import { uploadRateLimit } from '../services/limits/rate-limit.js';
 import { requireProjectAccess } from '../services/project-sharing/access.js';
+import {
+  createProjectShare,
+  deleteProjectShare,
+  leaveProject,
+  listProjectShares,
+  projectAccessInfo,
+  transferProject,
+  updateProjectShare,
+} from '../services/project-sharing/shares.js';
 import {
   assertProjectsAllowed,
   createProject,
@@ -204,4 +217,87 @@ projectRoutes.delete('/:id/files/:fileId', async (c) => {
   const user = currentUser(c);
   await deleteProjectFile(c.req.param('id'), c.req.param('fileId'), user.id);
   return c.json({ ok: true });
+});
+
+/** The actor of a sharing request, as the audit trail names them. */
+function sharingActor(c: Context<AppBindings>) {
+  const user = currentUser(c);
+  return { id: user.id, role: user.role, email: user.email, ipAddress: clientIp(c) };
+}
+
+/**
+ * What the caller may do with the project and how widely it is shared, as
+ * counts: any access. Never who the other people are.
+ */
+projectRoutes.get('/:id/access', async (c) => {
+  const user = currentUser(c);
+  return c.json(await projectAccessInfo(c.req.param('id'), user.id));
+});
+
+/** The people and groups the project is shared with, with names and emails. Owner only (403 for anyone else with access). */
+projectRoutes.get('/:id/shares', async (c) => {
+  const user = currentUser(c);
+  return c.json({ shares: await listProjectShares(c.req.param('id'), user.id) });
+});
+
+/**
+ * Shares the project with a person (exact email) or with a group the owner
+ * belongs to, as viewer or editor. Owner only. 409 `upgrade_in_progress` while a
+ * replica of an older release still serves; 422 with a `details.reason` for the
+ * limits and unknown people; 429 past 30 a minute.
+ */
+projectRoutes.post('/:id/shares', async (c) => {
+  const input = await parseBody(c, createProjectShareSchema);
+  const share = await createProjectShare({
+    projectId: c.req.param('id'),
+    actor: sharingActor(c),
+    subject: input.subject,
+    permission: input.permission,
+  });
+  return c.json({ share }, 201);
+});
+
+/** Changes a share's permission. Owner only. Downgrading an editor hands the files they added to the owner. */
+projectRoutes.patch('/:id/shares/:shareId', async (c) => {
+  const input = await parseBody(c, updateProjectShareSchema);
+  const share = await updateProjectShare({
+    projectId: c.req.param('id'),
+    shareId: c.req.param('shareId'),
+    actor: sharingActor(c),
+    permission: input.permission,
+  });
+  return c.json({ share });
+});
+
+/** Removes a share. Owner only. Conversations of people who lose access leave the project (kept); their files go to the owner. */
+projectRoutes.delete('/:id/shares/:shareId', async (c) => {
+  const result = await deleteProjectShare({
+    projectId: c.req.param('id'),
+    shareId: c.req.param('shareId'),
+    actor: sharingActor(c),
+  });
+  return c.json({
+    ok: true,
+    detachedThreads: result.detachedThreads,
+    movedFiles: result.movedFiles,
+  });
+});
+
+/** Hands the project to a person who holds a direct editor share; the old owner becomes an editor. Owner only. */
+projectRoutes.post('/:id/transfer', async (c) => {
+  const user = currentUser(c);
+  const input = await parseBody(c, transferProjectSchema);
+  const projectId = c.req.param('id');
+  await transferProject({ projectId, actor: sharingActor(c), email: input.email });
+  return c.json({ project: await getProjectSummary(projectId, user.id) });
+});
+
+/** Gives up the caller's own direct share. 409 for the owner and for access only through a group. */
+projectRoutes.post('/:id/leave', async (c) => {
+  const result = await leaveProject({ projectId: c.req.param('id'), actor: sharingActor(c) });
+  return c.json({
+    ok: true,
+    detachedThreads: result.detachedThreads,
+    movedFiles: result.movedFiles,
+  });
 });

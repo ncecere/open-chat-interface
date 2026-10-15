@@ -21,3 +21,10 @@ export async function anyOnLegalHold(
     .limit(1);
   return Boolean(row);
 }
+
+/**
+ * Deleting an account that owns a shared project would delete the files other
+ * people added to it. Refused while any of those people is on legal hold.
+ */
+export const HELD_SHARED_PROJECT_ACCOUNT_DELETION_MESSAGE =
+  'This account owns a project that holds files added by someone whose data is on legal hold, so it cannot be deleted. Lift the hold or transfer the project first.';
