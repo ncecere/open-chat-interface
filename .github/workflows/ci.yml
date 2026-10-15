@@ -76,8 +76,11 @@ jobs:
       TEST_REDIS_URL: redis://127.0.0.1:6389
       AUTH_SECRET: ci-auth-secret-at-least-32-characters
       ENCRYPTION_KEY: ci-encryption-key-at-least-32-characters
-      APP_URL: http://127.0.0.1:4173
-      E2E_BASE_URL: http://127.0.0.1:4173
+      # `localhost`, not 127.0.0.1: WebAuthn (the passkey browser tests) refuses an IP
+      # address as the relying party. The preview server listens on 127.0.0.1 and
+      # Chromium reaches it through the name.
+      APP_URL: http://localhost:4173
+      E2E_BASE_URL: http://localhost:4173
       VITE_API_PROXY: http://127.0.0.1:3000
       INITIAL_ADMIN_EMAIL: admin@example.test
       INITIAL_ADMIN_PASSWORD: ci-admin-password-1234
@@ -187,8 +190,14 @@ jobs:
       - name: Browser and accessibility regression tests
         run: |
           pnpm --filter @oci/web exec playwright install --with-deps chromium
+          # The right-to-left browser tests choose a forced-RTL pseudo-locale, which only
+          # a build made with this flag offers (the build step above is the production one).
+          VITE_OCI_PSEUDO_LOCALES=1 pnpm --filter @oci/web build
           pnpm db:migrate
           pnpm db:seed
+          # Schedules the background migrations: the classification browser tests turn
+          # Warn and Block on, which the API refuses until it has.
+          pnpm db:migrate:post
           node apps/api/dist/server.js > /tmp/oci-api.log 2>&1 &
           api_pid=$!
           pnpm --filter @oci/web exec vite preview --host 127.0.0.1 --port 4173 > /tmp/oci-web.log 2>&1 &
