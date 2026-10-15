@@ -31,8 +31,11 @@ export const threadConnectorUse: BackgroundMigrationDefinition = {
   table: 'public.message',
   description:
     'Finds the conversations that used a connector before 0.14, so that classifying the connector reaches them.',
-  batchSize: 500,
-  pauseMs: 200,
+  // A read-mostly scan that writes a row only where a connector was used, so
+  // larger batches and shorter pauses than the migrations that rewrite rows; the
+  // runner's throttle (replication lag, long transactions) still applies.
+  batchSize: 2000,
+  pauseMs: 50,
   async batch(sql, { cursor, batchSize }) {
     const batch = await sql<{ id: string }[]>`
       select id from message

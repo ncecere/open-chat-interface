@@ -1432,7 +1432,7 @@ How the upgrade gets there, in the three phases of an [upgrade](#upgrade):
 2. **`migrate --post` (after every replica runs 0.14):** schedules the
    background migration `0.14.thread-connector-use`.
 3. **Background:** `0.14.thread-connector-use` reads stored messages in batches
-   of 500, with a pause between them, and records which connectors each
+   of 2,000, with a short pause between them, and records which connectors each
    conversation used before 0.14 (including tool runs by a v0.13 replica during
    the upgrade). It respects the usual throttle and can be paused or resumed on
    **System health → Background migrations**. Until it has finished, a decision
