@@ -3,6 +3,7 @@ import type { UsageSummary, UserRole } from '@oci/shared';
 import { db } from '../../db/index.js';
 import { getReserveAmounts } from '../lifecycle/settings.js';
 import { getDefaultOrganizationId } from '../organization.js';
+import { budgetAppliesTo } from './applicability.js';
 import {
   buildAllowance,
   calculateCostMicros,
@@ -35,8 +36,10 @@ export {
 export { resolveWindow } from './windows.js';
 
 /**
- * Every enabled policy applied to a role, with model scope and any per-user
- * override resolved.
+ * Every enabled policy applied to a person, with model scope and any per-user
+ * override resolved: those attached to their role or to any group they are in
+ * (`budgetAppliesTo`), each once. Every one is then enforced on its own; the
+ * most restrictive wins and nothing is summed.
  *
  * Overrides are applied here rather than at each call site so enforcement and
  * the usage meter can never disagree about what a person's limit actually is.
@@ -55,12 +58,11 @@ async function loadPoliciesForRole(role: UserRole, userId?: string): Promise<Eva
       timezone: schema.quotaPolicy.timezone,
     })
     .from(schema.quotaPolicy)
-    .innerJoin(schema.quotaPolicyRole, eq(schema.quotaPolicyRole.policyId, schema.quotaPolicy.id))
     .where(
       and(
         eq(schema.quotaPolicy.organizationId, organizationId),
         eq(schema.quotaPolicy.enabled, true),
-        eq(schema.quotaPolicyRole.role, role),
+        budgetAppliesTo(role, userId),
       ),
     )
     .orderBy(schema.quotaPolicy.name);

@@ -10,6 +10,11 @@ import {
 } from '../src/middleware/context.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
 import { groupAdminRoutes, userGroupRoutes } from '../src/routes/admin/groups.js';
+import { modelRoutes } from '../src/routes/admin/models.js';
+import { overrideRoutes } from '../src/routes/admin/overrides.js';
+import { quotaRoutes } from '../src/routes/admin/quotas.js';
+import { rolesRoutes } from '../src/routes/admin/roles.js';
+import { userRoutes } from '../src/routes/admin/users.js';
 import { groupRoutes } from '../src/routes/groups.js';
 
 /**
@@ -29,7 +34,12 @@ export function appFor(actor: Actor | null) {
   });
   app.use('/admin/*', requireAdmin);
   app.route('/admin/groups', groupAdminRoutes);
+  app.route('/admin/users', overrideRoutes);
   app.route('/admin/users', userGroupRoutes);
+  app.route('/admin/users', userRoutes);
+  app.route('/admin/quotas', quotaRoutes);
+  app.route('/admin/models', modelRoutes);
+  app.route('/admin/roles', rolesRoutes);
   app.route('/groups', groupRoutes);
   return app;
 }

@@ -3,12 +3,14 @@ import {
   createGroupSchema,
   listGroupMembersQuerySchema,
   listGroupsQuerySchema,
+  putGroupGrantsSchema,
   updateGroupMemberSchema,
   updateGroupSchema,
 } from '@oci/shared';
 import { Hono } from 'hono';
 import { type AppBindings, currentUser } from '../../middleware/context.js';
 import { parseBody, parseChanges, parseQuery } from '../../middleware/validate.js';
+import { putGroupGrants } from '../../services/groups/grants.js';
 import {
   createGroup,
   deleteGroup,
@@ -94,6 +96,15 @@ groupAdminRoutes.delete('/:id/members/:userId', async (c) => {
 
 groupAdminRoutes.get('/:id/grants', async (c) => {
   return c.json(await getGroupGrants(c.req.param('id')));
+});
+
+/**
+ * Replaces what the group grants. The one place grants are written: the budget
+ * and model forms never carry groups.
+ */
+groupAdminRoutes.put('/:id/grants', async (c) => {
+  const input = await parseBody(c, putGroupGrantsSchema);
+  return c.json(await putGroupGrants(currentUser(c), c.req.param('id'), input));
 });
 
 /**
