@@ -110,14 +110,17 @@ export function ProvidersSection() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {/* Full values on hover when a narrow screen cuts them short (#130). */}
-                  <p className="min-w-0 truncate font-medium" title={provider.label}>
+                  <p
+                    className="min-w-0 line-clamp-2 text-ellipsis [overflow-wrap:anywhere] font-medium"
+                    title={provider.label}
+                  >
                     {provider.label}
                   </p>
                   <Badge variant="neutral">{PROVIDER_KIND_LABELS[provider.kind]}</Badge>
                   {!provider.enabled && <Badge variant="warning">disabled</Badge>}
                 </div>
                 <p
-                  className="truncate text-xs text-[var(--text-muted)]"
+                  className="line-clamp-2 text-ellipsis [overflow-wrap:anywhere] text-xs text-[var(--text-muted)]"
                   title={providerSummary(provider)}
                 >
                   {providerSummary(provider)}
@@ -125,7 +128,8 @@ export function ProvidersSection() {
               </div>
 
               <EditOnly>
-                <div className="flex w-full items-center justify-end gap-1 sm:w-auto">
+                {/* May wrap, so at larger text the buttons give way instead of running past the list (1.4.4). */}
+                <div className="flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto">
                   <Button
                     variant="secondary"
                     size="sm"
