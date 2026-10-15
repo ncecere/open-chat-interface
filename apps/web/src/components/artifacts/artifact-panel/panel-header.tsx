@@ -1,5 +1,6 @@
 import { Maximize2, Minimize2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { type PanelResize, PanelWidthButtons } from '~/components/artifacts/panel-resize';
 import { Button } from '~/components/ui/button';
 import { DialogClose, DialogDescription, DialogTitle } from '~/components/ui/dialog';
 import { useT } from '~/lib/i18n';
@@ -13,6 +14,8 @@ export interface Chrome {
   fullScreen: boolean;
   /** Absent where the panel cannot go full screen. */
   onToggleFullScreen?: () => void;
+  /** Wider and Narrower for the docked panel; absent where it has no handle to drag. */
+  resize?: PanelResize;
 }
 
 /**
@@ -95,6 +98,7 @@ export function PanelHeader({
         {toolbar}
         {children}
       </div>
+      {chrome.resize && <PanelWidthButtons resize={chrome.resize} />}
       {chrome.onToggleFullScreen && (
         <Button
           type="button"

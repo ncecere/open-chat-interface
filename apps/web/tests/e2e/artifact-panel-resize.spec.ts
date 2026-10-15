@@ -109,6 +109,9 @@ test('the docked panel resizes by drag and keyboard, and remembers its width', a
     await page.getByRole('button', { name: 'Open artifact: Plan' }).click();
     await expect(page.getByRole('dialog', { name: 'Plan' })).toBeVisible();
     await expect(page.getByRole('separator', { name: 'Resize artifact panel' })).toHaveCount(0);
+    // Nor the buttons that do the same without dragging.
+    await expect(page.getByRole('button', { name: 'Make panel wider' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Make panel narrower' })).toHaveCount(0);
     return;
   }
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -167,4 +170,33 @@ test('the docked panel resizes by drag and keyboard, and remembers its width', a
   await handle.dblclick();
   expect(Math.abs((await width()) - before)).toBeLessThanOrEqual(2);
   expect(await page.evaluate(() => localStorage.getItem('oci.artifacts.panelWidth'))).toBeNull();
+
+  // WCAG 2.5.7: the same resizing without dragging, by a single click or the keyboard.
+  const wider = panel.getByRole('button', { name: 'Make panel wider' });
+  const narrower = panel.getByRole('button', { name: 'Make panel narrower' });
+  await expect(wider).toBeVisible();
+  const base = await width();
+  await wider.click();
+  await expect(handle).toHaveAttribute('aria-valuenow', String(base + 64));
+  expect(await width()).toBe(base + 64);
+  await narrower.click();
+  await narrower.click();
+  await expect(handle).toHaveAttribute('aria-valuenow', String(base - 64));
+  // From the keyboard: a button is in the tab order and Enter presses it.
+  await wider.focus();
+  await page.keyboard.press('Enter');
+  await expect(handle).toHaveAttribute('aria-valuenow', String(base));
+  // They stop where the handle stops, and say so.
+  await handle.focus();
+  await page.keyboard.press('Home');
+  await expect(narrower).toBeDisabled();
+  await expect(wider).toBeEnabled();
+  await page.keyboard.press('End');
+  await expect(wider).toBeDisabled();
+  await expect(narrower).toBeEnabled();
+  expect(await width()).toBe(Math.floor(1440 * 0.7));
+  // Full screen has neither the handle nor the buttons.
+  await panel.getByRole('button', { name: 'Full screen' }).click();
+  await expect(page.getByRole('button', { name: 'Make panel wider' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Exit full screen' }).click();
 });

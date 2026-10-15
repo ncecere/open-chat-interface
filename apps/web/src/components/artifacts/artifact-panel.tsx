@@ -81,6 +81,16 @@ export function ArtifactPanel({
     onClose,
     fullScreen,
     onToggleFullScreen: onFullScreenChange ? () => setFullScreen(!fullScreen) : undefined,
+    // Where the handle is: docked and not full screen, and a window wide enough to have room to change.
+    resize:
+      docked && !fullScreen && panelWidth.max > panelWidth.min
+        ? {
+            width: panelWidth.width,
+            min: panelWidth.min,
+            max: panelWidth.max,
+            onResize: panelWidth.set,
+          }
+        : undefined,
   };
   const setAside = useCallback(
     (element: HTMLElement | null) => {

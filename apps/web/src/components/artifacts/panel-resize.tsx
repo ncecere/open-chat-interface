@@ -1,3 +1,4 @@
+import { ChevronsLeftRight, ChevronsRightLeft } from 'lucide-react';
 import {
   type KeyboardEvent,
   type PointerEvent,
@@ -6,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Button } from '~/components/ui/button';
 import { useT } from '~/lib/i18n';
 
 /** The docked panel's width in CSS pixels, remembered in this browser. */
@@ -17,6 +19,8 @@ export const PANEL_MIN_WIDTH = 352;
 export const PANEL_MAX_SHARE = 0.7;
 /** One arrow-key step; Shift makes it four times as large. */
 export const PANEL_KEY_STEP = 32;
+/** One press of Wider or Narrower: a click is a bigger move than a key press. */
+export const PANEL_BUTTON_STEP = PANEL_KEY_STEP * 2;
 
 /** The widest the panel may be in a window this wide (never below the minimum). */
 export function maxPanelWidth(windowWidth: number): number {
@@ -86,6 +90,61 @@ export function widthForKey(
     default:
       return null;
   }
+}
+
+/** What the panel's header needs to offer Wider and Narrower; absent where it cannot be resized. */
+export interface PanelResize {
+  width: number;
+  min: number;
+  max: number;
+  /** The handle's own `onResize`: null restores the default. */
+  onResize: (width: number | null, persist?: boolean) => void;
+}
+
+/**
+ * Wider and Narrower: a way to resize the panel with a single click, for a
+ * person who cannot drag the handle (WCAG 2.5.7) and does not use the keyboard.
+ * They set the same width the handle's keys do, through the same `onResize`;
+ * the separator's value announces the result. The icons are symmetric, so they
+ * read the same whichever side the panel is docked on, and "wider" is a width,
+ * not a direction. A button at its limit is disabled (the Button keeps focus on
+ * it, so a held Enter does not fall out of the toolbar).
+ */
+export function PanelWidthButtons({ resize }: { resize: PanelResize }) {
+  const t = useT();
+  const { width, min, max, onResize } = resize;
+  const widerName = t('artifacts.resize.wider');
+  const narrowerName = t('artifacts.resize.narrower');
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={narrowerName}
+        title={narrowerName}
+        data-panel-narrower=""
+        className="shrink-0"
+        disabled={width <= min}
+        onClick={() => onResize(Math.max(min, width - PANEL_BUTTON_STEP))}
+      >
+        <ChevronsRightLeft aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={widerName}
+        title={widerName}
+        data-panel-wider=""
+        className="shrink-0"
+        disabled={width >= max}
+        onClick={() => onResize(Math.min(max, width + PANEL_BUTTON_STEP))}
+      >
+        <ChevronsLeftRight aria-hidden="true" />
+      </Button>
+    </>
+  );
 }
 
 /** Keeps a drag's pointer events on the handle, even over the preview's frame. */
