@@ -16,6 +16,11 @@ On a phone the same page is laid out for a narrow screen.
 
 ![Signing in on a phone](../images/mobile-sign-in.png)
 
+If you added two-step verification to your account (or your administrator
+requires it), you are asked for a code from your authenticator app, or a
+recovery code, after your password, or you can sign in with a passkey. See
+[Two-step verification](two-step-verification.md).
+
 If you opened a link to a particular page (a conversation, a Settings section,
 an administration page) while signed out, signing in takes you to that page
 rather than the chat home.

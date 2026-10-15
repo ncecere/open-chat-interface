@@ -56,6 +56,9 @@ scrape_configs:
 | `oci_webhook_deliveries_total` | counter | `outcome`: `succeeded`, `retrying`, `failed` |
 | `oci_webhook_deliveries_pending` | gauge | Deliveries waiting for a first attempt or a retry |
 | `oci_storage_deletions_pending` | gauge | Stored objects queued for deletion |
+| `oci_mfa_verifications_total` | counter | Second-step verifications: `method` (`totp`, `recovery_code`, `passkey`), `outcome` (`success`, `failure`) |
+| `oci_mfa_people` | gauge | Unbanned accounts by `role` and `state`: `enrolled`, `not_enrolled`, `exempt` (no password, so never required to) |
+| `oci_mfa_limited_people` | gauge | By `role`: people whose role requires two-step verification, who have not set it up and whose grace has passed |
 | `oci_backup_runs_total` | counter | `outcome`: `succeeded`, `failed` |
 | `oci_backup_duration_seconds` | histogram | |
 | `oci_backup_last_success_timestamp_seconds` | gauge | Absent until a backup succeeds. With [external database backup](external-database-backup.md) it means the attachment backup |
@@ -87,6 +90,19 @@ Labels never hold user ids, thread ids or raw paths, so the number of series
 stays bounded. The gauges read from the database at scrape time; if the
 database does not answer, they are left out of that scrape rather than failing
 it.
+
+Two-step verification: a burst of failures is a guessing attempt or a clock
+problem, and a limited person count that does not fall after the grace is people
+who need help setting up (or a reset):
+
+```yaml
+- alert: MfaVerificationFailuresHigh
+  expr: sum(rate(oci_mfa_verifications_total{outcome="failure"}[10m])) > 0.2
+  for: 15m
+- alert: MfaPeopleLimited
+  expr: sum(oci_mfa_limited_people) > 0
+  for: 1d
+```
 
 OCI cannot see that an external database backup's base backups stopped, only
 that WAL is archived. Alert on the backup tool's own metrics for that, for
