@@ -1,7 +1,7 @@
 # Implementation Plan: release-hygiene (v0.12.1), done
 
-Spec: [SPEC-release-hygiene.md](../../SPEC-release-hygiene.md), part of
-[SPEC.md](../../SPEC.md). Tasks: [release-hygiene-todo.md](release-hygiene-todo.md).
+Spec: [SPEC-release-hygiene.md](../../specs/v0.13/SPEC-release-hygiene.md), part of
+[SPEC.md](../../specs/v0.13/SPEC.md). Tasks: [release-hygiene-todo.md](release-hygiene-todo.md).
 
 ## Overview
 
