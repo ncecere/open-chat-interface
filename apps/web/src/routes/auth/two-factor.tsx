@@ -10,24 +10,12 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
+import { useT } from '~/lib/i18n';
 import type { SecondStepProblem } from '~/lib/mfa';
 import { returnPathFromSearch, signInSearch } from '~/lib/return-path';
 import { verifySecondStep } from '~/lib/second-step';
 
 type Method = 'totp' | 'recovery';
-
-const COPY: Record<Method, { label: string; hint: string; empty: string }> = {
-  totp: {
-    label: 'Authentication code',
-    hint: 'The 6-digit code from your authenticator app. You can paste it; spaces are fine.',
-    empty: 'Enter the code from your authenticator app.',
-  },
-  recovery: {
-    label: 'Recovery code',
-    hint: 'One of the recovery codes you saved when you set up two-step verification. Each works once. You can paste it.',
-    empty: 'Enter one of your recovery codes.',
-  },
-};
 
 /**
  * The second step of a password sign-in (#399).
@@ -39,6 +27,7 @@ const COPY: Record<Method, { label: string; hint: string; empty: string }> = {
  * five wrong codes) the page offers to start again rather than another try.
  */
 export function TwoFactorPage() {
+  const t = useT();
   const { data: status } = useAuthStatus();
   // The page a signed-out visit asked for (#225), kept through the password step.
   const [returnTo] = useState(() => returnPathFromSearch() ?? '/');
@@ -48,7 +37,18 @@ export function TwoFactorPage() {
   const [code, setCode] = useState('');
   const [problem, setProblem] = useState<SecondStepProblem | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const copy = COPY[method];
+  const copy =
+    method === 'totp'
+      ? {
+          label: t('auth.common.authenticationCode'),
+          hint: t('auth.twoFactor.totpHint'),
+          empty: t('auth.twoFactor.totpEmpty'),
+        }
+      : {
+          label: t('auth.twoFactor.recoveryLabel'),
+          hint: t('auth.twoFactor.recoveryHint'),
+          empty: t('auth.twoFactor.recoveryEmpty'),
+        };
   // Back to sign-in, which asks for the password again and comes back here.
   const signInAgain = signInSearch(returnTo);
 
@@ -99,13 +99,13 @@ export function TwoFactorPage() {
         </div>
 
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
-          <h1 className="text-lg font-semibold">Two-step verification</h1>
+          <h1 className="text-lg font-semibold">{t('auth.twoFactor.title')}</h1>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
             {ended
-              ? `Sign in to ${instanceName(appName)} again to get a new attempt.`
+              ? t('auth.twoFactor.ended', { appName: instanceName(appName) })
               : method === 'totp'
-                ? 'Enter the code from your authenticator app to finish signing in.'
-                : 'Enter one of your recovery codes to finish signing in.'}
+                ? t('auth.twoFactor.promptTotp')
+                : t('auth.twoFactor.promptRecovery')}
           </p>
 
           {ended ? (
@@ -113,7 +113,7 @@ export function TwoFactorPage() {
               <AuthFormError id="two-factor-error">{problem.text}</AuthFormError>
               <Button id="two-factor-start-again" variant="primary" className="w-full" asChild>
                 <Link to="/auth/login" search={signInAgain as never}>
-                  Start again
+                  {t('auth.twoFactor.startAgain')}
                 </Link>
               </Button>
             </div>
@@ -157,7 +157,7 @@ export function TwoFactorPage() {
                 className="w-full"
               >
                 {submitting ? <Spinner className="text-white" /> : <ShieldCheck />}
-                Verify
+                {t('auth.twoFactor.verify')}
               </Button>
 
               <div className="flex flex-col items-center gap-1">
@@ -168,12 +168,12 @@ export function TwoFactorPage() {
                   onClick={() => switchMethod(method === 'totp' ? 'recovery' : 'totp')}
                 >
                   {method === 'totp'
-                    ? 'Use a recovery code instead'
-                    : 'Use an authenticator code instead'}
+                    ? t('auth.twoFactor.useRecovery')
+                    : t('auth.twoFactor.useAuthenticator')}
                 </Button>
                 <PasskeySignInButton
                   returnTo={returnTo}
-                  label="Use a passkey instead"
+                  label={t('auth.twoFactor.usePasskey')}
                   variant="link"
                 />
               </div>
@@ -188,7 +188,7 @@ export function TwoFactorPage() {
               search={signInAgain as never}
               className="hover:text-[var(--text-primary)]"
             >
-              Back to sign in
+              {t('auth.twoFactor.back')}
             </Link>
           </p>
         )}

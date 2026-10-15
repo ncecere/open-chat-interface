@@ -19,8 +19,10 @@ import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { authClient } from '~/lib/auth-client';
+import { useT } from '~/lib/i18n';
 
 export function SignupPage() {
+  const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   // Only the first load waits; an outage is said as one, not as registration
@@ -41,7 +43,7 @@ export function SignupPage() {
     event.preventDefault();
     setError(null);
     const problems = authFormProblems([
-      { id: 'signup-name', problem: name.trim() ? null : 'Enter your name.' },
+      { id: 'signup-name', problem: name.trim() ? null : t('auth.form.nameRequired') },
       { id: 'signup-email', problem: emailProblem(email) },
       { id: 'signup-password', problem: newPasswordProblem(password) },
     ]);
@@ -55,7 +57,7 @@ export function SignupPage() {
 
     const result = await authClient.signUp.email({ name, email, password });
     if (result.error) {
-      setError(result.error.message ?? 'Unable to create your account.');
+      setError(result.error.message ?? t('auth.signup.createFailed'));
       setSubmitting(false);
       return;
     }
@@ -81,7 +83,7 @@ export function SignupPage() {
             logoUrl={status?.branding?.logoUrl}
             className="text-2xl"
           />
-          <p className="text-sm text-[var(--text-muted)]">Create your account.</p>
+          <p className="text-sm text-[var(--text-muted)]">{t('auth.signup.subtitle')}</p>
         </div>
 
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
@@ -92,34 +94,33 @@ export function SignupPage() {
           ) : created ? (
             <div className="space-y-4 text-center">
               <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
-              <h1 className="text-lg font-semibold">Check your email</h1>
+              <h1 className="text-lg font-semibold">{t('auth.common.checkYourEmail')}</h1>
               <p className="text-sm text-[var(--text-muted)]">
                 {/* It can be delayed, or not go out while mail is failing (#327). */}
-                Follow the verification link we are sending you before signing in. It can take a few
-                minutes, so check your spam folder too. If it does not arrive, request another
-                below, or ask an administrator to check email delivery.
+                {t('auth.signup.checkEmailBody')}
               </p>
               <ResendVerification email={email} />
               <Button asChild variant="primary" className="w-full">
-                <Link to="/auth/login">Return to sign in</Link>
+                <Link to="/auth/login">{t('auth.common.returnToSignIn')}</Link>
               </Button>
             </div>
           ) : unavailable ? (
-            <AuthStatusUnavailable title="Registration temporarily unavailable" refetch={refetch} />
+            <AuthStatusUnavailable
+              title={t('auth.signup.tempUnavailableTitle')}
+              refetch={refetch}
+            />
           ) : !registrationAvailable ? (
             <div className="space-y-4 text-center">
-              <h1 className="text-lg font-semibold">Registration unavailable</h1>
-              <p className="text-sm text-[var(--text-muted)]">
-                This instance is not accepting open account registrations.
-              </p>
+              <h1 className="text-lg font-semibold">{t('auth.signup.unavailableTitle')}</h1>
+              <p className="text-sm text-[var(--text-muted)]">{t('auth.signup.unavailableBody')}</p>
               <Button asChild className="w-full">
-                <Link to="/auth/login">Return to sign in</Link>
+                <Link to="/auth/login">{t('auth.common.returnToSignIn')}</Link>
               </Button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-name">Name</Label>
+                <Label htmlFor="signup-name">{t('auth.common.name')}</Label>
                 <Input
                   id="signup-name"
                   {...authFieldProps({
@@ -136,7 +137,7 @@ export function SignupPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-email">Email</Label>
+                <Label htmlFor="signup-email">{t('auth.common.email')}</Label>
                 <Input
                   id="signup-email"
                   {...authFieldProps({
@@ -154,7 +155,7 @@ export function SignupPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="signup-password">Password</Label>
+                <Label htmlFor="signup-password">{t('auth.common.password')}</Label>
                 <Input
                   id="signup-password"
                   {...authFieldProps({
@@ -174,7 +175,7 @@ export function SignupPage() {
                   onChange={(event) => setPassword(event.target.value)}
                 />
                 <p id="signup-password-hint" className="text-xs text-[var(--text-muted)]">
-                  Use at least 12 characters.
+                  {t('auth.common.passwordHint')}
                 </p>
               </div>
               {error && (
@@ -183,13 +184,13 @@ export function SignupPage() {
                 </AuthFormError>
               )}
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
-                {submitting ? <Spinner /> : <UserPlus />} Create account
+                {submitting ? <Spinner /> : <UserPlus />} {t('auth.signup.submit')}
               </Button>
               <Link
                 to="/auth/login"
                 className="text-center text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
-                Already have an account? Sign in
+                {t('auth.signup.alreadyHave')}
               </Link>
             </form>
           )}

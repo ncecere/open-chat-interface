@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode, useEffect, useRef } from 'react';
+import { translate } from '~/lib/i18n';
 
 /**
  * A sign-in, sign-up or reset form's error. Announced when it appears
@@ -12,7 +13,7 @@ export function AuthFormError({
   messages,
 }: {
   id: string;
-  children: string;
+  children: ReactNode;
   /**
    * The form's own check, one message per field at fault. The alert is still
    * one message, read once, but each part has an id so the field it is about
@@ -65,7 +66,7 @@ export function authFieldProps({
   hintRestated = false,
 }: {
   errorId: string;
-  error: string | null;
+  error: ReactNode;
   messages?: FieldMessage[];
   fieldId: string;
   invalid?: boolean;
@@ -193,13 +194,11 @@ const EMAIL_ADDRESS = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** What is wrong with a typed email address, or null. */
 export function emailProblem(email: string): string | null {
-  if (!email.trim()) return 'Enter your email address.';
-  return EMAIL_ADDRESS.test(email.trim())
-    ? null
-    : 'Enter an email address such as you@example.com.';
+  if (!email.trim()) return translate('auth.form.emailRequired');
+  return EMAIL_ADDRESS.test(email.trim()) ? null : translate('auth.form.emailInvalid');
 }
 
 /** What is wrong with a new password's length, or null (the instance's rule: 12 to 200). */
 export function newPasswordProblem(password: string): string | null {
-  return password.length < 12 ? 'Use at least 12 characters for your password.' : null;
+  return password.length < 12 ? translate('auth.form.passwordTooShort') : null;
 }

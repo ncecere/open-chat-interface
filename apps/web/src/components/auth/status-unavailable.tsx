@@ -3,6 +3,7 @@ import { RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+import { useT } from '~/lib/i18n';
 
 /**
  * An auth page whose status could not be loaded (the database or the API
@@ -19,11 +20,12 @@ export function AuthStatusUnavailable({
 }) {
   // A retry asked for with the button; the 5 s background refetch does not show.
   const [retrying, setRetrying] = useState(false);
+  const t = useT();
   return (
     <div className="space-y-4 text-center">
       <h1 className="text-lg font-semibold">{title}</h1>
       <p role="status" className="text-sm text-[var(--text-muted)]">
-        The service is temporarily unavailable. Try again in a moment.
+        {t('auth.unavailable.service')}
       </p>
       <Button
         variant="primary"
@@ -35,13 +37,13 @@ export function AuthStatusUnavailable({
           setRetrying(false);
         }}
       >
-        {retrying ? <Spinner /> : <RotateCw />} Try again
+        {retrying ? <Spinner /> : <RotateCw />} {t('auth.common.tryAgain')}
       </Button>
       <Link
         to="/auth/login"
         className="block text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
       >
-        Return to sign in
+        {t('auth.common.returnToSignIn')}
       </Link>
     </div>
   );

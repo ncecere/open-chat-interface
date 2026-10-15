@@ -10,6 +10,7 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { ApiError, api } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 import { authenticatorCode, groupManualKey, MFA_STATUS_KEY, mfaProblems } from '~/lib/mfa';
 import { useReadOnlyLock } from '~/lib/read-only';
 
@@ -44,6 +45,7 @@ export function TotpEnrol({
   /** The recovery codes were saved and Done pressed. */
   onFinished: () => void;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const lock = useReadOnlyLock();
   const id = useId();
@@ -58,7 +60,7 @@ export function TotpEnrol({
   async function begin(event: FormEvent) {
     event.preventDefault();
     if (!password) {
-      setProblems([{ fields: ['password'], text: 'Enter your password.' }]);
+      setProblems([{ fields: ['password'], text: t('auth.form.passwordRequired') }]);
       form.current?.querySelector<HTMLElement>('input')?.focus();
       return;
     }
@@ -70,7 +72,7 @@ export function TotpEnrol({
       setProblems([]);
       setStep({ name: 'scan', totpURI: started.totpURI, manualKey: started.manualKey });
     } catch (error) {
-      setProblems(mfaProblems(error, 'Two-step verification could not be started. Try again.'));
+      setProblems(mfaProblems(error, t('auth.totp.startFailed')));
     } finally {
       setBusy(false);
     }
@@ -79,7 +81,7 @@ export function TotpEnrol({
   async function confirm(event: FormEvent) {
     event.preventDefault();
     if (!code.trim()) {
-      setProblems([{ fields: ['code'], text: 'Enter the code your authenticator app shows.' }]);
+      setProblems([{ fields: ['code'], text: t('auth.totp.codeRequired') }]);
       form.current?.querySelector<HTMLElement>('input')?.focus();
       return;
     }
@@ -96,7 +98,7 @@ export function TotpEnrol({
       void queryClient.invalidateQueries({ queryKey: ['me'], exact: true });
       void queryClient.invalidateQueries({ queryKey: MFA_STATUS_KEY });
     } catch (error) {
-      const found = mfaProblems(error, 'The code could not be checked. Try again.');
+      const found = mfaProblems(error, t('auth.totp.confirmFailed'));
       // Nothing waiting to be confirmed (409): the secret is gone, so start over.
       // (The typed code stays: editing it would clear this message.)
       if (error instanceof ApiError && error.status === 409) setStep({ name: 'password' });
@@ -127,14 +129,11 @@ export function TotpEnrol({
     return (
       <form ref={form} onSubmit={begin} noValidate className="flex max-w-sm flex-col gap-4">
         <div>
-          <StepHeading>Set up an authenticator app</StepHeading>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            Enter your password to start. Then you will scan a QR code with an authenticator app on
-            your phone, or type its key by hand.
-          </p>
+          <StepHeading>{t('auth.totp.setUpTitle')}</StepHeading>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{t('auth.totp.passwordIntro')}</p>
         </div>
         <Field
-          label="Current password"
+          label={t('auth.common.currentPassword')}
           htmlFor={passwordId}
           error={problemsAt(problems, 'password')}
         >
@@ -155,10 +154,10 @@ export function TotpEnrol({
         <div className="flex gap-2">
           <Button type="submit" variant="accent" locked={lock.title} disabled={busy}>
             {busy && <Spinner />}
-            Continue
+            {t('auth.totp.continue')}
           </Button>
           <Button type="button" variant="ghost" onClick={onCancel}>
-            Cancel
+            {t('auth.common.cancel')}
           </Button>
         </div>
       </form>
@@ -168,11 +167,8 @@ export function TotpEnrol({
   return (
     <form ref={form} onSubmit={confirm} noValidate className="flex flex-col gap-5">
       <div>
-        <StepHeading>Scan the QR code</StepHeading>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          Scan it with an authenticator app, such as one from your phone's app store or a password
-          manager. Then enter the 6-digit code it shows.
-        </p>
+        <StepHeading>{t('auth.totp.scanTitle')}</StepHeading>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">{t('auth.totp.scanIntro')}</p>
       </div>
 
       <div className="flex flex-wrap items-start gap-6">
@@ -182,7 +178,7 @@ export function TotpEnrol({
         <div className="flex min-w-0 max-w-sm flex-col gap-3">
           <div>
             <p className="text-sm font-medium text-[var(--text-secondary)]">
-              Cannot scan it? Enter this key in your app
+              {t('auth.totp.cannotScan')}
             </p>
             <p
               data-testid="manual-key"
@@ -198,10 +194,10 @@ export function TotpEnrol({
                 onClick={() => copyKey(step.manualKey)}
               >
                 <Copy />
-                Copy key
+                {t('auth.totp.copyKey')}
               </Button>
               <p role="status" className="text-xs text-[var(--text-muted)]">
-                {copiedKey && 'Key copied to the clipboard.'}
+                {copiedKey && t('auth.totp.keyCopied')}
               </p>
             </div>
           </div>
@@ -210,17 +206,17 @@ export function TotpEnrol({
             className="inline-flex items-center gap-1.5 text-sm text-[var(--accent-bright)] hover:underline"
           >
             <Smartphone className="size-4" aria-hidden="true" />
-            Open in your authenticator app
+            {t('auth.totp.openInApp')}
           </a>
         </div>
       </div>
 
       <div className="max-w-sm">
         <Field
-          label="Authentication code"
+          label={t('auth.common.authenticationCode')}
           htmlFor={codeId}
           error={problemsAt(problems, 'code')}
-          hint="The 6-digit code from your app. You can paste it; spaces are fine."
+          hint={t('auth.totp.codeHint')}
         >
           <Input
             id={codeId}
@@ -245,10 +241,10 @@ export function TotpEnrol({
       <div className="flex gap-2">
         <Button type="submit" variant="accent" locked={lock.title} disabled={busy}>
           {busy && <Spinner />}
-          Turn on
+          {t('auth.totp.turnOn')}
         </Button>
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
+          {t('auth.common.cancel')}
         </Button>
       </div>
     </form>

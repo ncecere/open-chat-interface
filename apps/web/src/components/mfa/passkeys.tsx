@@ -2,6 +2,7 @@ import type { MfaStatus, PasskeySummary } from '@oci/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Fingerprint, Pencil, Trash2 } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
+import { bdiMessage } from '~/components/auth/bdi-message';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -16,7 +17,7 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { authClient } from '~/lib/auth-client';
 import { answered } from '~/lib/auth-unavailable';
-import { formatDate } from '~/lib/i18n/format';
+import { useT } from '~/lib/i18n';
 import {
   MFA_STATUS_KEY,
   type PasskeyProblem,
@@ -31,13 +32,6 @@ type Dialogs =
   | { kind: 'rename'; passkey: PasskeySummary }
   | { kind: 'remove'; passkey: PasskeySummary }
   | null;
-
-const addedOn = (iso: string | null) => (iso ? `Added ${formatDate(iso, 'long')}` : null);
-
-const kindOf = (passkey: PasskeySummary) =>
-  passkey.deviceType === 'multiDevice' || passkey.backedUp
-    ? 'Synced across your devices'
-    : 'This device only';
 
 /** A refusal or a cancel inside a dialog: an error is announced, a cancel is said calmly. */
 function Problem({ problem }: { problem: PasskeyProblem | null }) {
@@ -66,6 +60,7 @@ export function PasskeySection({
   passkeys: MfaStatus['passkeys'];
   onNotice: (message: string) => void;
 }) {
+  const t = useT();
   const queryClient = useQueryClient();
   const lock = useReadOnlyLock();
   const [dialog, setDialog] = useState<Dialogs>(null);
@@ -80,14 +75,13 @@ export function PasskeySection({
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-[var(--text-primary)]">Passkeys</h3>
-      <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Sign in with your fingerprint, face, screen lock or a security key instead of a password and
-        a code. A passkey is a second step on its own.
-      </p>
+      <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+        {t('auth.passkeys.title')}
+      </h3>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">{t('auth.passkeys.intro')}</p>
 
       {passkeys.length === 0 ? (
-        <p className="mt-3 text-sm text-[var(--text-secondary)]">No passkeys yet.</p>
+        <p className="mt-3 text-sm text-[var(--text-secondary)]">{t('auth.passkeys.none')}</p>
       ) : (
         <ul className="mt-3 divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
           {passkeys.map((passkey) => (
@@ -98,10 +92,19 @@ export function PasskeySection({
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                  {passkey.name || 'Passkey'}
+                  {passkey.name || t('auth.passkeys.defaultName')}
                 </p>
                 <p className="text-xs text-[var(--text-muted)]">
-                  {[addedOn(passkey.createdAt), kindOf(passkey)].filter(Boolean).join(' · ')}
+                  {[
+                    passkey.createdAt
+                      ? t('auth.passkeys.added', { date: passkey.createdAt })
+                      : null,
+                    passkey.deviceType === 'multiDevice' || passkey.backedUp
+                      ? t('auth.passkeys.synced')
+                      : t('auth.passkeys.deviceOnly'),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </p>
               </div>
               <div className="flex gap-1">
@@ -109,23 +112,27 @@ export function PasskeySection({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={`Rename ${passkey.name || 'passkey'}`}
+                  aria-label={t('auth.passkeys.renameAria', {
+                    name: passkey.name || t('auth.passkeys.defaultNameLower'),
+                  })}
                   locked={lock.title}
                   onClick={() => setDialog({ kind: 'rename', passkey })}
                 >
                   <Pencil />
-                  Rename
+                  {t('auth.passkeys.rename')}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={`Remove ${passkey.name || 'passkey'}`}
+                  aria-label={t('auth.passkeys.removeAria', {
+                    name: passkey.name || t('auth.passkeys.defaultNameLower'),
+                  })}
                   locked={lock.title}
                   onClick={() => setDialog({ kind: 'remove', passkey })}
                 >
                   <Trash2 />
-                  Remove
+                  {t('auth.passkeys.remove')}
                 </Button>
               </div>
             </li>
@@ -143,30 +150,27 @@ export function PasskeySection({
             onClick={() => setDialog({ kind: 'add' })}
           >
             <Fingerprint />
-            Add a passkey
+            {t('auth.passkeys.add')}
           </Button>
         ) : (
-          <p className="text-sm text-[var(--text-muted)]">
-            This browser cannot make passkeys. Use a current version of Chrome, Edge, Safari or
-            Firefox on a device with a screen lock or a security key to add one.
-          </p>
+          <p className="text-sm text-[var(--text-muted)]">{t('auth.passkeys.unsupported')}</p>
         )}
       </div>
 
       <AddPasskeyDialog
         open={dialog?.kind === 'add'}
         onOpenChange={(open) => !open && setDialog(null)}
-        onAdded={() => changed('Passkey added.')}
+        onAdded={() => changed(t('auth.passkeys.noticeAdded'))}
       />
       <RenamePasskeyDialog
         passkey={dialog?.kind === 'rename' ? dialog.passkey : null}
         onOpenChange={(open) => !open && setDialog(null)}
-        onRenamed={() => changed('Passkey renamed.')}
+        onRenamed={() => changed(t('auth.passkeys.noticeRenamed'))}
       />
       <RemovePasskeyDialog
         passkey={dialog?.kind === 'remove' ? dialog.passkey : null}
         onOpenChange={(open) => !open && setDialog(null)}
-        onRemoved={() => changed('Passkey removed.')}
+        onRemoved={() => changed(t('auth.passkeys.noticeRemoved'))}
       />
     </div>
   );
@@ -181,6 +185,7 @@ function AddPasskeyDialog({
   onOpenChange: (open: boolean) => void;
   onAdded: () => void;
 }) {
+  const t = useT();
   const id = useId();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -217,17 +222,14 @@ function AddPasskeyDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add a passkey</DialogTitle>
-          <DialogDescription>
-            Your browser will ask you to confirm with your fingerprint, face, screen lock or
-            security key.
-          </DialogDescription>
+          <DialogTitle>{t('auth.passkeys.add')}</DialogTitle>
+          <DialogDescription>{t('auth.passkeys.addDescription')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={add} noValidate className="flex flex-col gap-4">
           <Field
-            label="Name"
+            label={t('auth.common.name')}
             htmlFor={`${id}-name`}
-            hint="Optional. Helps you tell your passkeys apart, such as “Work laptop”."
+            hint={t('auth.passkeys.nameHint')}
           >
             <Input
               id={`${id}-name`}
@@ -241,11 +243,11 @@ function AddPasskeyDialog({
           <Problem problem={problem} />
           <DialogFooter className="mt-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t('auth.common.cancel')}
             </Button>
             <Button type="submit" variant="accent" disabled={busy}>
               {busy && <Spinner />}
-              Add passkey
+              {t('auth.passkeys.addSubmit')}
             </Button>
           </DialogFooter>
         </form>
@@ -286,6 +288,7 @@ function RenameForm({
   onCancel: () => void;
   onRenamed: () => void;
 }) {
+  const t = useT();
   const id = useId();
   const [name, setName] = useState(passkey.name);
   const [busy, setBusy] = useState(false);
@@ -311,15 +314,15 @@ function RenameForm({
     onRenamed();
   }
 
-  const error = empty ? 'Enter a name.' : null;
+  const error = empty ? t('auth.passkeys.nameRequired') : null;
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Rename passkey</DialogTitle>
-        <DialogDescription>Choose a name that helps you recognise it.</DialogDescription>
+        <DialogTitle>{t('auth.passkeys.renameTitle')}</DialogTitle>
+        <DialogDescription>{t('auth.passkeys.renameDescription')}</DialogDescription>
       </DialogHeader>
       <form onSubmit={save} noValidate className="flex flex-col gap-4">
-        <Field label="Name" htmlFor={`${id}-name`} error={error}>
+        <Field label={t('auth.common.name')} htmlFor={`${id}-name`} error={error}>
           <Input
             id={`${id}-name`}
             {...invalidFieldProps(`${id}-name`, error)}
@@ -336,11 +339,11 @@ function RenameForm({
         <Problem problem={problem} />
         <DialogFooter className="mt-2">
           <Button type="button" variant="ghost" onClick={onCancel}>
-            Cancel
+            {t('auth.common.cancel')}
           </Button>
           <Button type="submit" variant="accent" disabled={busy}>
             {busy && <Spinner />}
-            Save name
+            {t('auth.passkeys.saveName')}
           </Button>
         </DialogFooter>
       </form>
@@ -357,6 +360,7 @@ function RemovePasskeyDialog({
   onOpenChange: (open: boolean) => void;
   onRemoved: () => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<PasskeyProblem | null>(null);
 
@@ -384,19 +388,21 @@ function RemovePasskeyDialog({
       {passkey && (
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove this passkey?</DialogTitle>
+            <DialogTitle>{t('auth.passkeys.removeTitle')}</DialogTitle>
             <DialogDescription>
-              “{passkey.name || 'Passkey'}” will no longer sign you in. You can add it again later.
+              {bdiMessage(t, 'auth.passkeys.removeDescription', undefined, {
+                name: passkey.name || t('auth.passkeys.defaultName'),
+              })}
             </DialogDescription>
           </DialogHeader>
           <Problem problem={problem} />
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t('auth.common.cancel')}
             </Button>
             <Button type="button" variant="danger" disabled={busy} onClick={remove}>
               {busy && <Spinner />}
-              Remove passkey
+              {t('auth.passkeys.removeConfirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

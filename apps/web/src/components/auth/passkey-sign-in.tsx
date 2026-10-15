@@ -6,6 +6,7 @@ import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 import { authClient } from '~/lib/auth-client';
 import { answered } from '~/lib/auth-unavailable';
+import { useT } from '~/lib/i18n';
 import { type PasskeyProblem, passkeyProblem, webAuthnSupported } from '~/lib/mfa';
 import { failureOf, retryAfterCapture } from '~/lib/second-step';
 
@@ -34,7 +35,7 @@ export function useFinishSignIn(returnTo: string) {
  */
 export function PasskeySignInButton({
   returnTo,
-  label = 'Use a passkey',
+  label,
   variant = 'secondary',
   className,
 }: {
@@ -43,6 +44,7 @@ export function PasskeySignInButton({
   variant?: 'secondary' | 'ghost' | 'link';
   className?: string;
 }) {
+  const t = useT();
   const finish = useFinishSignIn(returnTo);
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<PasskeyProblem | null>(null);
@@ -72,7 +74,7 @@ export function PasskeySignInButton({
         onClick={signIn}
       >
         {pending ? <Spinner /> : <Fingerprint />}
-        {label}
+        {label ?? t('auth.passkey.use')}
       </Button>
       {problem && (
         <p

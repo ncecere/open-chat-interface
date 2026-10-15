@@ -2,10 +2,7 @@ import { Copy, Download } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { saveBlob } from '~/lib/api-client';
-
-/** What the downloaded file says above the codes; never an address or a name. */
-const FILE_HEADER =
-  'Recovery codes\nEach code works once, to sign in if you cannot use your authenticator app.\nKeep this file somewhere safe and private.\n\n';
+import { useT } from '~/lib/i18n';
 
 /**
  * The recovery codes, shown once (#399).
@@ -20,7 +17,7 @@ export function RecoveryCodes({
   codes,
   onDone,
   onSavedChange,
-  heading = 'Save your recovery codes',
+  heading,
 }: {
   codes: string[];
   onDone: () => void;
@@ -28,6 +25,7 @@ export function RecoveryCodes({
   onSavedChange?: (saved: boolean) => void;
   heading?: string;
 }) {
+  const t = useT();
   const savedId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [saved, setSaved] = useState(false);
@@ -47,7 +45,10 @@ export function RecoveryCodes({
 
   function download() {
     saveBlob(
-      new Blob([FILE_HEADER, codes.join('\n'), '\n'], { type: 'text/plain;charset=utf-8' }),
+      // The file's own words, never an address or a name.
+      new Blob([t('auth.recoveryCodes.fileHeader'), codes.join('\n'), '\n'], {
+        type: 'text/plain;charset=utf-8',
+      }),
       'recovery-codes.txt',
     );
   }
@@ -56,16 +57,13 @@ export function RecoveryCodes({
     <div className="flex flex-col gap-4">
       <div>
         <h4 ref={headingRef} tabIndex={-1} className="text-sm font-semibold outline-none">
-          {heading}
+          {heading ?? t('auth.recoveryCodes.heading')}
         </h4>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          If you cannot use your authenticator app, each of these codes signs you in once. You will
-          not be able to see these again, so keep them somewhere safe, such as a password manager.
-        </p>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">{t('auth.recoveryCodes.intro')}</p>
       </div>
 
       <ul
-        aria-label="Recovery codes"
+        aria-label={t('auth.recoveryCodes.listLabel')}
         className="grid grid-cols-1 gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-4 sm:grid-cols-2"
       >
         {codes.map((code) => (
@@ -82,15 +80,15 @@ export function RecoveryCodes({
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={copy}>
           <Copy />
-          Copy codes
+          {t('auth.recoveryCodes.copy')}
         </Button>
         <Button type="button" variant="secondary" size="sm" onClick={download}>
           <Download />
-          Download codes
+          {t('auth.recoveryCodes.download')}
         </Button>
         <p role="status" className="text-xs text-[var(--text-muted)]">
-          {copied === 'copied' && 'Copied to the clipboard.'}
-          {copied === 'failed' && 'Your browser would not copy them. Select them and copy by hand.'}
+          {copied === 'copied' && t('auth.recoveryCodes.copied')}
+          {copied === 'failed' && t('auth.recoveryCodes.copyFailed')}
         </p>
       </div>
 
@@ -108,12 +106,12 @@ export function RecoveryCodes({
           }}
           className="size-4 accent-[var(--accent)]"
         />
-        I have saved my recovery codes
+        {t('auth.recoveryCodes.saved')}
       </label>
 
       <div className="flex justify-end">
         <Button type="button" variant="accent" disabled={!saved} onClick={onDone}>
-          Done
+          {t('auth.recoveryCodes.done')}
         </Button>
       </div>
     </div>
