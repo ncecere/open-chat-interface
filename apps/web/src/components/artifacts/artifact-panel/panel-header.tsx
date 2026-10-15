@@ -2,6 +2,7 @@ import { Maximize2, Minimize2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '~/components/ui/button';
 import { DialogClose, DialogDescription, DialogTitle } from '~/components/ui/dialog';
+import { useT } from '~/lib/i18n';
 
 /** How the panel is framed: a dialog, or a region docked beside the conversation. */
 export interface Chrome {
@@ -64,13 +65,16 @@ export function PanelHeader({
   toolbar?: ReactNode;
   children?: ReactNode;
 }) {
-  const fullScreenName = chrome.fullScreen ? 'Exit full screen' : 'Full screen';
+  const t = useT();
+  const fullScreenName = chrome.fullScreen
+    ? t('artifacts.panel.exitFullScreen')
+    : t('artifacts.panel.fullScreen');
   const close = (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label="Close"
+      aria-label={t('artifacts.panel.close')}
       data-panel-close=""
       className="shrink-0"
       onClick={chrome.docked ? () => chrome.onClose(true) : undefined}

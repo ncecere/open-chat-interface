@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import { type ComponentProps, type ReactNode, useId, useRef, useState } from 'react';
 import type { LinkSafetyModalProps } from 'streamdown';
+import { translatedNodes } from '~/components/chat/translated-nodes';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 const SKIP_EXTERNAL_LINK_WARNING_KEY = 'oci.skipExternalLinkWarning';
@@ -40,6 +42,7 @@ function canOpenWithoutWarning(url: string): boolean {
 }
 
 export function ExternalLinkWarning({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProps) {
+  const t = useT();
   const [remember, setRemember] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const hintId = useId();
@@ -65,16 +68,21 @@ export function ExternalLinkWarning({ isOpen, onClose, onConfirm, url }: LinkSaf
         <DialogHeader className="mb-5">
           <DialogTitle className="flex items-center gap-3 text-xl">
             <AlertTriangle className="size-5" aria-hidden="true" />
-            Open external link
+            {t('chat.externalLink.title')}
           </DialogTitle>
           <DialogDescription className="pt-2 text-base leading-7 text-[var(--text-secondary)]">
-            We cannot guarantee the safety of external links. Be cautious and keep your personal
-            information safe.
+            {t('chat.externalLink.description')}
           </DialogDescription>
         </DialogHeader>
 
         <p className="text-base font-medium text-[var(--text-primary)]">
-          Continue to: <span className="font-semibold">{safeHost(url)}</span>
+          {translatedNodes(t, 'chat.externalLink.continueTo', {
+            host: (
+              <span dir="ltr" className="font-semibold">
+                {safeHost(url)}
+              </span>
+            ),
+          })}
         </p>
 
         {/* The checkbox is named by its label alone; the note under it is its
@@ -93,21 +101,20 @@ export function ExternalLinkWarning({ isOpen, onClose, onConfirm, url }: LinkSaf
               htmlFor={`${hintId}-remember`}
               className="block cursor-pointer text-sm font-medium text-[var(--text-primary)]"
             >
-              Don&apos;t show this warning again
+              {t('chat.externalLink.dontShowAgain')}
             </label>
             <p id={`${hintId}-hint`} className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
-              External sites remain outside this instance&apos;s control. You can clear this choice
-              by removing this site&apos;s local browser data.
+              {t('chat.externalLink.dontShowHint')}
             </p>
           </div>
         </div>
 
         <DialogFooter>
           <Button ref={cancelRef} type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            {t('chat.externalLink.cancel')}
           </Button>
           <Button type="button" variant="accent" onClick={continueToLink}>
-            Continue
+            {t('chat.externalLink.continue')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,9 +1,9 @@
-import type { UsageAllowance, UsageSummary } from '@oci/shared';
-import { quotaLimitName, quotaWindowPhrase } from '@oci/shared';
+import type { QuotaMetric, QuotaWindowKind, UsageAllowance, UsageSummary } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { api } from '~/lib/api-client';
+import { translate } from '~/lib/i18n';
 
 /**
  * Warns before a user is cut off rather than after.
@@ -17,6 +17,34 @@ import { api } from '~/lib/api-client';
  *
  * Severity is computed server-side so this cannot disagree with enforcement.
  */
+/** What a limit counts, as the sentence names it (the shared English helpers are not translated). */
+function limitName(metric: QuotaMetric): string {
+  switch (metric) {
+    case 'messages':
+      return translate('chat.usageWarning.limitMessages');
+    case 'tokens':
+      return translate('chat.usageWarning.limitTokens');
+    default:
+      return translate('chat.usageWarning.limitUsage');
+  }
+}
+
+/** "for today", "for the last 24 hours". */
+function windowPhrase(windowKind: QuotaWindowKind, windowHours: number | null): string {
+  switch (windowKind) {
+    case 'rolling':
+      return translate('chat.usageWarning.windowHours', { hours: windowHours ?? 24 });
+    case 'daily':
+      return translate('chat.usageWarning.windowToday');
+    case 'weekly':
+      return translate('chat.usageWarning.windowWeek');
+    case 'monthly':
+      return translate('chat.usageWarning.windowMonth');
+    default:
+      return translate('chat.usageWarning.windowOther');
+  }
+}
+
 export function UsageWarning() {
   // Remembers the severity each policy was last announced at, so crossing into
   // a worse state warns again while ordinary polling stays silent.
@@ -45,15 +73,19 @@ export function UsageWarning() {
         id: `usage-${allowance.policyId}`,
         description:
           exceeded && allowance.modelSlugs.length > 0
-            ? 'Other models are still available.'
+            ? translate('chat.usageWarning.otherModels')
             : undefined,
       };
 
       // Not the policy's name, which is the administrator's (#93).
-      const limit = `${quotaLimitName(allowance.metric)} for ${quotaWindowPhrase(allowance.windowKind, allowance.windowHours)}`;
-      const message = exceeded
-        ? `You have reached your ${limit}.`
-        : `You are approaching your ${limit}.`;
+      const sentence = {
+        limit: limitName(allowance.metric),
+        window: windowPhrase(allowance.windowKind, allowance.windowHours),
+      };
+      const message = translate(
+        exceeded ? 'chat.usageWarning.reached' : 'chat.usageWarning.approaching',
+        sentence,
+      );
 
       if (exceeded || allowance.severity === 'critical') toast.error(message, options);
       else toast.warning(message, options);

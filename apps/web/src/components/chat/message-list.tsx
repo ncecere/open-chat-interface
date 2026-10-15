@@ -12,6 +12,7 @@ import { replySearchOf, SearchLoading } from '~/components/chat/search-grounding
 import { type AnswerApproval, toolLimitOf, toolStepsOf } from '~/components/chat/tool-steps';
 import type { HistoryControls } from '~/hooks/use-history-pages';
 import { useWindowedRows } from '~/hooks/use-windowed-rows';
+import { useT } from '~/lib/i18n';
 import { repeatedOpeningPositions } from '~/lib/message-excerpt';
 
 interface MessageListProps {
@@ -86,6 +87,7 @@ export const MessageList = memo(function MessageList({
   history,
   anchorId,
 }: MessageListProps) {
+  const t = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const last = messages.at(-1);
   const lastIsAssistant = last?.role === 'assistant';
@@ -103,7 +105,9 @@ export const MessageList = memo(function MessageList({
           toolLimitOf(last) ||
           capacityWaitOf(last)?.state === 'waiting')),
   );
-  const waitingLabel = lastReasoning ? 'Thinking' : 'Generating response';
+  const waitingLabel = lastReasoning
+    ? t('chat.messageList.thinking')
+    : t('chat.messageList.generating');
   // Once the search's step is in the reply's block, the wait is for the model.
   const searched = lastIsAssistant && replySearchOf(last).presearch !== null;
 
@@ -294,6 +298,7 @@ function EarlierMessages({
   history: HistoryControls;
   scrollRef?: RefObject<HTMLElement | null>;
 }) {
+  const t = useT();
   const { hasOlder, loading, error, loadOlder, announcement } = history;
   const button = useRef<HTMLButtonElement>(null);
   const start = useRef<HTMLParagraphElement>(null);
@@ -327,11 +332,13 @@ function EarlierMessages({
           aria-disabled={loading === 'older' ? true : undefined}
           className="rounded-full border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
         >
-          {loading === 'older' ? 'Loading earlier messages…' : 'Load earlier messages'}
+          {loading === 'older'
+            ? t('chat.messageList.loadingEarlier')
+            : t('chat.messageList.loadEarlier')}
         </button>
       ) : (
         <p ref={start} tabIndex={-1} className="outline-none">
-          This is the start of the conversation.
+          {t('chat.messageList.startOfConversation')}
         </p>
       )}
       {error && <p role="alert">{error}</p>}
@@ -354,6 +361,7 @@ function HistoryGap({
   history: HistoryControls;
   scrollRef?: RefObject<HTMLElement | null>;
 }) {
+  const t = useT();
   const { loading, loadGap } = history;
   const element = useRef<HTMLDivElement>(null);
   useNearView(
@@ -374,7 +382,7 @@ function HistoryGap({
       data-history-gap=""
       className="flex items-center gap-3 py-2 text-sm text-[var(--text-muted)]"
     >
-      <span className="sr-only">Some messages here are not loaded yet.</span>
+      <span className="sr-only">{t('chat.messageList.gapNotLoaded')}</span>
       <span aria-hidden="true" className="h-px flex-1 bg-[var(--border-subtle)]" />
       <button
         type="button"
@@ -382,7 +390,7 @@ function HistoryGap({
         aria-disabled={loading === 'gap' ? true : undefined}
         className="rounded-full border border-[var(--border-subtle)] px-3 py-1.5 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
       >
-        {loading === 'gap' ? 'Loading messages…' : 'Load more messages'}
+        {loading === 'gap' ? t('chat.messageList.loadingMore') : t('chat.messageList.loadMore')}
       </button>
       <span aria-hidden="true" className="h-px flex-1 bg-[var(--border-subtle)]" />
     </div>

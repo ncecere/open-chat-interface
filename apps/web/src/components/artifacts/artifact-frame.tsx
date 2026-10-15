@@ -7,6 +7,7 @@ import {
   FRAME_READY,
   loadArtifactLibraries,
 } from '~/lib/artifact-sandbox';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -28,6 +29,7 @@ export function ArtifactFrame({
   title: string;
   className?: string;
 }) {
+  const t = useT();
   const frame = useRef<HTMLIFrameElement>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -70,13 +72,13 @@ export function ArtifactFrame({
   if (failed)
     return (
       <p role="alert" className="p-4 text-sm text-[var(--danger-on-tint)]">
-        This artifact could not be prepared.
+        {t('artifacts.frame.failed')}
       </p>
     );
   if (html === null)
     return (
       <p role="status" className="p-4 text-sm text-[var(--text-muted)]">
-        Preparing preview…
+        {t('artifacts.frame.preparing')}
       </p>
     );
   return (

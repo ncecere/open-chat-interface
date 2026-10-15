@@ -2,8 +2,10 @@ import type { MemoryToolResult } from '@oci/shared';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Brain } from 'lucide-react';
 import { useContext, useState } from 'react';
+import { translatedNodes } from '~/components/chat/translated-nodes';
 import { Button } from '~/components/ui/button';
 import { apiErrorMessage } from '~/lib/api-client';
+import { translate, useT } from '~/lib/i18n';
 import { MEMORY_QUERY_KEY, undoMemoryStep } from '~/lib/memory';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 
@@ -26,6 +28,7 @@ export function MemoryNote({
   /** False where the reply cannot be acted on, such as while it is still streaming. */
   canUndo?: boolean;
 }) {
+  const t = useT();
   // Rendered in conversations and in tests without a query client.
   const queryClient = useContext(QueryClientContext);
   const [status, setStatus] = useState<Status>('idle');
@@ -42,29 +45,32 @@ export function MemoryNote({
       void queryClient?.invalidateQueries({ queryKey: MEMORY_QUERY_KEY });
     } catch (cause) {
       setStatus('idle');
-      setError(apiErrorMessage(cause, 'The change could not be undone. Try again.'));
+      setError(apiErrorMessage(cause, translate('chat.memoryNote.undoFailed')));
     }
   }
 
-  const verb = change.action === 'added' ? 'Remembered' : 'Forgot';
   return (
     <div
       role="note"
-      aria-label="Memory updated"
+      aria-label={t('chat.memoryNote.updated')}
       data-testid="memory-note"
       className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-control)]/50 px-3 py-2 text-[0.8125rem]"
     >
       <div className="flex min-w-0 items-start gap-2">
         <Brain className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-[var(--text-primary)]">Memory updated</p>
+          <p className="font-medium text-[var(--text-primary)]">{t('chat.memoryNote.updated')}</p>
           <p className="break-words text-[var(--text-secondary)]">
-            {verb}: {change.content}
+            {translatedNodes(
+              t,
+              change.action === 'added' ? 'chat.memoryNote.remembered' : 'chat.memoryNote.forgot',
+              { content: <bdi dir="auto">{change.content}</bdi> },
+            )}
           </p>
         </div>
         {status === 'undone' ? (
           <span role="status" className="shrink-0 text-xs text-[var(--text-muted)]">
-            Undone
+            {t('chat.memoryNote.undone')}
           </span>
         ) : (
           <Button
@@ -74,11 +80,13 @@ export function MemoryNote({
             className="shrink-0"
             disabled={!canUndo || status === 'pending'}
             aria-label={
-              change.action === 'added' ? 'Undo: forget this' : 'Undo: remember this again'
+              change.action === 'added'
+                ? t('chat.memoryNote.undoForget')
+                : t('chat.memoryNote.undoRemember')
             }
             onClick={() => void undo()}
           >
-            Undo
+            {t('chat.memoryNote.undo')}
           </Button>
         )}
       </div>

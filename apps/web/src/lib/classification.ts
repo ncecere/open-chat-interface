@@ -7,6 +7,7 @@ import {
   ERROR_CODES,
 } from '@oci/shared';
 import { ApiError } from '~/lib/api-client';
+import { formatList, translate } from '~/lib/i18n';
 
 /** The error code of a refusal by data classification (403). */
 export const DATA_CLASS_BLOCKED = ERROR_CODES.DATA_CLASS_BLOCKED;
@@ -57,12 +58,16 @@ export function blockedSlugs(
 
 /** "Not approved for Student records": the picker's text, and the composer's lead. */
 export function notApprovedText(model: ClassificationModel): string {
-  return `Not approved for ${listNames(model.missing.map((entry) => entry.name))}`;
+  return translate('chat.classification.notApproved', {
+    classes: formatList(model.missing.map((entry) => entry.name)),
+  });
 }
 
 /** What `block` would have refused, as the amber note beside a model in `warn`. */
 export function warnNoteText(model: ClassificationModel): string {
-  return `${notApprovedText(model)}. You can still use it; the administrator is told.`;
+  return translate('chat.classification.warnNote', {
+    classes: formatList(model.missing.map((entry) => entry.name)),
+  });
 }
 
 /**
@@ -91,21 +96,21 @@ export function blockedDetailsOf(error: unknown): DataClassBlockedDetails | null
 
 /** What a `data-classification` reply part says, by where the warning arose. */
 export function warnedText(part: DataClassificationPartData): string {
-  const names = listNames(part.missing);
+  const classes = formatList(part.missing);
   switch (part.point) {
     case 'send':
     case 'approval':
-      return `This conversation carries ${names}, which this model is not approved for. It was sent anyway because data classification is set to warn; the administrator can see this in the audit log.`;
+      return translate('chat.classification.warnedSend', { classes });
     case 'tool':
-      return `A tool was used in a conversation that carries ${names}, which it is not approved for. It ran because data classification is set to warn.`;
+      return translate('chat.classification.warnedTool', { classes });
     case 'compaction':
-      return `Earlier messages were summarised by a model that is not approved for ${names}. It went ahead because data classification is set to warn.`;
+      return translate('chat.classification.warnedCompaction', { classes });
     case 'web_search':
-      return `The web search was made from a conversation that carries ${names}, which web search is not approved for. It went ahead because data classification is set to warn.`;
+      return translate('chat.classification.warnedWebSearch', { classes });
     case 'embedding':
     case 'rerank':
-      return `Project search sent text to a service that is not approved for ${names}. It went ahead because data classification is set to warn.`;
+      return translate('chat.classification.warnedProjectSearch', { classes });
     case 'share':
-      return `This conversation carries ${names}, and a share link is open to anyone who has it. It was allowed because data classification is set to warn.`;
+      return translate('chat.classification.warnedShare', { classes });
   }
 }

@@ -9,8 +9,9 @@ import {
   HOVERED_ROW_TEXT,
 } from '~/components/ui/item-focus';
 import { notApprovedText, warnNoteText } from '~/lib/classification';
+import { formatList, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
-import { CAPABILITY_LABELS, modelDescription } from './model-picker-data';
+import { capabilityLabel, modelDescription } from './model-picker-data';
 
 /** The DOM id of a model's option, for the search box's aria-activedescendant. */
 export const modelOptionId = (modelId: string) => `model-option-${modelId}`;
@@ -40,6 +41,7 @@ export function ModelPickerOption({
   onSelect: (model: CatalogModel) => void;
   onDetails: (id: string) => void;
 }) {
+  const t = useT();
   const blocked = availability?.status === 'blocked';
   const warned = availability?.status === 'warn';
   return (
@@ -106,7 +108,9 @@ export function ModelPickerOption({
         )}
         {model.capabilities.length > 0 && (
           <span className="sr-only">
-            {`, ${model.capabilities.map((capability) => CAPABILITY_LABELS[capability]).join(', ')}`}
+            {t('chat.modelPicker.optionCapabilities', {
+              capabilities: formatList(model.capabilities.map(capabilityLabel)),
+            })}
           </span>
         )}
       </button>
@@ -125,7 +129,7 @@ export function ModelPickerOption({
           <button
             type="button"
             tabIndex={-1}
-            aria-label={`Details for ${model.displayName}`}
+            aria-label={t('chat.modelPicker.details', { name: model.displayName })}
             aria-expanded={detailsOpen}
             onClick={() => onDetails(model.id)}
             className={cn(

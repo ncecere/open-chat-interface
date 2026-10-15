@@ -2,7 +2,8 @@ import type { CatalogModel, ClassificationResponse, DataClassBlockedDetails } fr
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
-import { isClassifying, listNames } from '~/lib/classification';
+import { isClassifying } from '~/lib/classification';
+import { formatList, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -19,10 +20,11 @@ export function ComposerClassificationNote({
   classification: ClassificationResponse | null | undefined;
   selectedModel: CatalogModel | null;
 }) {
+  const t = useT();
   if (!isClassifying(classification) || !selectedModel) return null;
   const status = classification.models.find((model) => model.slug === selectedModel.slug);
   if (!status || status.status === 'ok') return null;
-  const names = listNames(status.missing.map((entry) => entry.name));
+  const names = formatList(status.missing.map((entry) => entry.name));
   const approved = classification.models.some((model) => model.status === 'ok');
   const blocked = status.status === 'blocked';
   return (
@@ -46,12 +48,19 @@ export function ComposerClassificationNote({
       )}
       <span className="min-w-0">
         {blocked
-          ? `${selectedModel.displayName} is not approved for ${names}, which this conversation carries. ${
+          ? t(
               approved
-                ? 'Choose a model that is approved for it before you send.'
-                : 'No model is approved for it yet. Ask an administrator.'
-            }`
-          : `${selectedModel.displayName} is not approved for ${names}, which this conversation carries. Your message will still be sent, and the administrator will see this in the audit log.`}
+                ? 'chat.classificationNote.blockedApproved'
+                : 'chat.classificationNote.blockedNone',
+              {
+                model: selectedModel.displayName,
+                classes: names,
+              },
+            )
+          : t('chat.classificationNote.warned', {
+              model: selectedModel.displayName,
+              classes: names,
+            })}
       </span>
     </p>
   );
@@ -73,6 +82,7 @@ export function BlockedSendNotice({
   models: readonly CatalogModel[];
   onChoose: (model: CatalogModel) => void;
 }) {
+  const t = useT();
   const [chosen, setChosen] = useState<string | null>(null);
   // Only a refused send can be put right by another model: an approval
   // continues the reply's own model, and a summary or a link has none to pick.
@@ -92,7 +102,7 @@ export function BlockedSendNotice({
       <p>{message}</p>
       {choices.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-xs">Approved models:</span>
+          <span className="text-xs">{t('chat.classificationNote.approvedModels')}</span>
           {choices.map((model) => (
             <Button
               key={model.slug}
@@ -104,14 +114,14 @@ export function BlockedSendNotice({
                 setChosen(model.displayName);
               }}
             >
-              Use {model.displayName}
+              {t('chat.classificationNote.use', { model: model.displayName })}
             </Button>
           ))}
         </div>
       )}
       {chosen && (
         <p role="status" className="mt-2 text-xs">
-          Switched to {chosen}. Your message is back in the box: send it again.
+          {t('chat.classificationNote.switched', { model: chosen })}
         </p>
       )}
     </div>

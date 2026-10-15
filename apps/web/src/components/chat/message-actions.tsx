@@ -4,11 +4,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { ExportMenu, ExportNotice, useDocumentExport } from '~/components/chat/export-menu';
 import { Button } from '~/components/ui/button';
 import { useModels } from '~/hooks/use-models';
+import { useT } from '~/lib/i18n';
 import { messageExcerpt, quotedMessage } from '~/lib/message-excerpt';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
+import { effortLabel } from '~/lib/reasoning';
 import { cn } from '~/lib/utils';
 
 function ModelAttribution({ slug, effort }: { slug: string | null; effort: string | null }) {
+  useT();
   const { data: models } = useModels();
   if (!slug) return null;
   const model = models?.find((entry) => entry.slug === slug);
@@ -19,7 +22,7 @@ function ModelAttribution({ slug, effort }: { slug: string | null; effort: strin
       <span className="max-w-52 truncate" title={model?.displayName ?? slug}>
         {model?.displayName ?? slug}
       </span>
-      {effort && <span className="capitalize">({effort})</span>}
+      {effort && <span className="capitalize">({effortLabel(effort)})</span>}
     </span>
   );
 }
@@ -77,12 +80,13 @@ export function MessageActions({
   /** Its place, when another message opens with the same words: "reply 3" (#293). */
   position?: string | null;
 }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   // Every message has these controls; its opening words tell them apart (#194):
   // "Copy message “Walk3 table: give me a small…”".
   // And "Copy message “Again.” (question 2)" when another opens alike (#293).
   const excerpt = useMemo(() => messageExcerpt(text), [text]);
-  const about = excerpt ? ` ${quotedMessage(excerpt, position)}` : '';
+  const about = excerpt ? quotedMessage(excerpt, position) : '';
   // Read-only maintenance mode (v0.11): forking, editing and retrying write.
   const readOnly = useReadOnlyStatus();
   const lockedTitle = readOnly.active ? readOnlyShortReason(readOnly) : undefined;
@@ -100,7 +104,9 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`Copy message${about}`}
+          aria-label={
+            about ? t('chat.messageActions.copyNamed', { about }) : t('chat.messageActions.copy')
+          }
           onClick={async () => {
             await navigator.clipboard.writeText(text);
             setCopied(true);
@@ -117,7 +123,9 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={excerpt ? `Fork conversation at${about}` : 'Fork conversation here'}
+          aria-label={
+            excerpt ? t('chat.messageActions.forkNamed', { about }) : t('chat.messageActions.fork')
+          }
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={() => void onFork()}
@@ -129,7 +137,9 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`Edit message${about}`}
+          aria-label={
+            about ? t('chat.messageActions.editNamed', { about }) : t('chat.messageActions.edit')
+          }
           data-message-edit=""
           disabled={readOnly.active}
           title={lockedTitle}
@@ -142,7 +152,7 @@ export function MessageActions({
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label="Retry"
+          aria-label={t('chat.messageActions.retry')}
           disabled={readOnly.active}
           title={lockedTitle}
           onClick={onRetry}
@@ -152,7 +162,10 @@ export function MessageActions({
       )}
       {modelSlug && <ModelAttribution slug={modelSlug} effort={effort ?? null} />}
       {searched && (
-        <Globe2 className="ms-0.5 size-3.5 text-[var(--text-muted)]" aria-label="Web search used" />
+        <Globe2
+          className="ms-0.5 size-3.5 text-[var(--text-muted)]"
+          aria-label={t('chat.messageActions.searched')}
+        />
       )}
     </div>
   );

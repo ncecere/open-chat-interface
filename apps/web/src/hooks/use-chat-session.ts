@@ -27,6 +27,7 @@ import {
 } from '~/lib/chat-submission';
 import { blockedSlugs } from '~/lib/classification';
 import { invalidateConversationLists } from '~/lib/conversation-cache';
+import { translate } from '~/lib/i18n';
 import { noteMfaRequiredResponse } from '~/lib/mfa-required';
 import { notePolicyRequiredResponse } from '~/lib/policy-required';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
@@ -43,8 +44,7 @@ const MESSAGE_SAVED_HEADER = 'X-OCI-Message-Saved';
  * stored (#326). Not why: a lost database, a proxy's 502 or a dropped
  * connection end the same way.
  */
-export const UNSAVED_MESSAGE_TEXT =
-  'Your message could not be saved, so it is back in the message box. Send it again.';
+export const unsavedMessageText = () => translate('chat.session.unsaved');
 
 /**
  * A user message among the saved ones that was not there before the send,
@@ -372,7 +372,7 @@ export function useChatSession(options: {
     // anything typed meanwhile is kept after it rather than either being lost.
     setDraft((current) => (current.trim() ? `${sent.text}\n\n${current}` : sent.text));
     setRefused(true);
-    setNotice(UNSAVED_MESSAGE_TEXT);
+    setNotice(unsavedMessageText());
   };
   acceptSubmission.current = (submission, promptId) => {
     consumeFiles(submission.attachmentIds);

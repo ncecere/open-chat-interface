@@ -1,6 +1,7 @@
 import { type ArtifactKind, normalizeCodeLanguage } from '@oci/shared';
 import { useEffect, useRef, useState } from 'react';
 import { HighlightedCode, MARKDOWN_PROSE } from '~/components/chat/markdown';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -79,14 +80,14 @@ export function ArtifactSource({
   content: string;
   writing?: boolean;
 }) {
+  const t = useT();
   const large = content.length > HIGHLIGHT_LIMIT;
   const highlighted = useThrottled(content, STREAMING_HIGHLIGHT_MS, writing && !large);
   if (large)
     return (
       <div data-artifact-source="plain">
         <p role="note" className="px-4 pt-3 text-xs text-[var(--text-muted)] sm:px-5">
-          Syntax highlighting is off for sources over{' '}
-          {new Intl.NumberFormat().format(HIGHLIGHT_LIMIT)} characters.
+          {t('artifacts.source.plainNote', { limit: HIGHLIGHT_LIMIT })}
         </p>
         <pre dir="ltr" className={PLAIN}>
           <code>{content}</code>

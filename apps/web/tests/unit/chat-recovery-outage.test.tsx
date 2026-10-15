@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RECOVERY_RETRYING_TEXT } from '../../src/hooks/use-chat-recovery';
+import { recoveryRetryingText } from '../../src/hooks/use-chat-recovery';
 import {
   advance,
   initialPending,
@@ -11,6 +11,9 @@ import {
   type RecoverySession,
   recoveryHarness,
 } from './chat-recovery.fixtures';
+
+// The text is translated now (English here: tests/unit/setup.ts).
+const RECOVERY_RETRYING_TEXT = recoveryRetryingText();
 
 // The API client, history validation, AI SDK, recovery and session are all
 // real; only the server behind `fetch` is simulated: crashed (the connection

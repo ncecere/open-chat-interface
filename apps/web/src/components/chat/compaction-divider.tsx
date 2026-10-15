@@ -2,9 +2,10 @@ import type { ConversationCompaction } from '@oci/shared';
 import { ChevronDown } from 'lucide-react';
 import { useId, useState } from 'react';
 import { MARKDOWN_PROSE, Markdown } from '~/components/chat/markdown';
+import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
-export const COMPACTION_DIVIDER_TEXT = 'Earlier messages are summarised for the model';
+export const compactionDividerText = (): string => translate('chat.compaction.dividerText');
 
 /**
  * A quiet single line above the first message the model still receives
@@ -12,13 +13,14 @@ export const COMPACTION_DIVIDER_TEXT = 'Earlier messages are summarised for the 
  * only as the summary, which the line discloses on request.
  */
 export function CompactionDivider({ compaction }: { compaction: ConversationCompaction }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const count = compaction.messagesSummarized;
 
   return (
     <section
-      aria-label="Conversation summary"
+      aria-label={t('chat.compaction.sectionLabel')}
       data-compaction-divider={compaction.id}
       className="flex flex-col gap-1.5"
     >
@@ -30,9 +32,9 @@ export function CompactionDivider({ compaction }: { compaction: ConversationComp
           aria-controls={panelId}
           onClick={() => setOpen((current) => !current)}
           className="flex items-center gap-1 rounded px-1.5 py-0.5 opacity-80 transition hover:text-[var(--text-primary)] hover:opacity-100"
-          title={`${count} earlier ${count === 1 ? 'message' : 'messages'} summarised; they stay here unchanged`}
+          title={t('chat.compaction.dividerTitle', { count })}
         >
-          {COMPACTION_DIVIDER_TEXT}
+          {t('chat.compaction.dividerText')}
           <ChevronDown
             aria-hidden="true"
             className={cn('size-3 transition-transform', open && 'rotate-180')}
@@ -46,8 +48,7 @@ export function CompactionDivider({ compaction }: { compaction: ConversationComp
           className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 px-4 py-3 text-sm text-[var(--text-secondary)]"
         >
           <p className="mb-2 text-xs text-[var(--text-muted)]">
-            What the model receives in place of the {count} earlier{' '}
-            {count === 1 ? 'message' : 'messages'} above, which stay here unchanged.
+            {t('chat.compaction.summaryIntro', { count })}
           </p>
           <Markdown className={MARKDOWN_PROSE}>{compaction.summary}</Markdown>
         </div>

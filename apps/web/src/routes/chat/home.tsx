@@ -4,6 +4,7 @@ import { Clock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Composer } from '~/components/chat/composer';
 import { DEFAULT_PROMPTS, SUGGESTION_CATEGORIES } from '~/components/chat/suggestions';
+import { translatedNodes } from '~/components/chat/translated-nodes';
 import { ProjectChatNotice } from '~/components/projects/project-chat-notice';
 import { useAttachments } from '~/hooks/use-attachments';
 import { useClassification } from '~/hooks/use-classification';
@@ -15,6 +16,7 @@ import { apiErrorMessage } from '~/lib/api-client';
 import { blockedSlugs } from '~/lib/classification';
 import { focusComposerOnArrival } from '~/lib/focus-after-navigation';
 import { greetingName } from '~/lib/greeting-name';
+import { translate, useT } from '~/lib/i18n';
 import { useClearReadOnlyRefusal } from '~/lib/read-only-refusals';
 import { reasoningEffortForRequest } from '~/lib/reasoning';
 import { forgetBrowserModel, startingModelAmong } from '~/lib/starting-model';
@@ -59,6 +61,7 @@ function ChatHome({
   projectId?: string;
   classification?: ClassificationResponse | undefined;
 }) {
+  const t = useT();
   const { data } = useCurrentUser();
   const modelsQuery = useModels();
   const hiddenFromRole = useModelsHiddenFromRole();
@@ -126,9 +129,10 @@ function ChatHome({
 
   // What the introduction asked to be called, else the account's given name (#315).
   const firstName = data && greetingName(data.user.name, data.preferences?.displayName);
-  const prompts =
+  const promptKeys =
     SUGGESTION_CATEGORIES.find((category) => category.id === activeCategory)?.prompts ??
     DEFAULT_PROMPTS;
+  const prompts = promptKeys.map((key) => t(key));
 
   const selectModel = useCallback((model: CatalogModel) => setModelSlug(model.slug), []);
 
@@ -137,7 +141,8 @@ function ChatHome({
       // Read before any await: the composer is replaced when the conversation opens.
       const typing =
         document.activeElement instanceof HTMLTextAreaElement &&
-        document.activeElement.getAttribute('aria-label') === 'Message input';
+        document.activeElement.getAttribute('aria-label') ===
+          translate('chat.composer.messageInput');
 
       const { thread } = await createThread(
         projectId ? { temporary: false, projectId } : { temporary },
@@ -197,7 +202,7 @@ function ChatHome({
         started.current = false;
         setSubmitting(false);
         // Such as the server's limit on starting conversations (429).
-        setStartError(apiErrorMessage(error, 'The conversation could not be started. Try again.'));
+        setStartError(apiErrorMessage(error, translate('chat.home.startFailed')));
         throw error;
       } finally {
         creating.current = false;
@@ -217,23 +222,28 @@ function ChatHome({
           <h1 className="block items-center gap-3 text-center text-[1.375rem] font-bold leading-tight tracking-tight md:flex md:text-start md:text-[1.875rem]">
             {temporary && <Clock className="size-7 text-[var(--accent-bright)]" />}
             {temporary ? (
-              'Temporary chat'
+              t('chat.home.temporaryTitle')
             ) : (
               // One text item, so the flex gap (for the icon) never lands after
               // the comma, and the name is in the DOM once, not once per
               // breakpoint (#94). On phones the name wraps to its own line.
               // Hidden, with room for the name, until it is known.
               <span className={cn(!data && 'invisible')}>
-                How can I help you{firstName || !data ? ', ' : '?'}
-                {(firstName || !data) && (
-                  <span className="block md:inline">{firstName ?? '\u00a0'}?</span>
-                )}
+                {firstName || !data
+                  ? translatedNodes(t, 'chat.home.greetingNamed', {
+                      name: (
+                        <span dir="auto" className="block md:inline">
+                          {firstName ?? '\u00a0'}
+                        </span>
+                      ),
+                    })
+                  : t('chat.home.greeting')}
               </span>
             )}
           </h1>
           {temporary && (
             <p className="mt-2 text-center text-sm text-[var(--text-muted)] md:text-start">
-              This conversation stays out of history and expires automatically after 24 hours.
+              {t('chat.home.temporaryNote')}
             </p>
           )}
           {projectId && <ProjectChatNotice projectId={projectId} />}
@@ -255,7 +265,7 @@ function ChatHome({
                   )}
                 >
                   <category.icon />
-                  {category.label}
+                  {t(category.label)}
                 </button>
               );
             })}
@@ -286,9 +296,7 @@ function ChatHome({
             <p className="mt-8 rounded-xl bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
               {/* Kept from every model by their role, the person needs to ask, not
                   wait for the instance to be set up (#303). */}
-              {hiddenFromRole
-                ? 'No models are available to your role. Ask an administrator.'
-                : 'No models are available yet. An administrator needs to add a provider and enable a model in the catalog.'}
+              {hiddenFromRole ? t('chat.home.noModelsRole') : t('chat.home.noModelsYet')}
             </p>
           )}
           {modelsQuery.isError && (
@@ -296,7 +304,7 @@ function ChatHome({
               role="alert"
               className="mt-8 rounded-xl bg-[var(--danger)]/15 px-4 py-3 text-sm text-[var(--danger-on-tint)]"
             >
-              The list of models could not be loaded. Reload the page to try again.
+              {t('chat.home.modelsFailed')}
             </p>
           )}
           {startError && (

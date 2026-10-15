@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Plug, X } from 'lucide-react';
 import { useState } from 'react';
+import { translatedNodes } from '~/components/chat/translated-nodes';
 import { fetchUserConnectors, USER_CONNECTORS_QUERY_KEY } from '~/lib/connectors';
+import { useT } from '~/lib/i18n';
 
 /** Connector ids whose hint the person dismissed, in this browser. */
 export const CONNECTOR_HINT_STORAGE_KEY = 'oci:dismissed-connector-hints';
@@ -50,6 +52,7 @@ export function connectorToSuggest(
  * dismissing it is remembered per connector in this browser.
  */
 export function ComposerConnectHint({ selectedModel }: { selectedModel: CatalogModel | null }) {
+  const t = useT();
   const supportsTools = selectedModel?.capabilities.includes('tool_calling') ?? false;
   const connectors = useQuery({
     queryKey: USER_CONNECTORS_QUERY_KEY,
@@ -71,24 +74,34 @@ export function ComposerConnectHint({ selectedModel }: { selectedModel: CatalogM
   return (
     <div
       role="note"
-      aria-label={`Connect ${connector.name}`}
+      aria-label={t('chat.connectHint.label', { name: connector.name })}
       className="mb-2 flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-control)] py-1.5 ps-3 pe-1.5 text-[0.8125rem] text-[var(--text-secondary)]"
       data-testid="composer-connect-hint"
     >
       <Plug className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
       <p className="min-w-0 flex-1">
-        <Link
-          to="/settings/connectors"
-          className="font-medium text-[var(--text-primary)] underline underline-offset-2 hover:text-[var(--accent-bright)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-bright)]"
-        >
-          {connector.needsReconnect ? 'Reconnect' : 'Connect'} {connector.name}
-        </Link>{' '}
-        to let the model use its tools.
+        {translatedNodes(t, 'chat.connectHint.sentence', {
+          link: (
+            <Link
+              to="/settings/connectors"
+              className="font-medium text-[var(--text-primary)] underline underline-offset-2 hover:text-[var(--accent-bright)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-bright)]"
+            >
+              {t(
+                connector.needsReconnect
+                  ? 'chat.connectHint.reconnect'
+                  : 'chat.connectHint.connect',
+                {
+                  name: connector.name,
+                },
+              )}
+            </Link>
+          ),
+        })}
       </p>
       <button
         type="button"
         onClick={() => dismiss(connector.id)}
-        aria-label={`Dismiss: connect ${connector.name}`}
+        aria-label={t('chat.connectHint.dismiss', { name: connector.name })}
         className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-bright)]"
       >
         <X className="size-4" aria-hidden="true" />

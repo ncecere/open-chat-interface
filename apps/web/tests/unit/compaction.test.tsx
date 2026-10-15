@@ -13,14 +13,14 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  COMPACT_ACTION_LABEL,
-  COMPACTION_PENDING_TEXT,
+  compactActionLabel,
+  compactionPendingText,
 } from '../../src/components/chat/compact-thread-dialog';
-import { COMPACTION_DIVIDER_TEXT } from '../../src/components/chat/compaction-divider';
+import { compactionDividerText } from '../../src/components/chat/compaction-divider';
 import {
-  COMPACTION_FAILED_TEXT,
-  COMPACTION_FAILURE_TEXT,
   CompactionFailureNotice,
+  compactionFailedText,
+  compactionFailureText,
 } from '../../src/components/chat/compaction-failure-notice';
 import { MessageList } from '../../src/components/chat/message-list';
 import { TopBar } from '../../src/components/layout/top-bar';
@@ -28,6 +28,18 @@ import { COMPACTION_POLL_MS, COMPACTION_POLL_WINDOW_MS } from '../../src/hooks/u
 import { summaryModelChoice, usePublishSummaryModel } from '../../src/hooks/use-summary-model';
 import { ApiError } from '../../src/lib/api-client';
 import { alerts, button, cleanup, click, dialog, findButton, settle } from './admin-test-utils';
+
+// The texts are translated now (English here: tests/unit/setup.ts).
+const COMPACT_ACTION_LABEL = compactActionLabel();
+const COMPACTION_PENDING_TEXT = compactionPendingText();
+const COMPACTION_DIVIDER_TEXT = compactionDividerText();
+const COMPACTION_FAILED_TEXT = compactionFailedText();
+const COMPACTION_FAILURE_TEXT = Object.fromEntries(
+  (['allowance', 'model_error', 'nothing_to_summarise', 'timeout'] as const).map((reason) => [
+    reason,
+    compactionFailureText(reason),
+  ]),
+) as Record<'allowance' | 'model_error' | 'nothing_to_summarise' | 'timeout', string>;
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 vi.mock('../../src/lib/api-client', async (importOriginal) => ({

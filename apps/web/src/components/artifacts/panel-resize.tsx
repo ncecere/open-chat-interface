@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useT } from '~/lib/i18n';
 
 /** The docked panel's width in CSS pixels, remembered in this browser. */
 export const PANEL_WIDTH_STORAGE_KEY = 'oci.artifacts.panelWidth';
@@ -174,6 +175,7 @@ export function PanelResizeHandle({
   /** null restores the default; `persist` false while a drag is still moving. */
   onResize: (width: number | null, persist?: boolean) => void;
 }) {
+  const t = useT();
   const drag = useRef<{ x: number; width: number; last: number } | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -221,13 +223,13 @@ export function PanelResizeHandle({
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize artifact panel"
+      aria-label={t('artifacts.resize.label')}
       aria-controls={controls}
       aria-valuenow={width}
       aria-valuemin={min}
       aria-valuemax={max}
-      aria-valuetext={`${width} pixels wide`}
-      title="Drag to resize; double-click to reset"
+      aria-valuetext={t('artifacts.resize.valueText', { width })}
+      title={t('artifacts.resize.title')}
       tabIndex={0}
       data-panel-resize=""
       data-dragging={dragging ? '' : undefined}

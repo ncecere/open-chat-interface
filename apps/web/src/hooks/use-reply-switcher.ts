@@ -2,6 +2,7 @@ import type { UIMessage } from 'ai';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
 import { activateReply } from '~/lib/chat-history';
+import { translate } from '~/lib/i18n';
 
 type SetMessages = (update: (current: UIMessage[]) => UIMessage[]) => void;
 
@@ -85,7 +86,7 @@ export function useReplySwitcher(options: {
       pending.current = activateReply(threadId, target.id)
         .catch(() => {
           swap(target, previous);
-          setError('The reply could not be switched. Try again.');
+          setError(translate('chat.replySwitcher.failed'));
         })
         .finally(() => setSaving(false));
     },

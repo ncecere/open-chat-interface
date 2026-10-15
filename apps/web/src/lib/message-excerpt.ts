@@ -1,4 +1,5 @@
 import { plainTextOfMarkdown } from '@oci/shared';
+import { type MessageKey, translate } from '~/lib/i18n';
 
 /**
  * A message's opening words as plain text ("Walk3 table: give me a small…"),
@@ -21,10 +22,15 @@ export function messageExcerpt(text: string, max = 40): string | null {
  * “Again.” (question 2).
  */
 export function quotedMessage(excerpt: string, position?: string | null): string {
-  return `“${excerpt}”${position ? ` (${position})` : ''}`;
+  return position
+    ? translate('chat.excerpt.quotedAt', { excerpt, position })
+    : translate('chat.excerpt.quoted', { excerpt });
 }
 
-const POSITION_NOUN: Record<string, string> = { user: 'question', assistant: 'reply' };
+const POSITION_KEYS: Record<string, MessageKey> = {
+  user: 'chat.excerpt.positionQuestion',
+  assistant: 'chat.excerpt.positionReply',
+};
 
 /**
  * Opening words are not enough when two messages share them (#293): replies
@@ -46,6 +52,6 @@ export function repeatedOpeningPositions(
     const place = (counts.get(role) ?? 0) + 1;
     counts.set(role, place);
     if (!excerpt || (seen.get(excerpt) ?? 0) < 2) return null;
-    return `${POSITION_NOUN[role] ?? 'message'} ${place}`;
+    return translate(POSITION_KEYS[role] ?? 'chat.excerpt.positionMessage', { place });
   });
 }

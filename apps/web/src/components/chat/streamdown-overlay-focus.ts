@@ -2,6 +2,7 @@ import {
   nameStreamdownControls,
   nameTableFullscreen,
 } from '~/components/chat/streamdown-control-names';
+import { translate } from '~/lib/i18n';
 
 /**
  * Focus management for Streamdown's table full-screen view (WCAG 2.4.3).
@@ -113,9 +114,15 @@ export function uninstallStreamdownOverlayFocus(): void {
  * Each one is named and made focusable as it appears; scans are batched to one
  * per frame so a streaming reply does not trigger one per token.
  */
-const SCROLL_REGIONS: Array<[selector: string, label: string]> = [
-  ['[data-streamdown="table-wrapper"] > .overflow-x-auto:not([tabindex])', 'Table'],
-  ['[data-streamdown="code-block-body"]:not([tabindex])', 'Code block'],
+const SCROLL_REGIONS: Array<[selector: string, label: () => string]> = [
+  [
+    '[data-streamdown="table-wrapper"] > .overflow-x-auto:not([tabindex])',
+    () => translate('chat.controls.regionTable'),
+  ],
+  [
+    '[data-streamdown="code-block-body"]:not([tabindex])',
+    () => translate('chat.controls.regionCode'),
+  ],
 ];
 let regionObserver: MutationObserver | null = null;
 
@@ -124,7 +131,7 @@ export function markStreamdownScrollRegions(root: ParentNode = document): void {
     for (const element of root.querySelectorAll<HTMLElement>(selector)) {
       element.tabIndex = 0;
       element.setAttribute('role', 'region');
-      element.setAttribute('aria-label', label);
+      element.setAttribute('aria-label', label());
     }
   }
   // Then each region and button is named for its block (#194).

@@ -8,6 +8,7 @@ import { ComposerOptions, type ComposerOptionsProps } from '~/components/chat/co
 import { ProjectFilesControl } from '~/components/chat/project-files-control';
 import { FILLED_FOCUS_RING, FOCUS_RING } from '~/components/ui/focus-ring';
 import type { PendingAttachment } from '~/hooks/use-attachments';
+import { useT } from '~/lib/i18n';
 import { readOnlyShortReason, useReadOnlyStatus } from '~/lib/read-only';
 import { isSendKey, sendKeyShortcuts } from '~/lib/send-keys';
 import { cn } from '~/lib/utils';
@@ -60,12 +61,13 @@ export const Composer = memo(function Composer({
   loading = false,
   classification,
   onRemoveAttachment,
-  placeholder = 'Type your message here...',
+  placeholder,
   autoFocus = false,
   projectId = null,
   excludedProjectFileIds = NO_FILES,
   onExcludedProjectFilesChange,
 }: ComposerProps) {
+  const t = useT();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Settings → Customization: Enter adds a line and Cmd/Ctrl+Enter sends.
   const invertSend = useInvertSend();
@@ -132,9 +134,13 @@ export const Composer = memo(function Composer({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={readOnly.active ? `${readOnlyShortReason(readOnly)}.` : placeholder}
+          placeholder={
+            readOnly.active
+              ? `${readOnlyShortReason(readOnly)}.`
+              : (placeholder ?? t('chat.composer.placeholder'))
+          }
           disabled={readOnly.active}
-          aria-label="Message input"
+          aria-label={t('chat.composer.messageInput')}
           // Each line reads from its own side as it is typed (#360).
           dir="auto"
           aria-invalid={tooLong || undefined}
@@ -147,11 +153,12 @@ export const Composer = memo(function Composer({
         />
         {tooLong && (
           <p id={lengthNoteId} className="mt-2 text-xs font-medium text-[var(--text-primary)]">
-            This message is {length.toLocaleString('en-US')} characters long. Messages can be up to{' '}
-            {MESSAGE_TEXT_MAX_LENGTH.toLocaleString('en-US')} characters.{' '}
-            {attachmentsAvailable === false
-              ? 'Shorten it to send it.'
-              : 'Shorten it, or attach long text as a file instead.'}
+            {t(
+              attachmentsAvailable === false
+                ? 'chat.composer.tooLongShorten'
+                : 'chat.composer.tooLongAttach',
+              { length, max: MESSAGE_TEXT_MAX_LENGTH },
+            )}
           </p>
         )}
 
@@ -184,7 +191,7 @@ export const Composer = memo(function Composer({
             <button
               type="button"
               onClick={onStop}
-              aria-label="Stop generating"
+              aria-label={t('chat.composer.stop')}
               className={`ms-auto inline-flex size-[2.125rem] shrink-0 items-center justify-center rounded-lg border border-[var(--accent-button-border)] bg-[var(--accent-send)] text-[var(--accent-button-foreground)] transition-colors hover:bg-[var(--accent-send-hover)] ${FOCUS_RING} ${FILLED_FOCUS_RING}`}
             >
               <Square className="size-3.5 fill-current" />
@@ -195,7 +202,7 @@ export const Composer = memo(function Composer({
               disabled={!canSubmit}
               aria-busy={submitting || undefined}
               onClick={onSubmit}
-              aria-label="Send message"
+              aria-label={t('chat.composer.send')}
               title={readOnly.active ? readOnlyShortReason(readOnly) : undefined}
               aria-keyshortcuts={sendKeyShortcuts(invertSend)}
               className={cn(

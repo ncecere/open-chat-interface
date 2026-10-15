@@ -19,14 +19,12 @@ import {
   useCompactThread,
 } from '~/hooks/use-compaction';
 import { apiErrorMessage } from '~/lib/api-client';
+import { translate, useT } from '~/lib/i18n';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { cn } from '~/lib/utils';
 
-export const COMPACT_ACTION_LABEL = 'Summarise earlier messages now';
-export const COMPACTION_PENDING_TEXT = 'Summarising earlier messages…';
-/** As the API refuses it (NOTHING_TO_COMPACT), said before anyone fills in the dialog (#153). */
-export const NOTHING_TO_SUMMARISE_TEXT =
-  'There is nothing to summarise yet. A conversation needs at least two turns before the earlier ones can be summarised.';
+export const compactActionLabel = (): string => translate('chat.compaction.actionLabel');
+export const compactionPendingText = (): string => translate('chat.compaction.pending');
 
 /**
  * The conversation's "Summarise earlier messages now" control. While a
@@ -34,6 +32,7 @@ export const NOTHING_TO_SUMMARISE_TEXT =
  * conversation stays usable throughout.
  */
 export function CompactConversationControl({ threadId }: { threadId: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const pending = useCompactionPending(threadId);
   const summarisable = useCompactionSummarisable(threadId) || pending;
@@ -44,13 +43,13 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label={COMPACT_ACTION_LABEL}
+        aria-label={t('chat.compaction.actionLabel')}
         title={
           pending
-            ? COMPACTION_PENDING_TEXT
+            ? t('chat.compaction.pending')
             : summarisable
-              ? COMPACT_ACTION_LABEL
-              : 'Nothing to summarise yet'
+              ? t('chat.compaction.actionLabel')
+              : t('chat.compaction.nothingYet')
         }
         locked={lock.title}
         aria-haspopup="dialog"
@@ -67,7 +66,7 @@ export function CompactConversationControl({ threadId }: { threadId: string }) {
         )}
       </Button>
       <span role="status" className="sr-only">
-        {pending ? COMPACTION_PENDING_TEXT : ''}
+        {pending ? t('chat.compaction.pending') : ''}
       </span>
       <CompactThreadDialog
         threadId={threadId}
@@ -100,17 +99,18 @@ export function CompactThreadDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* With nothing to summarise, the footer's Close is the only one: an ×
           beside it was a second control with the same name (#246). */}
       <DialogContent className="w-[calc(100%-2rem)] max-w-lg" closeButton={summarisable}>
         <DialogHeader>
-          <DialogTitle>{COMPACT_ACTION_LABEL}</DialogTitle>
+          <DialogTitle>{t('chat.compaction.actionLabel')}</DialogTitle>
           <DialogDescription>
             {summarisable
-              ? 'The earlier messages are summarised in the background, and the model receives the summary in their place. You can keep writing meanwhile. Every message stays here as it is. The summary counts towards your usage.'
-              : NOTHING_TO_SUMMARISE_TEXT}
+              ? t('chat.compaction.dialogDescription')
+              : t('chat.compaction.nothingToSummarise')}
           </DialogDescription>
         </DialogHeader>
         {summarisable ? (
@@ -123,7 +123,7 @@ export function CompactThreadDialog({
         ) : (
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-              Close
+              {t('chat.compaction.close')}
             </Button>
           </DialogFooter>
         )}
@@ -141,6 +141,7 @@ function CompactThreadForm({
   pending: boolean;
   onDone: () => void;
 }) {
+  const t = useT();
   const [instructions, setInstructions] = useState('');
   const compact = useCompactThread(threadId);
   const id = useId();
@@ -154,14 +155,12 @@ function CompactThreadForm({
   return (
     <form noValidate onSubmit={(event) => void submit(event).catch(() => undefined)}>
       {pending && (
-        <p className="mb-3 text-xs text-[var(--text-muted)]">
-          {COMPACTION_PENDING_TEXT} Asking again does not start a second summary.
-        </p>
+        <p className="mb-3 text-xs text-[var(--text-muted)]">{t('chat.compaction.pendingAgain')}</p>
       )}
       <Field
-        label="Instructions (optional)"
+        label={t('chat.compaction.instructionsLabel')}
         htmlFor={id}
-        hint="What the summary should keep, for example “keep every figure in the budget”."
+        hint={t('chat.compaction.instructionsHint')}
       >
         <Textarea
           id={id}
@@ -178,16 +177,16 @@ function CompactThreadForm({
           role="alert"
           className="mt-3 rounded-lg bg-[var(--danger)]/15 px-3 py-2 text-xs text-[var(--danger-on-tint)]"
         >
-          {apiErrorMessage(compact.error, 'The earlier messages could not be summarised.')}
+          {apiErrorMessage(compact.error, t('chat.compaction.failed'))}
         </p>
       )}
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onDone} disabled={compact.isPending}>
-          Cancel
+          {t('chat.compaction.cancel')}
         </Button>
         <Button type="submit" variant="primary" disabled={compact.isPending}>
           {compact.isPending && <Spinner />}
-          Summarise
+          {t('chat.compaction.submit')}
         </Button>
       </DialogFooter>
     </form>

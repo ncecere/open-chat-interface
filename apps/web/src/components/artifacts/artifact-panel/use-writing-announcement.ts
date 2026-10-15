@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { translate } from '~/lib/i18n';
 import type { PanelView } from './panel-helpers';
 
 /** Announces when a source starts and finishes being written, never each token. */
@@ -8,21 +9,24 @@ export function useWritingAnnouncement(view: PanelView | null): string {
   useEffect(() => {
     const current = announced.current;
     if (view?.type === 'draft') {
-      const name = view.title ?? 'the artifact';
       if (view.writing && view.title && current?.id !== view.draft.toolCallId) {
         announced.current = { id: view.draft.toolCallId, finished: false };
-        setMessage(`Writing ${view.title}…`);
+        setMessage(translate('chat.work.writingTitled', { title: view.title }));
       } else if (!view.writing && current?.id === view.draft.toolCallId && !current.finished) {
         current.finished = true;
         setMessage(
           view.draft.state === 'saved'
-            ? `Finished writing ${name}.`
-            : `Writing ${name} stopped before it was saved.`,
+            ? view.title
+              ? translate('artifacts.announce.finishedTitled', { title: view.title })
+              : translate('artifacts.announce.finished')
+            : view.title
+              ? translate('artifacts.announce.stoppedTitled', { title: view.title })
+              : translate('artifacts.announce.stopped'),
         );
       }
     } else if (view?.type === 'artifact' && current && !current.finished) {
       current.finished = true;
-      setMessage(`Finished writing ${view.ref.title}.`);
+      setMessage(translate('artifacts.announce.finishedTitled', { title: view.ref.title }));
     }
   }, [view]);
   return message;
