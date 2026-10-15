@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useFocusReturn } from '~/hooks/use-focus-return';
+import { translate, useT } from '~/lib/i18n';
 import { keepHiddenContentInert } from '~/lib/inert-hidden';
 import { cn } from '~/lib/utils';
 
@@ -10,7 +11,8 @@ keepHiddenContentInert();
 
 export const Dialog = DialogPrimitive.Root;
 
-const DISCARD_QUESTION = 'Discard what you have entered?';
+/** Asked in the language showing when it is needed, not when this file loaded. */
+const discardQuestion = () => translate('ui.dialog.discardQuestion');
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
 
@@ -36,6 +38,7 @@ export function DialogContent({
   // Focus goes back to whatever opened the dialog, or near it if it has gone
   // (WCAG 2.4.3; #41, #128).
   const focusReturn = useFocusReturn();
+  const t = useT();
 
   return (
     <DialogPrimitive.Portal>
@@ -53,12 +56,12 @@ export function DialogContent({
         )}
         onEscapeKeyDown={(event) => {
           onEscapeKeyDown?.(event);
-          if (!event.defaultPrevented && confirmDiscard && !window.confirm(DISCARD_QUESTION))
+          if (!event.defaultPrevented && confirmDiscard && !window.confirm(discardQuestion()))
             event.preventDefault();
         }}
         onPointerDownOutside={(event) => {
           onPointerDownOutside?.(event);
-          if (!event.defaultPrevented && confirmDiscard && !window.confirm(DISCARD_QUESTION))
+          if (!event.defaultPrevented && confirmDiscard && !window.confirm(discardQuestion()))
             event.preventDefault();
         }}
         onOpenAutoFocus={(event) => {
@@ -75,7 +78,7 @@ export function DialogContent({
         {closeButton && (
           <DialogPrimitive.Close
             className="absolute end-4 top-4 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control)] hover:text-[var(--text-primary)]"
-            aria-label="Close"
+            aria-label={t('ui.dialog.close')}
           >
             <X className="size-4" />
           </DialogPrimitive.Close>

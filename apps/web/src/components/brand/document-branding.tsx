@@ -8,6 +8,7 @@ import {
   pageTitleFor,
   usePageTitleOverride,
 } from '~/lib/document-title';
+import { useT } from '~/lib/i18n';
 import { applyInstallMeta, watchAppliedMode } from '~/lib/install-meta';
 
 /**
@@ -22,12 +23,15 @@ export function DocumentBranding({ router }: { router: AnyRouter }) {
   const { data } = useAuthStatus();
   const pathname = useRouterState({ router, select: (state) => state.location.pathname });
   const override = usePageTitleOverride();
+  // The page's name is in the language showing: written again when it changes.
+  useT();
   const appName = data?.branding?.appName;
   const icon = brandIconHref(data?.branding?.logoUrl);
 
+  const title = documentTitle(override ?? pageTitleFor(pathname), appName);
   useEffect(() => {
-    document.title = documentTitle(override ?? pageTitleFor(pathname), appName);
-  }, [appName, override, pathname]);
+    document.title = title;
+  }, [title]);
 
   useEffect(() => {
     // Wait for the status: resetting to the default first would flash it.

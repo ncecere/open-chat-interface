@@ -1,6 +1,7 @@
 import { instanceName } from '@oci/shared';
 import { useEffect, useSyncExternalStore } from 'react';
 import { findActiveAdminNav } from '~/lib/admin-navigation';
+import { type MessageKey, translate } from '~/lib/i18n';
 
 /**
  * The browser tab's title and icon follow Branding (v0.10).
@@ -11,43 +12,46 @@ import { findActiveAdminNav } from '~/lib/admin-navigation';
  * name of its own (a shared conversation's title) sets it with `usePageTitle`.
  */
 
-const SEPARATOR = ' · ';
+/** "<page> · <parent>" and "<page> · <app name>": one message each, so a language can order them. */
+const within = (page: string, parent: string) => translate('brand.title.within', { page, parent });
 
-const AUTH_PAGES: Record<string, string> = {
-  '/auth/login': 'Sign in',
-  '/auth/signup': 'Create account',
-  '/auth/forgot-password': 'Forgot password',
-  '/auth/reset-password': 'Reset password',
-  '/auth/accept-invite': 'Accept invitation',
-  '/auth/verify-email': 'Verify email',
+const AUTH_PAGES: Record<string, MessageKey> = {
+  '/auth/login': 'brand.title.signIn',
+  '/auth/signup': 'brand.title.signUp',
+  '/auth/forgot-password': 'brand.title.forgotPassword',
+  '/auth/reset-password': 'brand.title.resetPassword',
+  '/auth/accept-invite': 'brand.title.acceptInvite',
+  '/auth/verify-email': 'brand.title.verifyEmail',
 };
 
-const SETTINGS_SECTIONS: Record<string, string> = {
-  '': 'Account',
-  '/customization': 'Customization',
-  '/memory': 'Memory',
-  '/history': 'History',
-  '/models': 'Models',
-  '/sharing': 'Sharing',
-  '/groups': 'Groups',
-  '/connectors': 'Connectors',
-  '/attachments': 'Attachments',
+const SETTINGS_SECTIONS: Record<string, MessageKey> = {
+  '': 'brand.title.settingsAccount',
+  '/customization': 'brand.title.settingsCustomization',
+  '/memory': 'brand.title.settingsMemory',
+  '/history': 'brand.title.settingsHistory',
+  '/models': 'brand.title.settingsModels',
+  '/sharing': 'brand.title.settingsSharing',
+  '/groups': 'brand.title.settingsGroups',
+  '/connectors': 'brand.title.settingsConnectors',
+  '/attachments': 'brand.title.settingsAttachments',
 };
 
 /** The page's own part of the title, or null where the app name alone is right. */
 export function pageTitleFor(pathname: string): string | null {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   const auth = AUTH_PAGES[path];
-  if (auth) return auth;
-  if (path.startsWith('/share/')) return 'Shared conversation';
+  if (auth) return translate(auth);
+  if (path.startsWith('/share/')) return translate('brand.title.sharedConversation');
   if (path === '/settings' || path.startsWith('/settings/')) {
     // Each section by name, as admin pages are (#110).
     const section = SETTINGS_SECTIONS[path.slice('/settings'.length)];
-    return section ? `${section}${SEPARATOR}Settings` : 'Settings';
+    const settings = translate('brand.title.settings');
+    return section ? within(translate(section), settings) : settings;
   }
   if (path === '/admin' || path.startsWith('/admin/')) {
     const active = findActiveAdminNav(path);
-    return active ? `${active.item.label}${SEPARATOR}Admin` : 'Admin';
+    // The administration console stays in English, its title too.
+    return active ? within(active.item.label, 'Admin') : 'Admin';
   }
   return null;
 }
@@ -58,13 +62,13 @@ export function pageTitleFor(pathname: string): string | null {
  */
 export function pageWithin(name: string, pathname: string): string {
   const parent = pageTitleFor(pathname);
-  return parent ? `${name}${SEPARATOR}${parent}` : name;
+  return parent ? within(name, parent) : name;
 }
 
 export function documentTitle(page: string | null | undefined, appName?: string | null): string {
   const name = instanceName(appName);
   const own = page?.trim();
-  return own ? `${own}${SEPARATOR}${name}` : name;
+  return own ? translate('brand.title.withApp', { page: own, app: name }) : name;
 }
 
 // A page-provided title, kept outside React state so the one component that
