@@ -89,7 +89,7 @@ async function submit() {
   );
 }
 const passkeyButton = () =>
-  [...container.querySelectorAll('button')].find((b) => b.textContent === 'Sign in with a passkey');
+  [...container.querySelectorAll('button')].find((b) => b.textContent === 'Use a passkey');
 
 describe('the password step of a person with a second step', () => {
   it('goes to the second step, not into the app, and keeps no session in the cache', async () => {
@@ -125,7 +125,7 @@ describe('the password step of a person with a second step', () => {
   });
 });
 
-describe('Sign in with a passkey', () => {
+describe('Use a passkey', () => {
   it('is not shown where the browser has no WebAuthn', async () => {
     await render();
     expect(passkeyButton()).toBeUndefined();

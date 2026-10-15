@@ -9,6 +9,8 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export const FIXTURE_SPECS = ['**/long-conversation.spec.ts'];
 
+const MFA_REQUIREMENT_SPEC = '**/mfa-requirement.spec.ts';
+
 export default defineConfig({
   testDir: './tests/e2e',
   testIgnore: process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : [],
@@ -23,7 +25,15 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
+    {
+      name: 'mobile-chromium',
+      // The requirement for a role is a setting of the whole instance, which the
+      // desktop run of this spec sets and clears; a second project would do the
+      // same under it. Left out, never skipped.
+      // (A project's own testIgnore replaces the one above, so it is repeated.)
+      testIgnore: [...(process.env.E2E_SEEDED === '1' ? FIXTURE_SPECS : []), MFA_REQUIREMENT_SPEC],
+      use: { ...devices['Pixel 7'] },
+    },
     // The instance falls back to the dark theme, so the scans above never saw
     // light, where every AA contrast failure the QA walk found was (#72). The
     // specs store the light theme for projects whose name ends in -light.

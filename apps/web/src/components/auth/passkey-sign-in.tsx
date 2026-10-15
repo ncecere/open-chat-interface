@@ -26,13 +26,15 @@ export function useFinishSignIn(returnTo: string) {
 /**
  * Sign in with a passkey, on the sign-in page and as the alternative on the
  * second step. A passkey is both factors (the server refuses one that was not
- * used with a PIN or biometric), so there is no code afterwards. Not shown
+ * used with a PIN or biometric), so there is no code afterwards. Its label is
+ * "Use a passkey", not "Sign in with a passkey": every browser test finds the
+ * password button by the name "Sign in", which matches by substring. Not shown
  * where the browser has no WebAuthn; the person closing the browser's prompt is
  * said calmly, not as an error.
  */
 export function PasskeySignInButton({
   returnTo,
-  label = 'Sign in with a passkey',
+  label = 'Use a passkey',
   variant = 'secondary',
   className,
 }: {

@@ -25,7 +25,10 @@ export function MfaBanner({ className }: { className?: string }) {
       <ShieldAlert className="mt-0.5 size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
       <p className="min-w-0 flex-1 leading-relaxed text-[var(--text-secondary)]">
         Set up two-step verification by {mfaDeadlineText(mfa.deadline)}.{' '}
-        <Link to="/settings" className="font-medium text-[var(--accent-bright)] hover:underline">
+        <Link
+          to="/settings"
+          className="font-medium text-[var(--accent-bright)] underline hover:no-underline"
+        >
           Set up now
         </Link>
       </p>

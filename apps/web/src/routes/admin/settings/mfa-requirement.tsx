@@ -67,7 +67,13 @@ function summary(
 
 function ImpactTable({ impact }: { impact: MfaImpact }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+    <section
+      // Scrolls sideways when narrow; keyboard users must reach it (WCAG 2.1.1).
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access
+      tabIndex={0}
+      aria-label="Two-step verification by role"
+      className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]"
+    >
       <table className="w-full min-w-[34rem] text-sm">
         <caption className="sr-only">
           How many people in each role have two-step verification set up
@@ -116,7 +122,7 @@ function ImpactTable({ impact }: { impact: MfaImpact }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }
 
@@ -287,7 +293,10 @@ export function MfaRequirementSection({ requirement }: { requirement: MfaRequire
         {refusal && (
           <Notice tone="warning" title="This requirement cannot be saved yet">
             {refusal}{' '}
-            <Link to="/settings" className="text-[var(--accent-bright)] hover:underline">
+            <Link
+              to="/settings"
+              className="text-[var(--accent-bright)] underline hover:no-underline"
+            >
               Set it up under Settings → Account
             </Link>
           </Notice>

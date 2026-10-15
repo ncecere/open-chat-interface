@@ -76,7 +76,10 @@ export function UserMfaSection({
             {oneself ? (
               <p className="mt-3 text-[var(--text-muted)] text-sm">
                 Manage your own under{' '}
-                <Link to="/settings" className="text-[var(--accent-bright)] hover:underline">
+                <Link
+                  to="/settings"
+                  className="text-[var(--accent-bright)] underline hover:no-underline"
+                >
                   Settings → Account
                 </Link>
                 .
