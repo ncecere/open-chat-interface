@@ -95,8 +95,14 @@ removed), `group.member.add` and `group.member.remove` (one entry per request li
 
 `apps/api/src/services/groups/access-changes.ts`: `onGroupMembersRemoved(tx, groupId, userIds)`,
 `onGroupDeleting(tx, groupId, memberIds)` and `countGroupSharedProjects(tx, groupId)`. The groups code calls them in
-the transaction that removes the rows, with the group row locked, then the user rows by id. They do nothing until
-project sharing fills them in (reconcile threads and files there; return the real count of shared projects).
+the transaction that removes the rows, with the group row locked. They do nothing until project sharing fills them
+in (reconcile threads and files there; return the real count of shared projects).
+
+- `onGroupMembersRemoved` runs AFTER the `group_member` rows are deleted (administrator, manager or self-removal),
+  so access computed from `group_member` is already the final state.
+- `onGroupDeleting` runs BEFORE the group row is deleted, while `project_share` rows naming the group can still be
+  read; it may return a function, which the groups code runs in the same transaction AFTER the delete (the cascade
+  has then removed the memberships and the shares): reconcile the projects you noted against the access that remains.
 
 `apps/api/src/services/groups/upgrade-guard.ts`: `assertNoOlderReplicas()` (409 `upgrade_in_progress` while a replica
 of an earlier minor release serves), for creating a share and changing grants.

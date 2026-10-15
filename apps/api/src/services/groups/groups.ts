@@ -310,13 +310,14 @@ export async function deleteGroup(actor: GroupActor, id: string): Promise<Delete
         .where(eq(schema.modelGroupAccess.groupId, id)),
     ]);
     const sharedProjects = await countGroupSharedProjects(tx, id);
-    await onGroupDeleting(
+    const afterDelete = await onGroupDeleting(
       tx,
       id,
       members.map((row) => row.userId),
     );
     // Members, budget and model grants (and project shares) cascade.
     await tx.delete(schema.group).where(eq(schema.group.id, id));
+    await afterDelete?.();
     return {
       group,
       removed: {

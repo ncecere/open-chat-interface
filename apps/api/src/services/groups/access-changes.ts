@@ -26,14 +26,19 @@ export async function onGroupMembersRemoved(
 
 /**
  * A group is about to be deleted; `memberIds` are its members, who lose
- * whatever it shared with them. Called before the group row is deleted, so a
- * share naming the group can still be read.
+ * whatever it shared with them. Called before the group row is deleted, while
+ * shares naming the group can still be read (to note which projects they
+ * reach). It may return a function, which is run in the same transaction
+ * AFTER the group, its memberships and its shares are gone: the place to
+ * reconcile those projects against the access that remains.
  */
 export async function onGroupDeleting(
   _tx: GroupTransaction,
   _groupId: string,
   _memberIds: string[],
-): Promise<void> {}
+): Promise<undefined | (() => Promise<void>)> {
+  return undefined;
+}
 
 /**
  * How many projects are shared with the group, for the delete dialog and the
