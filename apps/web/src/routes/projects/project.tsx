@@ -2,6 +2,7 @@ import {
   MAX_FILES_PER_PROJECT,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
+  type ProjectAccessLevel,
   type ProjectFile,
   type ProjectSummary,
 } from '@oci/shared';
@@ -16,6 +17,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import { ShareProjectButton } from '~/components/projects/share-dialog';
+import { TransferProjectSection } from '~/components/projects/transfer-dialog';
 import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input, Textarea } from '~/components/ui/input';
@@ -28,6 +31,7 @@ import {
   useProject,
   useProjectFiles,
   useProjectThreads,
+  useRefreshOnAccessLoss,
   useUpdateProject,
   useUploadProjectFiles,
 } from '~/hooks/use-projects';
@@ -38,9 +42,11 @@ import {
   validateProjectSearch,
 } from '~/lib/chat-search-params';
 import { usePageTitle } from '~/lib/document-title';
+import { accessLabel, accessOf, projectControls } from '~/lib/project-access';
 import { useReadOnlyLock } from '~/lib/read-only';
 import { useTemporaryChat } from '~/providers/temporary-chat-provider';
 import { ProjectLabelsSection } from './project-labels';
+import { ProjectAccessSections } from './project-access-section';
 import { DeleteProjectSection, Section } from './project-sections';
 
 function formatBytes(bytes: number): string {
@@ -88,6 +94,9 @@ function indexStatusLabel(index: ProjectFile['index'] | undefined): string {
 export function ProjectPage({ projectId }: { projectId: string }) {
   const { data: me } = useCurrentUser();
   const project = useProject(me?.features.projects ? projectId : undefined);
+  // A project that was on screen and now answers 404 lost its access mid-session (v0.14).
+  const opened = useRef<string | null>(null);
+  if (project.data) opened.current = projectId;
   // Nothing started from a project is temporary; do not leave the top bar's
   // temporary-chat control highlighted here.
   const { temporary, setTemporary } = useTemporaryChat();
@@ -128,10 +137,19 @@ export function ProjectPage({ projectId }: { projectId: string }) {
 
   if (project.error || !project.data) {
     const missing = project.error instanceof ApiError && project.error.status === 404;
+    // 404 is also what a project the person never had answers, so only a project
+    // that was open a moment ago can be called "no longer yours".
+    const lost = missing && opened.current === projectId;
     return (
       <UnavailableState
         alert
-        title={missing ? 'Project not found' : 'Could not load project'}
+        title={
+          lost
+            ? 'You no longer have access'
+            : missing
+              ? 'Project not found'
+              : 'Could not load project'
+        }
         actions={
           missing ? (
             <Button asChild>
@@ -149,9 +167,11 @@ export function ProjectPage({ projectId }: { projectId: string }) {
           )
         }
       >
-        {missing
-          ? 'This project does not exist or was deleted.'
-          : apiErrorMessage(project.error, 'The project could not be loaded.')}
+        {lost
+          ? 'The owner stopped sharing this project with you, or it was deleted. Your own conversations that were in it are kept in your conversation list.'
+          : missing
+            ? 'This project does not exist, was deleted, or you no longer have access to it.'
+            : apiErrorMessage(project.error, 'The project could not be loaded.')}
       </UnavailableState>
     );
   }
@@ -171,6 +191,8 @@ function ProjectView({
   attachmentsAvailable: boolean;
 }) {
   const navigate = useNavigate();
+  const access = accessOf(project);
+  const controls = projectControls(access);
   // The open tab lives in the URL, so a reload or shared link opens the same one.
   const tab = validateProjectSearch(useSearch({ strict: false })).tab ?? DEFAULT_PROJECT_TAB;
   const setTab = (next: ProjectTab) =>
@@ -187,13 +209,22 @@ function ProjectView({
         <div className="min-w-0">
           <p className="text-sm text-[var(--text-muted)]">Project</p>
           <h1 className="mt-1 break-words text-2xl font-bold leading-tight">{project.name}</h1>
+          {access !== 'owner' && (
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              {project.ownerName ? `Shared by ${project.ownerName} · ` : 'Shared with you · '}
+              {accessLabel(access)}
+            </p>
+          )}
         </div>
-        <Button variant="primary" asChild className="shrink-0">
-          <Link to="/" search={{ project: project.id }}>
-            <MessageSquarePlus aria-hidden="true" />
-            New chat in project
-          </Link>
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {controls.share && <ShareProjectButton project={project} />}
+          <Button variant="primary" asChild>
+            <Link to="/" search={{ project: project.id }}>
+              <MessageSquarePlus aria-hidden="true" />
+              New chat in project
+            </Link>
+          </Button>
+        </div>
       </header>
 
       <div className="mt-8">
@@ -214,18 +245,30 @@ function ProjectView({
         aria-label={TABS.find((candidate) => candidate.id === tab)?.label}
         className="mt-10"
       >
-        {tab === 'conversations' && <ProjectConversations projectId={project.id} />}
-        {tab === 'instructions' && <ProjectInstructionsForm project={project} />}
+        {tab === 'conversations' && (
+          <ProjectConversations projectId={project.id} shared={access !== 'owner'} />
+        )}
+        {tab === 'instructions' && (
+          <ProjectInstructionsForm project={project} canEdit={controls.editInstructions} />
+        )}
         {tab === 'files' && (
-          <ProjectFiles projectId={project.id} attachmentsAvailable={attachmentsAvailable} />
+          <ProjectFiles
+            projectId={project.id}
+            attachmentsAvailable={attachmentsAvailable}
+            access={access}
+          />
         )}
-        {tab === 'settings' && (
-          <>
-            <ProjectNameForm project={project} />
-            <ProjectLabelsSection projectId={project.id} />
-            <DeleteProjectSection project={project} />
-          </>
-        )}
+        {tab === 'settings' &&
+          (access === 'owner' ? (
+            <>
+              <ProjectNameForm project={project} />
+              <ProjectLabelsSection projectId={project.id} />
+              <TransferProjectSection project={project} />
+              <DeleteProjectSection project={project} />
+            </>
+          ) : (
+            <ProjectAccessSections project={project} />
+          ))}
       </div>
     </PageFrame>
   );
@@ -280,7 +323,13 @@ function SaveRow({
   );
 }
 
-function ProjectInstructionsForm({ project }: { project: ProjectSummary }) {
+function ProjectInstructionsForm({
+  project,
+  canEdit,
+}: {
+  project: ProjectSummary;
+  canEdit: boolean;
+}) {
   const [instructions, setInstructions] = useState(project.instructions);
   const state = useProjectSave(project.id);
   const instructionsId = useId();
@@ -295,7 +344,11 @@ function ProjectInstructionsForm({ project }: { project: ProjectSummary }) {
   return (
     <Section
       title="Instructions"
-      description="Added to every conversation in this project, after the instance’s and your own instructions."
+      description={
+        canEdit
+          ? 'Added to every conversation in this project, after the instance’s and your own instructions.'
+          : 'Added to every conversation in this project, after the instance’s and your own instructions. Only the owner and editors can change them.'
+      }
     >
       <form onSubmit={submit} className="flex flex-col gap-1.5" noValidate>
         <label htmlFor={instructionsId} className="sr-only">
@@ -305,10 +358,13 @@ function ProjectInstructionsForm({ project }: { project: ProjectSummary }) {
           id={instructionsId}
           value={instructions}
           rows={10}
+          readOnly={!canEdit}
           maxLength={PROJECT_INSTRUCTIONS_MAX_LENGTH}
           aria-describedby={counterId}
           className="resize-y"
-          placeholder="For example: Answer as a patient tutor. Use British spelling."
+          placeholder={
+            canEdit ? 'For example: Answer as a patient tutor. Use British spelling.' : undefined
+          }
           onChange={(event) => {
             state.edited();
             setInstructions(event.target.value);
@@ -317,7 +373,7 @@ function ProjectInstructionsForm({ project }: { project: ProjectSummary }) {
         <p id={counterId} className="text-right text-xs text-[var(--text-muted)]">
           {instructions.length} / {PROJECT_INSTRUCTIONS_MAX_LENGTH} characters
         </p>
-        <SaveRow state={state} dirty={dirty} disabled={!dirty} />
+        {canEdit && <SaveRow state={state} dirty={dirty} disabled={!dirty} />}
       </form>
     </Section>
   );
@@ -359,11 +415,15 @@ function ProjectNameForm({ project }: { project: ProjectSummary }) {
 function ProjectFiles({
   projectId,
   attachmentsAvailable,
+  access,
 }: {
   projectId: string;
   attachmentsAvailable: boolean;
+  access: ProjectAccessLevel;
 }) {
+  const canManage = projectControls(access).manageFiles;
   const files = useProjectFiles(projectId);
+  useRefreshOnAccessLoss(projectId, files.error);
   const upload = useUploadProjectFiles(projectId);
   const remove = useDeleteProjectFile(projectId);
   const lock = useReadOnlyLock();
@@ -384,11 +444,16 @@ function ProjectFiles({
         <>
           Their text is given to the model in every conversation in this project. When the files are
           too large to give in full, they are searched with each message and the passages that match
-          best are used instead. {count} of {MAX_FILES_PER_PROJECT} files. Files count toward your
-          storage.
+          best are used instead. {count} of {MAX_FILES_PER_PROJECT} files.{' '}
+          {access === 'owner'
+            ? 'Files count toward your storage.'
+            : access === 'editor'
+              ? 'Files you add count toward your storage.'
+              : 'Only the owner and editors can add or remove files.'}
         </>
       }
       action={
+        canManage &&
         attachmentsAvailable && (
           <>
             <input
@@ -414,7 +479,7 @@ function ProjectFiles({
         )
       }
     >
-      {!attachmentsAvailable && (
+      {canManage && !attachmentsAvailable && (
         <p className="mb-3 text-sm text-[var(--text-muted)]">
           File uploads are not available to you, so project files are not used in conversations.
         </p>
@@ -440,15 +505,20 @@ function ProjectFiles({
           {files.data?.map((file) => (
             <li key={file.id} className={ROW}>
               <FileText className="size-4 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-              <a
-                href={file.url}
-                target="_blank"
-                rel="noreferrer"
-                // Wrapped, not cut: a tooltip is no use on touch (#244).
-                className="min-w-0 flex-1 text-sm wrap-anywhere hover:underline"
-              >
-                {file.filename}
-              </a>
+              <div className="min-w-0 flex-1">
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  // Wrapped, not cut: a tooltip is no use on touch (#244).
+                  className="text-sm wrap-anywhere hover:underline"
+                >
+                  {file.filename}
+                </a>
+                {addedByText(file) && (
+                  <p className="text-xs text-[var(--text-muted)]">{addedByText(file)}</p>
+                )}
+              </div>
               <span
                 className="shrink-0 text-xs text-[var(--text-muted)]"
                 data-index-status={file.index?.status ?? 'pending'}
@@ -458,17 +528,19 @@ function ProjectFiles({
               <span className="hidden shrink-0 text-xs text-[var(--text-muted)] sm:inline">
                 {formatBytes(file.sizeBytes)}
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove ${file.filename}`}
-                locked={lock.title}
-                disabled={remove.isPending}
-                onClick={() => remove.mutate(file.id)}
-              >
-                <Trash2 />
-              </Button>
+              {canManage && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remove ${file.filename}`}
+                  locked={lock.title}
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(file.id)}
+                >
+                  <Trash2 />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
@@ -477,11 +549,22 @@ function ProjectFiles({
   );
 }
 
-function ProjectConversations({ projectId }: { projectId: string }) {
+/** Who added a file, as the API says (a display name, never an email); nothing from an older API. */
+function addedByText(file: ProjectFile): string | null {
+  if (file.addedByMe) return 'Added by you';
+  if (file.addedBy === undefined) return null;
+  return file.addedBy === null ? 'Added by a deleted account' : `Added by ${file.addedBy}`;
+}
+
+function ProjectConversations({ projectId, shared }: { projectId: string; shared: boolean }) {
   const threads = useProjectThreads(projectId);
+  useRefreshOnAccessLoss(projectId, threads.error);
 
   return (
-    <Section title="Conversations">
+    <Section
+      title="Conversations"
+      description={shared ? 'Only you can see your conversations in this project.' : undefined}
+    >
       {threads.isLoading ? (
         <p className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <Spinner /> Loading conversations…

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { AccountDeletionText, deletionConfirmed } from '~/components/account/account-deletion';
+import { SharingImpactNotice } from '~/components/account/sharing-impact';
 import { EditOnly } from '~/components/admin/admin-access';
 import { ConfirmDialog } from '~/components/admin/confirm-dialog';
 import { ADMIN_USERS_QUERY_KEY } from '~/components/admin/user-role-select';
@@ -10,6 +11,7 @@ import { Button } from '~/components/ui/button';
 import { Field } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { useCurrentUser } from '~/hooks/use-current-user';
+import { useSharingImpact } from '~/hooks/use-project-sharing';
 import { api } from '~/lib/api-client';
 
 /**
@@ -31,6 +33,8 @@ export function DeleteUserSection({
   const me = useCurrentUser();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
+  // What deleting does to other people's projects, read when the dialog opens (v0.14).
+  const impact = useSharingImpact(`/admin/users/${user.id}/sharing-impact`, open);
 
   if (me.data?.user.id === user.id) return null;
 
@@ -76,9 +80,12 @@ export function DeleteUserSection({
         confirmLabel="Delete user"
         pendingLabel="Deleting…"
         errorMessage="The account could not be deleted."
-        confirmDisabled={held || !deletionConfirmed(typed, user.email)}
+        confirmDisabled={held || impact.isLoading || !deletionConfirmed(typed, user.email)}
         onConfirm={deleteAccount}
       >
+        <div className="mb-4">
+          <SharingImpactNotice query={impact} subject="admin" />
+        </div>
         {held ? (
           <p
             role="note"

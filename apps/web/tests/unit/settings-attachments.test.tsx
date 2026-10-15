@@ -159,6 +159,18 @@ describe('Settings → Attachments', () => {
     expect(document.querySelector('[aria-label="Select chat-notes.txt"]')).not.toBeNull();
   });
 
+  it('copes with a file left in a project the person can no longer read (v0.14)', async () => {
+    // The API keeps the file (it is theirs, and counts against them) but stands in "Project"
+    // for the name once the project is no longer readable by them.
+    files = [file('a3', 'left-behind.txt', { id: 'gone', name: 'Project' })];
+    await render();
+    const link = document.querySelector<HTMLAnchorElement>('a[href="/projects/gone?tab=files"]');
+    expect(link?.textContent).toBe('Project');
+    // Still managed from the project page (which says what happened), never deleted here.
+    expect(document.querySelector('[aria-label="Delete left-behind.txt"]')).toBeNull();
+    expect(document.body.textContent).toContain('left-behind.txt');
+  });
+
   it("lets a file's details wrap rather than cut them off without a tooltip (#195)", async () => {
     await render();
     const list = document.querySelector('a[href="/projects/p1?tab=files"]')!.closest('p')!;
