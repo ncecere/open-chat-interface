@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { authClient } from '~/lib/auth-client';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /**
@@ -28,6 +29,7 @@ export function ResendVerification({
   /** When a link was just sent for this address (a refused sign-in sends one). */
   sentAt?: number;
 }) {
+  const t = useT();
   const [state, setState] = useState<'idle' | 'sending' | 'requested' | 'error'>('idle');
   const [waitUntil, setWaitUntil] = useState(() => (sentAt ? sentAt + RESEND_COOLDOWN_MS : 0));
   const [now, setNow] = useState(() => Date.now());
@@ -87,30 +89,29 @@ export function ResendVerification({
         aria-describedby={waiting ? 'resend-wait' : missingEmail ? 'resend-needs-email' : undefined}
         onClick={() => void resend()}
       >
-        {state === 'sending' ? 'Requesting email...' : 'Resend verification email'}
+        {state === 'sending' ? t('auth.resend.requesting') : t('auth.resend.button')}
       </Button>
       {missingEmail && !waiting && (
         <p id="resend-needs-email" className="text-xs text-[var(--text-muted)]">
-          Enter your email address above to ask for a link.
+          {t('auth.resend.needsEmail')}
         </p>
       )}
       {state === 'requested' && (
         <p role="status" className="text-xs text-[var(--text-muted)]">
-          If this address needs verification, check its inbox and spam folder. If no email arrives,
-          try again later or contact an administrator to check email delivery.
+          {t('auth.resend.requested')}
         </p>
       )}
       {waiting && (
         <p id="resend-wait" className="text-xs text-[var(--text-muted)]">
           {/* After a request, nothing more: it does not say whether one was sent (#328). */}
           {state === 'requested'
-            ? 'You can ask again in a minute.'
-            : 'A link was just sent. You can ask for another in a minute if it does not arrive.'}
+            ? t('auth.resend.waitAfterRequest')
+            : t('auth.resend.waitJustSent')}
         </p>
       )}
       {state === 'error' && (
         <p role="alert" className="text-xs text-[var(--danger-on-tint)]">
-          Could not request a verification email. Try again later or contact an administrator.
+          {t('auth.resend.error')}
         </p>
       )}
     </div>

@@ -4,6 +4,7 @@ import { LogOut } from 'lucide-react';
 import { TwoStepPanel } from '~/components/mfa/two-step-panel';
 import { Button } from '~/components/ui/button';
 import { authClient } from '~/lib/auth-client';
+import { useT } from '~/lib/i18n';
 import { mfaDeadlineText, useMfaStatus } from '~/lib/mfa';
 
 /**
@@ -14,6 +15,7 @@ import { mfaDeadlineText, useMfaStatus } from '~/lib/mfa';
  * session satisfied the moment it is confirmed, with no second sign-in.
  */
 export function MfaSetupPage() {
+  const t = useT();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data: status } = useMfaStatus();
@@ -36,21 +38,13 @@ export function MfaSetupPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center px-4 pt-[10vh] pb-12">
       <div className="w-full max-w-2xl">
-        <h1 className="text-2xl font-bold">Set up two-step verification</h1>
+        <h1 className="text-2xl font-bold">{t('auth.mfaSetup.title')}</h1>
         <p className="mt-2 text-sm text-[var(--text-muted)]">
-          {signInAgain ? (
-            <>
-              Your administrator requires two-step verification, and you have it set up, but this
-              session was opened with your password only. Sign out and sign in again, then enter
-              your code or use your passkey.
-            </>
-          ) : (
-            <>
-              Your administrator requires two-step verification for your account
-              {status?.deadline ? ` (since ${mfaDeadlineText(status.deadline)})` : ''}. Until you
-              set it up, this page and Sign out are all you can use.
-            </>
-          )}
+          {signInAgain
+            ? t('auth.mfaSetup.signInAgain')
+            : status?.deadline
+              ? t('auth.mfaSetup.requiredSince', { date: mfaDeadlineText(status.deadline) })
+              : t('auth.mfaSetup.required')}
         </p>
 
         <div className="mt-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6">
@@ -64,7 +58,7 @@ export function MfaSetupPage() {
             onClick={() => void signOut()}
           >
             <LogOut className="rtl:-scale-x-100" />
-            Sign out
+            {t('auth.common.signOut')}
           </Button>
         </div>
       </div>

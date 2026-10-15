@@ -1,5 +1,6 @@
 import { CheckCircle2, UserPlus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { bdiMessage } from '~/components/auth/bdi-message';
 import {
   AuthFormError,
   authFieldProps,
@@ -16,6 +17,7 @@ import { Label } from '~/components/ui/label';
 import { Spinner } from '~/components/ui/spinner';
 import { useAuthStatus } from '~/hooks/use-auth-status';
 import { ApiError, api } from '~/lib/api-client';
+import { useT } from '~/lib/i18n';
 
 type InviteState = 'checking' | 'valid' | 'invalid' | 'accepted';
 
@@ -34,6 +36,7 @@ interface AcceptInviteResponse {
  * `/auth/accept-invite`; it intentionally lives outside authenticated layouts.
  */
 export function AcceptInvitePage() {
+  const t = useT();
   const { data: authStatus } = useAuthStatus();
   const [token] = useState(() => {
     const fragmentToken = new URLSearchParams(window.location.hash.slice(1)).get('token');
@@ -88,7 +91,7 @@ export function AcceptInvitePage() {
     event.preventDefault();
     setError(null);
     const problems = authFormProblems([
-      { id: 'invite-name', problem: name.trim() ? null : 'Enter your name.' },
+      { id: 'invite-name', problem: name.trim() ? null : t('auth.form.nameRequired') },
       { id: 'invite-email', problem: emailProblem(email) },
       { id: 'invite-password', problem: newPasswordProblem(password) },
     ]);
@@ -110,7 +113,7 @@ export function AcceptInvitePage() {
       setVerificationRequired(result.emailVerificationRequired);
       setInviteState('accepted');
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Unable to accept this invitation.');
+      setError(caught instanceof ApiError ? caught.message : t('auth.acceptInvite.acceptFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -126,24 +129,24 @@ export function AcceptInvitePage() {
             logoUrl={authStatus?.branding?.logoUrl}
             className="text-2xl"
           />
-          <p className="text-sm text-[var(--text-muted)]">Create your invited account.</p>
+          <p className="text-sm text-[var(--text-muted)]">{t('auth.acceptInvite.subtitle')}</p>
         </div>
 
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-control)]/40 p-6 backdrop-blur-sm">
           {inviteState === 'checking' && (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-[var(--text-muted)]">
-              <Spinner className="size-4" /> Checking invitation
+              <Spinner className="size-4" /> {t('auth.acceptInvite.checking')}
             </div>
           )}
 
           {inviteState === 'invalid' && (
             <div className="space-y-4 text-center">
-              <h1 className="text-lg font-semibold">Invitation unavailable</h1>
+              <h1 className="text-lg font-semibold">{t('auth.acceptInvite.invalidTitle')}</h1>
               <p className="text-sm text-[var(--text-muted)]">
-                This link is invalid, expired, already used, or registration is unavailable.
+                {t('auth.acceptInvite.invalidBody')}
               </p>
               <Button className="w-full" onClick={() => window.location.assign('/auth/login')}>
-                Return to sign in
+                {t('auth.common.returnToSignIn')}
               </Button>
             </div>
           )}
@@ -151,7 +154,7 @@ export function AcceptInvitePage() {
           {inviteState === 'valid' && (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-name">Name</Label>
+                <Label htmlFor="invite-name">{t('auth.common.name')}</Label>
                 <Input
                   id="invite-name"
                   {...authFieldProps({
@@ -169,7 +172,7 @@ export function AcceptInvitePage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-email">Email</Label>
+                <Label htmlFor="invite-email">{t('auth.common.email')}</Label>
                 <Input
                   id="invite-email"
                   type="email"
@@ -191,14 +194,14 @@ export function AcceptInvitePage() {
                 {emailLocked && (
                   <p id="invite-email-hint" className="text-xs text-[var(--text-muted)]">
                     {invitedEmail
-                      ? 'The address this invitation was sent to.'
-                      : 'Enter the email address this invitation was sent to.'}
+                      ? t('auth.acceptInvite.emailHintFixed')
+                      : t('auth.acceptInvite.emailHintAsked')}
                   </p>
                 )}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-password">Password</Label>
+                <Label htmlFor="invite-password">{t('auth.common.password')}</Label>
                 <Input
                   id="invite-password"
                   {...authFieldProps({
@@ -218,7 +221,7 @@ export function AcceptInvitePage() {
                   onChange={(event) => setPassword(event.target.value)}
                 />
                 <p id="invite-password-hint" className="text-xs text-[var(--text-muted)]">
-                  Use at least 12 characters.
+                  {t('auth.common.passwordHint')}
                 </p>
               </div>
 
@@ -230,7 +233,7 @@ export function AcceptInvitePage() {
 
               <Button type="submit" variant="primary" disabled={submitting} className="mt-1 w-full">
                 {submitting ? <Spinner /> : <UserPlus />}
-                Accept invitation
+                {t('auth.acceptInvite.submit')}
               </Button>
             </form>
           )}
@@ -238,13 +241,13 @@ export function AcceptInvitePage() {
           {inviteState === 'accepted' && (
             <div className="space-y-4 text-center">
               <CheckCircle2 className="mx-auto size-9 text-[var(--accent-bright)]" />
-              <h1 className="text-lg font-semibold">Account created</h1>
+              <h1 className="text-lg font-semibold">{t('auth.acceptInvite.accountCreated')}</h1>
               <p className="text-sm text-[var(--text-muted)]">
                 {/* Not "check your email" alone: the email may be delayed or not
                     go out at all while mail is failing (#327). */}
                 {verificationRequired
-                  ? `We are sending a verification link to ${email}. Open it before signing in. It can take a few minutes, so check your spam folder too; if nothing arrives, use Resend verification email or ask an administrator to check email delivery.`
-                  : 'Your invitation has been accepted. You can sign in now.'}
+                  ? bdiMessage(t, 'auth.acceptInvite.acceptedVerify', undefined, { email })
+                  : t('auth.acceptInvite.accepted')}
               </p>
               {verificationRequired && <ResendVerification email={email} />}
               <Button
@@ -252,7 +255,7 @@ export function AcceptInvitePage() {
                 className="w-full"
                 onClick={() => window.location.assign('/auth/login')}
               >
-                Continue to sign in
+                {t('auth.common.continueToSignIn')}
               </Button>
             </div>
           )}

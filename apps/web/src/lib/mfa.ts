@@ -2,7 +2,8 @@ import type { MfaStatus } from '@oci/shared';
 import { useQuery } from '@tanstack/react-query';
 import type { FieldProblem } from '~/hooks/use-clear-on-edit';
 import { ApiError, api, apiErrorProblems } from '~/lib/api-client';
-import { SIGN_IN_UNAVAILABLE } from '~/lib/auth-unavailable';
+import { signInUnavailable } from '~/lib/auth-unavailable';
+import { translate } from '~/lib/i18n';
 import { formatDate } from '~/lib/i18n/format';
 
 /** What Settings → Account and the setup page read: `GET /api/me/mfa`. */
@@ -43,13 +44,17 @@ export function webAuthnSupported(): boolean {
   return typeof window !== 'undefined' && 'PublicKeyCredential' in window;
 }
 
-/** "42 seconds", "15 minutes", "2 hours": a wait as a person would say it. */
+/** "42 seconds", "15 minutes", "2 hours": a wait as a person would say it, in their language. */
 export function retryText(seconds: number): string {
-  const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
-  if (seconds < 60) return plural(Math.max(1, Math.ceil(seconds)), 'second');
-  if (seconds < 3600) return plural(Math.ceil(seconds / 60), 'minute');
-  return plural(Math.ceil(seconds / 3600), 'hour');
+  if (seconds < 60)
+    return translate('auth.retry.seconds', { count: Math.max(1, Math.ceil(seconds)) });
+  if (seconds < 3600) return translate('auth.retry.minutes', { count: Math.ceil(seconds / 60) });
+  return translate('auth.retry.hours', { count: Math.ceil(seconds / 3600) });
 }
+
+/** How long to wait, from a `Retry-After` in seconds, or "a minute" when the server gave none. */
+const waitText = (retryAfter: number | null | undefined) =>
+  retryAfter ? retryText(retryAfter) : translate('auth.retry.aMinute');
 
 /** A deadline as a date in words, in the person's own time zone. */
 export function mfaDeadlineText(iso: string): string {
@@ -76,7 +81,7 @@ export interface SecondStepProblem {
 }
 
 /** Fifteen minutes: how long ten wrong codes lock the second step (the API's setting). */
-const LOCK_FALLBACK = '15 minutes';
+const LOCK_FALLBACK_SECONDS = 15 * 60;
 
 /**
  * What to tell a person whose second step was refused, for every code the API
@@ -90,46 +95,34 @@ export function secondStepProblem(
   const keep = (text: string): SecondStepProblem => ({ text, endsChallenge: false });
   // The service failing (no answer, a 5xx) is not about the code (#288).
   if (typeof failure.status === 'number' && (failure.status === 0 || failure.status >= 500))
-    return keep(SIGN_IN_UNAVAILABLE);
+    return keep(signInUnavailable());
   switch (failure.code) {
     case 'INVALID_CODE':
-      return keep(
-        'That code is not right. Check the code in your authenticator app and try again.',
-      );
+      return keep(translate('auth.secondStep.invalidCode'));
     case 'INVALID_BACKUP_CODE':
-      return keep(
-        'That recovery code is not right. Check it and try again: capital letters and small letters are different.',
-      );
+      return keep(translate('auth.secondStep.invalidRecoveryCode'));
     case 'CODE_ALREADY_USED':
       return keep(
-        method === 'recovery'
-          ? 'That recovery code was already used. Each one works once: use another, or an authenticator code.'
-          : 'That code was already used. Wait for the next code in your authenticator app, then enter it.',
+        translate(
+          method === 'recovery' ? 'auth.secondStep.recoveryCodeUsed' : 'auth.secondStep.codeUsed',
+        ),
       );
     case 'INVALID_TWO_FACTOR_COOKIE':
-      return {
-        text: 'Your sign-in timed out or was not started. Start again with your email and password.',
-        endsChallenge: true,
-      };
+      return { text: translate('auth.secondStep.timedOut'), endsChallenge: true };
     case 'TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE':
-      return {
-        text: 'Too many wrong codes. Start again with your email and password to try again.',
-        endsChallenge: true,
-      };
+      return { text: translate('auth.secondStep.tooManyWrongCodes'), endsChallenge: true };
     case 'ACCOUNT_TEMPORARILY_LOCKED':
       return keep(
-        `Two-step verification is locked after too many wrong codes. Try again in about ${
-          failure.retryAfter ? retryText(failure.retryAfter) : LOCK_FALLBACK
-        }, or ask an administrator to reset it.`,
+        translate('auth.secondStep.locked', {
+          wait: retryText(failure.retryAfter || LOCK_FALLBACK_SECONDS),
+        }),
       );
     case 'TOO_MANY_REQUESTS':
       return keep(
-        `Too many attempts. Try again in ${
-          failure.retryAfter ? retryText(failure.retryAfter) : 'a minute'
-        }.`,
+        translate('auth.secondStep.tooManyAttempts', { wait: waitText(failure.retryAfter) }),
       );
     default:
-      return keep(failure.message || 'The code could not be checked. Try again.');
+      return keep(failure.message || translate('auth.secondStep.generic'));
   }
 }
 
@@ -148,32 +141,20 @@ export interface PasskeyProblem {
 export function passkeyProblem(failure: SecondStepFailure): PasskeyProblem {
   const error = (text: string): PasskeyProblem => ({ kind: 'error', text });
   if (failure.code === 'AUTH_CANCELLED' || failure.code?.startsWith('ERROR_'))
-    return {
-      kind: 'cancelled',
-      text: 'The passkey request was cancelled or timed out. Try again, or sign in another way.',
-    };
+    return { kind: 'cancelled', text: translate('auth.passkey.cancelledSignIn') };
   if (typeof failure.status === 'number' && (failure.status === 0 || failure.status >= 500))
-    return error(SIGN_IN_UNAVAILABLE);
+    return error(signInUnavailable());
   switch (failure.code) {
     case 'LOCAL_AUTH_DISABLED':
-      return error(
-        'Email and password sign-in is turned off on this instance, and passkeys follow the same rule. Use another sign-in option.',
-      );
+      return error(translate('auth.passkey.localAuthDisabled'));
     case 'EMAIL_NOT_VERIFIED':
-      return error(
-        'Your email address is not verified yet. Open the verification link we sent, then sign in again.',
-      );
+      return error(translate('auth.passkey.emailNotVerified'));
     case 'TOO_MANY_REQUESTS':
       return error(
-        `Too many attempts. Try again in ${
-          failure.retryAfter ? retryText(failure.retryAfter) : 'a minute'
-        }.`,
+        translate('auth.secondStep.tooManyAttempts', { wait: waitText(failure.retryAfter) }),
       );
     default:
-      return error(
-        failure.message ||
-          'That passkey could not be used. Try again, or sign in with your password.',
-      );
+      return error(failure.message || translate('auth.passkey.failed'));
   }
 }
 
@@ -213,32 +194,21 @@ export function currentCode(text: string): string {
 export function passkeyManageProblem(failure: SecondStepFailure): PasskeyProblem {
   const error = (text: string): PasskeyProblem => ({ kind: 'error', text });
   if (failure.code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED')
-    return error(
-      'This device already has a passkey for your account. Use another device or security key, or remove the old passkey first.',
-    );
+    return error(translate('auth.passkey.alreadyRegistered'));
   if (failure.code === 'AUTH_CANCELLED' || failure.code?.startsWith('ERROR_'))
-    return {
-      kind: 'cancelled',
-      text: 'The passkey request was cancelled or timed out. Try again when you are ready.',
-    };
+    return { kind: 'cancelled', text: translate('auth.passkey.cancelledManage') };
   if (typeof failure.status === 'number' && (failure.status === 0 || failure.status >= 500))
-    return error('Passkeys are temporarily unavailable. Try again in a moment.');
+    return error(translate('auth.passkey.unavailable'));
   switch (failure.code) {
     case 'SESSION_NOT_FRESH':
-      return error(
-        'For your security, adding a passkey needs a recent sign-in. Sign out, enter your password and sign in again, then add the passkey.',
-      );
+      return error(translate('auth.passkey.sessionNotFresh'));
     case 'PASSKEY_NOT_AVAILABLE':
-      return error(
-        'Your account signs in through your organisation, so passkeys are not available.',
-      );
+      return error(translate('auth.passkey.notAvailable'));
     case 'TOO_MANY_REQUESTS':
       return error(
-        `Too many attempts. Try again in ${
-          failure.retryAfter ? retryText(failure.retryAfter) : 'a minute'
-        }.`,
+        translate('auth.secondStep.tooManyAttempts', { wait: waitText(failure.retryAfter) }),
       );
     default:
-      return error(failure.message || 'The passkey could not be changed. Try again.');
+      return error(failure.message || translate('auth.passkey.manageFailed'));
   }
 }
