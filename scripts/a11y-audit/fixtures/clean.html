@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+  Positive control for the accessibility audit: the same kinds of content as broken.html, done
+  properly. If a check flags this page, the check is wrong, not the page.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clean control</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 sans-serif; background: #fff; color: #111; }
+      main { padding: 8px; max-width: 100%; }
+      .faint { color: #595959; }
+      button, a.target { min-width: 44px; min-height: 44px; margin-right: 8px; }
+      :focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
+      .field { border: 2px solid #595959; background: #fff; padding: 6px; max-width: 100%; box-sizing: border-box; }
+      .clip { width: 180px; min-height: 42px; border: 1px solid #333; }
+      @keyframes spin { to { transform: rotate(1turn); } }
+      .spinner { display: inline-block; animation: spin 1s linear infinite; }
+      @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <a href="#content" class="skip">Skip to main content</a>
+    <main id="content" tabindex="-1">
+      <h1>Clean control</h1>
+      <p class="faint">This sentence is dark grey on white and passes contrast.</p>
+      <p><button type="button" aria-label="One">1</button><button type="button" aria-label="Two">2</button></p>
+      <p><a class="target" href="#top">A link with a focus indicator</a></p>
+      <form onsubmit="return false">
+        <p><label>Email <input class="field" type="email" autocomplete="username" /></label></p>
+        <p><label>Password <input class="field" type="password" autocomplete="current-password" /></label></p>
+      </form>
+      <div class="clip">A long title that is allowed to grow as the text spacing does.</div>
+      <p><span class="spinner" role="status" aria-label="Loading">o</span></p>
+    </main>
+  </body>
+</html>
