@@ -92,6 +92,22 @@ export function instanceName(appName: string | null | undefined): string {
   return appName?.trim() || DEFAULT_APP_NAME;
 }
 
+/** Android and iOS truncate a longer label under the home-screen icon (#400). */
+export const BRAND_SHORT_NAME_MAX = 12;
+
+/**
+ * The label under the installed app's icon: the configured short name, or the
+ * start of the name, at most 12 characters and never half of a character
+ * made of two code units. The manifest and the Apple title tag use it alike.
+ */
+export function brandShortName(
+  appName: string | null | undefined,
+  shortName: string | null | undefined,
+): string {
+  const label = shortName?.trim() || instanceName(appName);
+  return Array.from(label).slice(0, BRAND_SHORT_NAME_MAX).join('').trimEnd();
+}
+
 // This package compiles without DOM or Node types; both runtimes provide URL.
 declare const URL: new (input: string) => { protocol: string; username: string; password: string };
 

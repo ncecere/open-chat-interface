@@ -1,7 +1,9 @@
 import {
+  BRAND_SHORT_NAME_MAX,
   type BrandMode,
   brandBackgroundColor,
   brandMode,
+  brandShortName,
   brandThemeColor,
   instanceName,
   MIN_INSTALL_LOGO_PX,
@@ -18,8 +20,7 @@ import {
  * already on the sign-in page), so it never carries anything that is not.
  */
 
-/** Android and iOS truncate a longer label under the icon. */
-export const MANIFEST_SHORT_NAME_MAX = 12;
+export const MANIFEST_SHORT_NAME_MAX = BRAND_SHORT_NAME_MAX;
 
 export interface ManifestBranding {
   appName: string | null | undefined;
@@ -62,11 +63,6 @@ export const BUNDLED_ICONS: ManifestIcon[] = [
 /** Where an uploaded logo is served (routes/branding.ts). */
 const LOGO_ICON_URL = '/api/branding/logo';
 
-/** The first `max` characters, never half of a character made of two code units. */
-function firstCharacters(value: string, max: number): string {
-  return Array.from(value).slice(0, max).join('').trimEnd();
-}
-
 /**
  * @param logo the size of the instance's logo when it can be the icon
  *   (`installableLogo`), or null. Checked again here: a logo that is too
@@ -83,7 +79,7 @@ export function buildManifest(
 
   return {
     name,
-    short_name: firstCharacters(branding.shortName?.trim() || name, MANIFEST_SHORT_NAME_MAX),
+    short_name: brandShortName(branding.appName, branding.shortName),
     id: '/',
     start_url: '/',
     scope: '/',
