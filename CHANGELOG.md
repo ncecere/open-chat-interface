@@ -7,6 +7,140 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-15
+
+Governance and access, reach and compliance (`SPEC.md`). Six pre-deploy
+migrations (`0050` to `0055`), one background migration
+(`0.14.thread-connector-use`, scheduled by `migrate --post`) and no new
+post-deploy step. All migrations only add tables and columns. **Read the
+upgrade notes: three of the features are not enforced by a v0.13 replica, so
+turn them on only after every replica runs v0.14.**
+
+### Added
+
+- **Two-step verification for local accounts** (#399). An authenticator app
+  (TOTP) with ten one-use recovery codes, and passkeys, set up under Settings →
+  Account. Sign-in asks for a code after the password, or a passkey signs in
+  directly (a passkey counts as both factors and must verify the user).
+  Administrators can **require it per role** under Authentication (a 14-day
+  grace period by default): the requirement is enforced on the server on every
+  request, a person who is limited can only reach enrolment and sign-out, and
+  saving it is refused unless the administrator has used a second step and, for
+  the administrator role, an enrolled local administrator exists, so turning it
+  on cannot lock everyone out. People who sign in through single sign-on are
+  never held to it (their identity provider enforces it). An administrator can
+  reset a person's second step (People → Users), and an operator can with
+  `admin:reset-mfa <email> [--unlock]` or `--all --yes` after changing
+  `AUTH_SECRET`. Metrics `oci_mfa_*`, audit events `auth.mfa.*`,
+  `auth.passkey.*`, `user.mfa.reset` and `user.mfa_reset_cli`, and an email when
+  a second step changes (when email delivery is set up). New dependencies:
+  `@better-auth/passkey` 1.6.26 (API and web, MIT) and `qrcode-generator` (web,
+  MIT).
+- **Data classification** (#395). Administrators define **data classes**
+  (Administration → Models → Data classes), approve models for them (a new model
+  is approved for nothing) and say which classes each connector carries.
+  Projects, connectors a conversation has used, and the person can label a
+  conversation. With the mode on **Warn** or **Block**, content that carries a
+  class is not sent to a model that is not approved for it: the send, a
+  connector tool, web search, compaction, project passage search and reranking,
+  embeddings, saving a memory and creating a share link are all checked, and
+  each check was proven to make zero calls to the provider when it blocks. The
+  model picker shows why a model is unavailable, and a refused send keeps your
+  text. Warn is a dry run that audits what Block would have refused
+  (`classification.warn`). Audit events carry ids and class names at the time,
+  never content; the counter `oci_classification_decisions_total` has no class
+  label. It is not data-loss prevention: copying text out of OCI is not
+  controlled, and an approval is the administrator's statement about a
+  provider, which OCI cannot verify.
+- **Groups** (#394). Administrators create groups of people (People → Groups). A
+  group can carry usage budgets and grant models in addition to its members'
+  roles: it only adds, never takes access away, and when a person has several
+  budgets the most restrictive applies. Administrators appoint **group
+  managers**, who add people by email and remove members of their own groups
+  (Settings → Groups) and see nothing else. Custom roles are not part of this
+  release (tracked separately).
+- **Shared projects** (#394). Share a project from its page with a person (by
+  exact email) or one of your groups, as **viewer** or **editor**. People you
+  share with use the project's instructions and files in their own
+  conversations, which stay private to them; an editor can also change the
+  instructions and add or remove files; only the owner renames, deletes,
+  shares, or transfers it. A **Shared with me** list and sidebar section,
+  leave, and transfer. When access ends (a share removed, a member leaving a
+  group, a group deleted) the person's conversations leave the project and the
+  files they added go to the owner, in the same transaction. The access rules
+  are proven by a matrix of every actor against every action (198 cases, with
+  mutation checks) and by a scan that fails when any code touching project data
+  is not classified.
+- **Interface languages and right-to-left layout** (#397). A translation
+  framework with no new dependency; English, Spanish and Arabic (both **beta**,
+  machine-drafted, native review welcome: `docs/dev/translations.md`). Choose
+  the language in Settings → Customization; administrators set the default and
+  the enabled list (Branding). Right-to-left layout across the whole web app,
+  administration included, with direction-aware icons, keyboard handling and
+  user text isolated. The administration console and server text (emails,
+  exports) stay English. Every catalog loads before the first screen as its own
+  file, so translations do not enlarge the first download.
+- **Installable app** (#400). The instance serves a web app manifest at
+  `/api/manifest.webmanifest` with its name, short name, colours and icon (the
+  bundled icons, or the uploaded logo when it is a square PNG of at least 512
+  px), and Settings → Customization has an **Install** button when the browser
+  offers it. No offline mode and no service worker.
+- **Accessibility conformance report** (#401). `docs/accessibility/acr.md` in the
+  VPAT 2.5 layout for WCAG 2.2 A and AA, generated from `pnpm a11y:audit`, a
+  repeatable review of every route (automated, keyboard, accessibility tree,
+  measured contrast, target size, text spacing, reflow). It is a **self-assessment
+  by the project, not a third-party audit**: it says how it was made and what was
+  not done (no screen reader or voice-control testing by a person; user and
+  model generated content).
+
+### Changed
+
+- The initial JavaScript allowance was raised from 8 kB to 24 kB over v0.13.1
+  for the code that every page needs for these features (the QR code and the
+  enrolment pages are lazy); the reason is recorded in
+  `apps/web/scripts/bundle-budget.json`.
+
+### Fixed
+
+- The web container sent `Cache-Control: no-cache` only for `/index.html`, so `/`
+  and the sign-in page could be served from a heuristic cache and an installed
+  app could show a stale shell; every page and icon now revalidates.
+- Verifying an email address no longer signs in a person who has two-step
+  verification turned on.
+- Better Auth's one-use check for recovery codes could accept a code twice under
+  concurrent requests; they are now claimed atomically (as TOTP codes are).
+- Arabic list and quote styling did not apply on a page whose language differed
+  from the text, because the CSS build rewrote `:dir()`.
+
+### Upgrade notes
+
+- **Order:** back up, run the preflight (`pnpm upgrade:check`), `migrate`
+  (migrations `0050` to `0055`, all additive), replace the replicas one at a time,
+  then `migrate --post`, which schedules `0.14.thread-connector-use`. A single
+  instance with `RUN_MIGRATIONS=true` and the Helm chart do all of it on their
+  own.
+- **Do not turn these on until every replica runs v0.14**, because a v0.13
+  replica ignores them: requiring two-step verification (a v0.13 replica does not
+  ask for it), the classification **Warn** and **Block** modes (the setting is
+  refused until `migrate --post` has scheduled the background migration; a v0.13
+  replica does not enforce it and does not record connector use, which the
+  backfill finds), and creating groups, shares or group grants (answers 409 while
+  an older replica heartbeats). Delete no accounts during the upgrade window: a
+  v0.13 replica deleting an editor's account would also delete the files they
+  added to others' projects.
+- **`AUTH_SECRET` now also encrypts authenticator secrets and recovery codes.**
+  Changing it makes every authenticator unreadable (recover with `admin:reset-mfa
+  --all --yes`), and backups need it to restore them. `APP_URL`'s host is bound
+  to passkeys: set the final address before people register them. TOTP depends on
+  the server clock: keep it synchronised.
+- **Rolling back to v0.13:** safe. It ignores the new tables and columns, and the
+  triggers keep classification labels consistent. Two-step verification is not
+  asked for, classification and shared projects are not enforced or visible
+  (people lose sight of projects shared with them until you upgrade again).
+- Two settings changed meaning of "nothing happens until you use it": the
+  classification mode defaults to **Off**, the MFA requirement to nobody, and the
+  languages to English only.
+
 ## [0.13.1] - 2026-10-14
 
 A fix for the upgrade preflight. No migration, no post-deploy step.
@@ -1842,7 +1976,8 @@ Initial release.
 - This initial release has no earlier database version to roll back to. Back up
   PostgreSQL and attachment storage before future upgrades.
 
-[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.13.1...main
+[Unreleased]: https://github.com/ncecere/open-chat-interface/compare/v0.14.0...main
+[0.14.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.14.0
 [0.13.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.13.1
 [0.13.0]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.13.0
 [0.12.1]: https://github.com/ncecere/open-chat-interface/releases/tag/v0.12.1

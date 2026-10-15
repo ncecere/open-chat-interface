@@ -1,6 +1,6 @@
 # Spec: Open Chat Interface v0.14 (index)
 
-Status: **map and module specs approved 2026-10-14 under the maintainer's delegation ("use your judgement"); building.** This file is
+Status: **v0.14.0 released 2026-10-15: all six modules shipped (specs approved 2026-10-14 under the maintainer's delegation, "use your judgement").** This file is
 the index: the capability map, the scope decisions, the build order, and what every module shares (commands,
 structure, style, testing, boundaries). Each module has its own spec, named by its id (`SPEC-<id>.md`). The v0.13
 specs are in `specs/v0.13/`.

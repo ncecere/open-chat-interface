@@ -280,6 +280,29 @@ Left open, and why:
   Cloud plugin that the guide leads with is not installed there. The pgBackRest
   drill has (#386).
 
+## Shipped — v0.14: governance and access, reach and compliance
+
+Released as v0.14.0 in October 2026 (`SPEC.md`, one spec per module). See
+`CHANGELOG.md` for the details and upgrade notes.
+
+| Item | What shipped |
+| --- | --- |
+| **Two-step verification** (#399) | An authenticator app and passkeys for local accounts, ten recovery codes, an administrator requirement per role with a grace period, and `admin:reset-mfa`. The requirement is enforced by the server on every request. |
+| **Data classification** (#395) | Data classes on projects, connectors and conversations; models approved per class; Warn and Block modes enforced at every point that sends content to a model, each proven to make no provider call when it blocks. |
+| **Groups and project sharing** (#394) | Groups with budgets, model access and delegated managers; projects shared with a person or a group as viewer or editor, with transfer and leave. Proven by a matrix of every actor against every action. |
+| **Interface languages** (#397) | English, Spanish and Arabic (both beta) with right-to-left layout across the web app. The administration console and server text stay English. |
+| **Installable app** (#400) | A web app manifest and an Install button. No offline mode. |
+| **Accessibility conformance report** (#401) | `pnpm a11y:audit` and a WCAG 2.2 A and AA report (VPAT 2.5 layout), a self-assessment. The first run found seven defects and the final one a contrast failure in one accent; all are fixed. |
+
+Left open, and why:
+
+- **Custom roles** (#434) were left out on purpose: the permission checks assume
+  four fixed roles, and a role system needs its own spec.
+- **The model's name in the message box is cut at 200% text** (#435), so the
+  report lists 1.4.4 as partially supported until a design decision is made.
+- **Translations are machine-drafted** and marked beta until a native speaker has
+  reviewed them.
+
 ## Later — v1.0 and beyond: assistants and media
 
 | Item | Why | Notes |
