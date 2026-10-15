@@ -7,28 +7,32 @@ import { TotpEnrol } from '~/components/mfa/totp-enrol';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+import { type Translate, useT } from '~/lib/i18n';
 import { mfaDeadlineText, useMfaStatus } from '~/lib/mfa';
 import { useReadOnlyLock } from '~/lib/read-only';
 
 /** The recovery codes still unused, said plainly, with a warning when they run low. */
-function recoveryCodesText(left: number): { text: string; low: boolean } {
-  if (left === 0) return { text: 'You have no recovery codes left.', low: true };
-  const text = `${left} recovery ${left === 1 ? 'code' : 'codes'} left.`;
-  return { text, low: left <= 2 };
+function recoveryCodesText(left: number, t: Translate): { text: string; low: boolean } {
+  const low = left <= 2;
+  return {
+    text: t(low ? 'auth.twoStep.recoveryLeftLow' : 'auth.twoStep.recoveryLeft', { count: left }),
+    low,
+  };
 }
 
 function Summary({ status }: { status: MfaStatus }) {
+  const t = useT();
   const parts: string[] = [];
-  if (status.methods.includes('totp')) parts.push('Authenticator app');
+  if (status.methods.includes('totp')) parts.push(t('auth.twoStep.authenticatorApp'));
   const passkeys = status.passkeys.length;
-  if (passkeys > 0) parts.push(`${passkeys} ${passkeys === 1 ? 'passkey' : 'passkeys'}`);
+  if (passkeys > 0) parts.push(t('auth.twoStep.passkeyCount', { count: passkeys }));
   const locked = status.lockedUntil && Date.parse(status.lockedUntil) > Date.now();
   return (
     <div className="flex flex-col gap-2 text-sm">
       <p className="text-[var(--text-secondary)]">
-        Status:{' '}
+        {t('auth.twoStep.status')}{' '}
         <Badge variant={status.enrolled ? 'success' : 'neutral'}>
-          {status.enrolled ? 'On' : 'Off'}
+          {status.enrolled ? t('auth.twoStep.statusOn') : t('auth.twoStep.statusOff')}
         </Badge>
         {status.enrolled && parts.length > 0 && (
           <span className="ms-2 text-[var(--text-muted)]">{parts.join(' · ')}</span>
@@ -37,20 +41,13 @@ function Summary({ status }: { status: MfaStatus }) {
       {status.required && (
         <p className="text-[var(--text-secondary)]">
           {status.limited
-            ? 'Your administrator requires two-step verification. Set it up to continue.'
-            : status.enrolled
-              ? 'Required by your administrator.'
-              : `Required by your administrator.${
-                  status.deadline ? ` Set it up by ${mfaDeadlineText(status.deadline)}.` : ''
-                }`}
+            ? t('auth.twoStep.requiredLimited')
+            : status.enrolled || !status.deadline
+              ? t('auth.twoStep.requiredEnrolled')
+              : t('auth.twoStep.requiredByDate', { date: mfaDeadlineText(status.deadline) })}
         </p>
       )}
-      {locked && (
-        <p className="text-[var(--warning)]">
-          Two-step verification is locked after too many wrong codes. Try again later, or ask an
-          administrator to reset it.
-        </p>
-      )}
+      {locked && <p className="text-[var(--warning)]">{t('auth.twoStep.locked')}</p>}
     </div>
   );
 }
@@ -68,6 +65,7 @@ export function TwoStepPanel({
   /** Setting up an authenticator is finished: its recovery codes were saved. */
   onEnrolled?: () => void;
 }) {
+  const t = useT();
   const { data: status, isLoading, isError, refetch, isFetching } = useMfaStatus();
   const lock = useReadOnlyLock();
   const [enrolling, setEnrolling] = useState(false);
@@ -78,7 +76,7 @@ export function TwoStepPanel({
     return (
       <p role="status" className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
         <Spinner />
-        Loading two-step verification…
+        {t('auth.twoStep.loading')}
       </p>
     );
   }
@@ -86,7 +84,7 @@ export function TwoStepPanel({
     return (
       <div>
         <p role="alert" className="text-sm text-[var(--danger)]">
-          Two-step verification could not be loaded.
+          {t('auth.twoStep.loadFailed')}
         </p>
         <Button
           type="button"
@@ -96,7 +94,7 @@ export function TwoStepPanel({
           onClick={() => void refetch()}
         >
           {isFetching && <Spinner />}
-          Try again
+          {t('auth.common.tryAgain')}
         </Button>
       </div>
     );
@@ -107,10 +105,8 @@ export function TwoStepPanel({
   if (!status.eligible) {
     return (
       <div className="text-sm">
-        <p className="font-medium text-[var(--text-primary)]">Managed by your organisation</p>
-        <p className="mt-1 text-[var(--text-muted)]">
-          You sign in through your organisation, which decides how you verify who you are.
-        </p>
+        <p className="font-medium text-[var(--text-primary)]">{t('auth.twoStep.managed')}</p>
+        <p className="mt-1 text-[var(--text-muted)]">{t('auth.twoStep.managedBody')}</p>
       </div>
     );
   }
@@ -125,7 +121,7 @@ export function TwoStepPanel({
         onCancel={() => setEnrolling(false)}
         onFinished={() => {
           setEnrolling(false);
-          setNotice('The authenticator app is on. You will be asked for a code when you sign in.');
+          setNotice(t('auth.twoStep.enrolled'));
           onEnrolled?.();
         }}
       />
@@ -137,10 +133,7 @@ export function TwoStepPanel({
     if (status.enrolled) return null;
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-sm text-[var(--text-muted)]">
-          Use an authenticator app on your phone, or a password manager that makes codes. You will
-          enter a 6-digit code each time you sign in with your password.
-        </p>
+        <p className="text-sm text-[var(--text-muted)]">{t('auth.twoStep.enrolIntro')}</p>
         <div>
           <Button
             type="button"
@@ -149,7 +142,7 @@ export function TwoStepPanel({
             onClick={() => setEnrolling(true)}
           >
             <ShieldCheck />
-            Set up an authenticator app
+            {t('auth.twoStep.setUpApp')}
           </Button>
         </div>
       </div>
@@ -157,7 +150,7 @@ export function TwoStepPanel({
   }
 
   const codes =
-    status.recoveryCodesLeft === null ? null : recoveryCodesText(status.recoveryCodesLeft);
+    status.recoveryCodesLeft === null ? null : recoveryCodesText(status.recoveryCodesLeft, t);
 
   return (
     <div className="flex flex-col gap-6">
@@ -169,11 +162,13 @@ export function TwoStepPanel({
       )}
 
       <div>
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Authenticator app</h3>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+          {t('auth.twoStep.authenticatorApp')}
+        </h3>
         {hasTotp ? (
           <>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              You enter a code from your app each time you sign in with your password.
+              {t('auth.twoStep.authenticatorDescription')}
             </p>
             {codes && (
               <p
@@ -184,7 +179,6 @@ export function TwoStepPanel({
                 }
               >
                 {codes.text}
-                {codes.low && ' Get new ones before you run out.'}
               </p>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -195,7 +189,7 @@ export function TwoStepPanel({
                 locked={lock.title}
                 onClick={() => setDialog('regenerate')}
               >
-                Get new recovery codes
+                {t('auth.twoStep.getNewCodes')}
               </Button>
               <Button
                 type="button"
@@ -204,16 +198,13 @@ export function TwoStepPanel({
                 locked={lock.title}
                 onClick={() => setDialog('disable')}
               >
-                Turn off
+                {t('auth.twoStep.turnOff')}
               </Button>
             </div>
           </>
         ) : (
           <>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Use an authenticator app on your phone, or a password manager that makes codes. You
-              will enter a 6-digit code each time you sign in with your password.
-            </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">{t('auth.twoStep.enrolIntro')}</p>
             <div className="mt-3">
               <Button
                 type="button"
@@ -225,7 +216,7 @@ export function TwoStepPanel({
                   setEnrolling(true);
                 }}
               >
-                Set up an authenticator app
+                {t('auth.twoStep.setUpApp')}
               </Button>
             </div>
           </>

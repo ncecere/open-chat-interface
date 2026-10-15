@@ -16,29 +16,30 @@ import { Input } from '~/components/ui/input';
 import { Spinner } from '~/components/ui/spinner';
 import { problemsAt, problemsElsewhere, useFieldProblems } from '~/hooks/use-clear-on-edit';
 import { api } from '~/lib/api-client';
+import { type Translate, useT } from '~/lib/i18n';
 import { currentCode, MFA_STATUS_KEY, mfaProblems } from '~/lib/mfa';
 import { useReadOnlyLock } from '~/lib/read-only';
 
 export type ReauthKind = 'regenerate' | 'disable';
 
-const COPY = {
-  regenerate: {
-    title: 'Get new recovery codes',
-    description:
-      'The codes you have now will stop working. Enter your password and a current code to continue.',
-    confirm: 'Get new codes',
-    path: '/me/mfa/recovery-codes',
-    failed: 'New recovery codes could not be made. Try again.',
-  },
-  disable: {
-    title: 'Turn off the authenticator app?',
-    description:
-      'You will no longer be asked for a code when you sign in. Enter your password and a current code to confirm.',
-    confirm: 'Turn off authenticator',
-    path: '/me/mfa/totp/disable',
-    failed: 'The authenticator app could not be turned off. Try again.',
-  },
-} as const;
+/** What each action says, in the language showing now. */
+function copyFor(kind: ReauthKind, t: Translate) {
+  return kind === 'regenerate'
+    ? {
+        title: t('auth.reauth.regenerateTitle'),
+        description: t('auth.reauth.regenerateDescription'),
+        confirm: t('auth.reauth.regenerateConfirm'),
+        path: '/me/mfa/recovery-codes',
+        failed: t('auth.reauth.regenerateFailed'),
+      }
+    : {
+        title: t('auth.reauth.disableTitle'),
+        description: t('auth.reauth.disableDescription'),
+        confirm: t('auth.reauth.disableConfirm'),
+        path: '/me/mfa/totp/disable',
+        failed: t('auth.reauth.disableFailed'),
+      };
+}
 
 /**
  * The two actions that need the password and a current code, so a stolen
@@ -62,7 +63,8 @@ export function ReauthDialog({
   /** After turning it off, or after the new codes were saved. */
   onDone: (message: string) => void;
 }) {
-  const copy = COPY[kind];
+  const t = useT();
+  const copy = copyFor(kind, t);
   const queryClient = useQueryClient();
   const lock = useReadOnlyLock();
   const id = useId();
@@ -93,11 +95,11 @@ export function ReauthDialog({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const missing: { fields: string[]; text: string }[] = [];
-    if (!password) missing.push({ fields: ['password'], text: 'Enter your password.' });
+    if (!password) missing.push({ fields: ['password'], text: t('auth.form.passwordRequired') });
     if (!code.trim())
       missing.push({
         fields: ['code'],
-        text: 'Enter a code from your authenticator app, or a recovery code.',
+        text: t('auth.reauth.codeRequired'),
       });
     if (missing.length > 0) {
       setProblems(missing);
@@ -120,7 +122,7 @@ export function ReauthDialog({
       } else {
         reset();
         onOpenChange(false);
-        onDone('The authenticator app is turned off.');
+        onDone(t('auth.reauth.disableDone'));
       }
     } catch (error) {
       setProblems(mfaProblems(error, copy.failed));
@@ -142,27 +144,27 @@ export function ReauthDialog({
         confirmDiscard={!showingCodes && Boolean(password || code)}
       >
         <DialogHeader>
-          <DialogTitle>{showingCodes ? 'Your new recovery codes' : copy.title}</DialogTitle>
+          <DialogTitle>{showingCodes ? t('auth.reauth.newCodesTitle') : copy.title}</DialogTitle>
           <DialogDescription>
-            {showingCodes ? 'The old codes no longer work.' : copy.description}
+            {showingCodes ? t('auth.reauth.oldStopped') : copy.description}
           </DialogDescription>
         </DialogHeader>
 
         {showingCodes ? (
           <RecoveryCodes
-            heading="Save your new recovery codes"
+            heading={t('auth.reauth.newCodesHeading')}
             codes={recoveryCodes}
             onSavedChange={setSaved}
             onDone={() => {
               reset();
               onOpenChange(false);
-              onDone('New recovery codes are ready. The old ones no longer work.');
+              onDone(t('auth.reauth.newCodesDone'));
             }}
           />
         ) : (
           <form ref={form} onSubmit={submit} noValidate className="flex flex-col gap-4">
             <Field
-              label="Current password"
+              label={t('auth.common.currentPassword')}
               htmlFor={passwordId}
               error={problemsAt(problems, 'password')}
             >
@@ -176,10 +178,10 @@ export function ReauthDialog({
               />
             </Field>
             <Field
-              label="Authentication or recovery code"
+              label={t('auth.reauth.codeLabel')}
               htmlFor={codeId}
               error={problemsAt(problems, 'code')}
-              hint="The 6-digit code from your authenticator app, or one of your recovery codes. You can paste it."
+              hint={t('auth.reauth.codeHint')}
             >
               <Input
                 id={codeId}
@@ -200,7 +202,7 @@ export function ReauthDialog({
             )}
             <DialogFooter className="mt-2">
               <Button type="button" variant="ghost" onClick={close}>
-                Cancel
+                {t('auth.common.cancel')}
               </Button>
               <Button
                 type="submit"
