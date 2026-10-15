@@ -1,4 +1,4 @@
 {
   "description": "Directories whose JSX text and aria-label, title, placeholder and alt literals must all be t() calls (scripts/check-i18n.mjs). Paths from the repository root. Add a directory in the same change that extracts its strings; see docs/dev/translations.md.",
-  "directories": []
+  "directories": ["apps/web/src/components/settings"]
 }

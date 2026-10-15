@@ -16,7 +16,7 @@ import {
   useCurrentUser,
 } from '~/hooks/use-current-user';
 import { authClient } from '~/lib/auth-client';
-import { type MessageKey, useT } from '~/lib/i18n';
+import { type MessageKey, translate, useT } from '~/lib/i18n';
 import { isApplePlatform, modifierKey, SHORTCUT_IDS, shortcutKeys } from '~/lib/keyboard-shortcuts';
 import { cn } from '~/lib/utils';
 import { useTheme } from '~/providers/theme-provider';
@@ -251,7 +251,7 @@ export function SettingsLayout() {
   return (
     // Leaving a section with an edit not saved asks first, as administration
     // does (#45, #300): a default model picked and not saved looked applied (#314).
-    <UnsavedChangesGuard>
+    <UnsavedChangesGuard message={() => translate('settings.layout.unsavedChanges')}>
       <div className="min-h-dvh bg-[var(--bg-settings)]">
         {/* Past Back to Chat, the menus and the section tabs to the page (#173). */}
         <SkipLink />

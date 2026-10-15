@@ -276,6 +276,7 @@
   "settings.layout.tab.memory": "الذاكرة",
   "settings.layout.tab.models": "النماذج",
   "settings.layout.tab.sharing": "المشاركة",
+  "settings.layout.unsavedChanges": "لديك تغييرات غير محفوظة في هذه الصفحة. هل تريد المغادرة دون حفظها؟",
   "settings.layout.usageAndHelp": "الاستخدام والمساعدة",
   "settings.loadError.fallback": "تحقق من اتصالك وحاول مرة أخرى.",
   "settings.loadError.retry": "حاول مرة أخرى",

@@ -276,6 +276,7 @@
   "settings.layout.tab.memory": "Memory",
   "settings.layout.tab.models": "Models",
   "settings.layout.tab.sharing": "Sharing",
+  "settings.layout.unsavedChanges": "You have unsaved changes on this page. Leave without saving them?",
   "settings.layout.usageAndHelp": "Usage and help",
   "settings.loadError.fallback": "Check your connection and try again.",
   "settings.loadError.retry": "Try again",
