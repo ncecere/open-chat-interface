@@ -5,6 +5,7 @@ import {
   expect,
   type Page,
 } from '@playwright/test';
+import { reachApp } from './introduction';
 import { whileVerificationLifted } from './verification-lock';
 
 /**
@@ -31,10 +32,7 @@ export async function signInAs(page: Page, email: string, password: string) {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  const skip = page.getByRole('button', { name: 'Skip for now' });
-  await skip.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
-  if (await skip.isVisible().catch(() => false)) await skip.click();
-  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
+  await reachApp(page, page.getByRole('textbox', { name: 'Message input' }));
 }
 
 export async function signInAdmin(browser: Browser) {

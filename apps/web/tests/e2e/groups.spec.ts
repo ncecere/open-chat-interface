@@ -1,6 +1,7 @@
 import { type APIRequestContext, type Browser, expect, type Page, test } from '@playwright/test';
 import { describeViolations, scan } from './accessibility.helpers';
 import { ensureCatalogModels } from './fixtures/catalog';
+import { reachApp } from './fixtures/introduction';
 import { whileVerificationLifted } from './fixtures/verification-lock';
 
 /**
@@ -19,10 +20,7 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  const skip = page.getByRole('button', { name: 'Skip for now' });
-  await skip.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
-  if (await skip.isVisible().catch(() => false)) await skip.click();
-  await expect(page.getByRole('textbox', { name: 'Message input' })).toBeVisible();
+  await reachApp(page, page.getByRole('textbox', { name: 'Message input' }));
 }
 
 function adminCredentials() {

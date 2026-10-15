@@ -68,14 +68,17 @@ test.afterAll(async ({ browser }) => {
   // Removed again: a thread goes to the trash first, then is deleted for good.
   const context = await browser.newContext({ storageState: storage });
   if (threadId) {
-    expect((await context.request.delete(`/api/threads/${threadId}`)).ok()).toBe(true);
-    expect((await context.request.delete(`/api/threads/${threadId}/permanent`)).ok()).toBe(true);
+    const trashed = await context.request.delete(`/api/threads/${threadId}`);
+    expect(trashed.ok(), `trash thread: ${trashed.status()} ${await trashed.text()}`).toBe(true);
+    const removed = await context.request.delete(`/api/threads/${threadId}/permanent`);
+    expect(removed.ok(), `delete thread: ${removed.status()} ${await removed.text()}`).toBe(true);
   }
   const list = await context.request.get('/api/projects');
-  expect(list.ok()).toBe(true);
+  expect(list.ok(), `list projects: ${list.status()} ${await list.text()}`).toBe(true);
   const { projects } = (await list.json()) as { projects: { id: string; name: string }[] };
   for (const project of projects.filter((item) => item.name.startsWith(PROJECT_NAME))) {
-    expect((await context.request.delete(`/api/projects/${project.id}`)).ok()).toBe(true);
+    const deleted = await context.request.delete(`/api/projects/${project.id}`);
+    expect(deleted.ok(), `delete project: ${deleted.status()} ${await deleted.text()}`).toBe(true);
   }
   await context.close();
 });

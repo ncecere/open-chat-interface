@@ -165,7 +165,7 @@ test('an owner shares a project as a viewer; the person uses it, is made an edit
     await ownerPage.getByRole('button', { name: `Stop sharing with ${viewer.name}` }).click();
     const outcome = ownerPage.getByRole('dialog').getByRole('status');
     await expect(outcome).toContainText(`Stopped sharing with ${viewer.name}.`);
-    await expect(outcome).toContainText('Their 1 conversation was kept and left the project.');
+    await expect(outcome).toContainText('Their conversation was kept and left the project.');
     await expect(outcome).toContainText('1 file they added now belongs to you.');
     await ownerPage.keyboard.press('Escape');
     await ownerPage.reload();

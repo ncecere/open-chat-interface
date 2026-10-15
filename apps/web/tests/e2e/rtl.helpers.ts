@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { type Browser, expect, type Page } from '@playwright/test';
+import { reachApp } from './fixtures/introduction';
 
 /**
  * Shared by rtl.spec.ts (the forced right-to-left pseudo-locale `ar-XB`) and
@@ -87,10 +88,7 @@ export async function signInAs(page: Page, email: string, password: string) {
   await page.locator('input[type="email"]').fill(email);
   await page.locator('input[type="password"]').fill(password);
   await page.locator('form button[type="submit"]').click();
-  const skip = page.getByRole('button', { name: 'Skip for now' });
-  await skip.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
-  if (await skip.isVisible().catch(() => false)) await skip.click();
-  await expect(page.locator('textarea')).toBeVisible();
+  await reachApp(page, page.locator('textarea'));
 }
 
 export function adminCredentials() {
