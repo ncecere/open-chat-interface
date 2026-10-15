@@ -65,7 +65,7 @@ OCI's:
 
 | Call | Notes |
 |---|---|
-| `authClient.passkey.addPasskey({ name })` (`GET /api/auth/passkey/generate-register-options`, `POST /api/auth/passkey/verify-registration`) | Needs a **fresh** session (signed in within the last 24 hours): otherwise `400 SESSION_NOT_FRESH`; show "enter your password and sign in again". Refused with `409 CONFLICT`-style `{ code: 'MFA_NOT_AVAILABLE' }` for an account without a password. Resident key and user verification are required. |
+| `authClient.passkey.addPasskey({ name })` (`GET /api/auth/passkey/generate-register-options`, `POST /api/auth/passkey/verify-registration`) | Needs a **fresh** session (signed in within the last 24 hours): otherwise `403 SESSION_NOT_FRESH`; show "enter your password and sign in again". Refused with `409 CONFLICT`-style `{ code: 'MFA_NOT_AVAILABLE' }` for an account without a password. Resident key and user verification are required. |
 | `authClient.passkey.updatePasskey({ id, name })` (`POST /api/auth/passkey/update-passkey`) | Rename; owner only. |
 | `authClient.passkey.deletePasskey({ id })` (`POST /api/auth/passkey/delete-passkey`) | Remove; owner only. |
 | list | `GET /api/me/mfa` (`passkeys`), never the plugin's list. |
@@ -95,4 +95,33 @@ or `passkey`, or `totp` / `recovery_code` with the second step still on. A limit
 
 ## Spike results
 
-(Recorded by `apps/api/src/__tests__/live/mfa-spike.live.test.ts`; filled in below.)
+The spec listed what its author could not verify. Each was settled by running it
+(`mfa-library-behaviour.unit.test.ts`, `mfa-redis-primitives.integration.test.ts`; the library tests use a standalone
+Better Auth instance on the in-memory adapter with the plugin options and hook shapes OCI uses, so a Better Auth
+upgrade that changes any of them fails there first):
+
+1. **`auth.api.*` runs Better Auth's hooks and returns the swapped session's cookie: yes.** A server-side
+   `auth.api.verifyTOTP({ headers, body, returnHeaders: true })` ran the `before` and `after` hooks with
+   `ctx.path === '/two-factor/verify-totp'`, and `returnHeaders` carries the `Set-Cookie` of the new session (a
+   different token from the one sent; the old session is gone). Same for `disableTwoFactor`. OCI's routes forward the
+   cookies with `headers.getSetCookie()`.
+2. **`context.path` for a session created inside such a call: set.** `databaseHooks.session.create.before(session,
+   context)` receives the endpoint's path: `/sign-up/email`, `/sign-in/email` (the password step of an enrolled
+   person's sign-in: the session is deleted again and no session is left), `/two-factor/verify-totp` (the sign-in's
+   second step *and* the swap when enrolment is confirmed), `/two-factor/disable`, `/passkey/verify-authentication`.
+   So `auth_method` can be set from the path alone.
+3. **`userVerified` in `@simplewebauthn/server` 13: present.** The plugin's `authentication.afterVerification` receives
+   `verification.authenticationInfo.userVerified` (a boolean from the UV flag the authenticator signed). A PIN-less key
+   gives `false`; throwing an `APIError` there answers 401 before any session exists. Registration options with
+   `userVerification: 'required'` do not stop a registration response whose UV flag is clear (the plugin verifies
+   with `requireUserVerification: false`), so the check is at sign-in, where it counts.
+4. **Redis primitives for the replay guard: `SET key 1 EX 120 NX`** answers `OK` once and `null` after, exactly one
+   of 25 concurrent attempts wins, and the key expires on its own (real server).
+5. **Transitive licences:** `pnpm licenses:check` ("License policy passed") and `pnpm audit --prod` ("No known
+   vulnerabilities found") pass with `@better-auth/passkey@1.6.26` in `apps/api` (lockfile resolves
+   `@simplewebauthn/server` 13.3.3 and `@simplewebauthn/browser` 13.3.0). `THIRD_PARTY_NOTICES.md` records only
+   material that is not under a permissive licence, so it is unchanged.
+
+Other facts the tests pinned: the signed-in `verify-totp` accepts the same code again and again (the plugin keeps no
+memory of used codes: OCI's replay guard is its own); registration needs a session created in the last 24 hours:
+`403 SESSION_NOT_FRESH` otherwise.
