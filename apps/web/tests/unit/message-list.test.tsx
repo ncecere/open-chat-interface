@@ -171,7 +171,8 @@ describe('memoized transcript correctness', () => {
     ).toBe(true);
     const reasoning: UIMessage = { ...empty, parts: [{ type: 'reasoning', text: 'Let me think' }] };
     await render({ messages: [reasoning], streaming: true, onRetry });
-    expect(container.querySelector('[role="status"]')).toBeNull();
+    // The waiting dots are gone (the reply status, always present, is not them).
+    expect(container.querySelector('[role="status"][aria-label]')).toBeNull();
     expect(container.textContent).toContain('Let me think');
     expect(container.querySelector('[aria-label="Retry"]')).toBeNull();
     const answered: UIMessage = {

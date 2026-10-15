@@ -7,6 +7,7 @@ import { CompactionDivider } from '~/components/chat/compaction-divider';
 import { reasoningOf, textOf } from '~/components/chat/message-content';
 import type { EditMessage } from '~/components/chat/message-editor';
 import { MessageRow, messageExcerptOf } from '~/components/chat/message-row';
+import { replyOutcomeOf, useReplyAnnouncement } from '~/components/chat/reply-announcement';
 import type { ReplySwitch } from '~/components/chat/reply-switcher';
 import { replySearchOf, SearchLoading } from '~/components/chat/search-grounding';
 import { type AnswerApproval, toolLimitOf, toolStepsOf } from '~/components/chat/tool-steps';
@@ -20,6 +21,11 @@ interface MessageListProps {
   /** The saved conversation, for exporting replies as files. */
   threadId?: string;
   streaming: boolean;
+  /**
+   * The conversation shows an error of its own as an alert: a reply that ended
+   * with it is not announced as complete (the alert says so).
+   */
+  replyFailed?: boolean;
   onRetry: () => void;
   searching?: boolean;
   onEdit?: EditMessage;
@@ -75,6 +81,7 @@ export const MessageList = memo(function MessageList({
   messages,
   threadId,
   streaming,
+  replyFailed = false,
   onRetry,
   onEdit,
   onFork,
@@ -92,6 +99,8 @@ export const MessageList = memo(function MessageList({
   const last = messages.at(-1);
   const lastIsAssistant = last?.role === 'assistant';
   const switchable = Boolean(replySwitch) && lastIsAssistant;
+  // Told once when a reply starts and once when it ends, never its words (4.1.3).
+  const replyStatus = useReplyAnnouncement(streaming, replyOutcomeOf(last, replyFailed));
   const lastText = lastIsAssistant ? textOf(last) : '';
   const lastReasoning = lastIsAssistant ? reasoningOf(last) : '';
   // A tool step is visible progress too, for example "Searching the web…".
@@ -258,6 +267,19 @@ export const MessageList = memo(function MessageList({
           )}
         </div>
       )}
+
+      {/* Always there, so the text that arrives in it is announced. Apart from the
+          history status above, so neither repeats the other. A failure is the
+          page's alert, not this. */}
+      <span
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-reply-status=""
+        className="sr-only"
+      >
+        {replyStatus}
+      </span>
     </div>
   );
 });
