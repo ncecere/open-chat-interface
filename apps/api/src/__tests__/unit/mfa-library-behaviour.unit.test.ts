@@ -5,7 +5,7 @@ import { createAuthMiddleware } from 'better-auth/api';
 import { twoFactor } from 'better-auth/plugins';
 import { describe, expect, it } from 'vitest';
 import { secretFromUri, totp } from '../../../test/totp.js';
-import { SoftwareAuthenticator } from '../../../test/webauthn.js';
+import { type AuthenticationOptionsJSON, SoftwareAuthenticator } from '../../../test/webauthn.js';
 
 /**
  * What OCI's MFA design (SPEC-mfa.md) rests on in Better Auth 1.6.26 and
@@ -275,7 +275,7 @@ describe('@better-auth/passkey: user verification', () => {
         headers: { origin },
       }),
     );
-    const options = await optionsResponse.json();
+    const options = (await optionsResponse.json()) as AuthenticationOptionsJSON;
     return instance.auth.handler(
       new Request(`${origin}/api/auth/passkey/verify-authentication`, {
         method: 'POST',

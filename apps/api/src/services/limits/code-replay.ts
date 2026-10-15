@@ -3,7 +3,7 @@ import { logger } from '../../lib/logger.js';
 import { noteRedisFailure, sharedRedis } from '../chat-streams.js';
 
 /**
- * The replay guard for authenticator codes (SPEC-mfa.md, "Replay").
+ * The replay guard for second-step codes (SPEC-mfa.md, "Replay").
  *
  * Better Auth accepts a TOTP code for about 90 seconds (the current 30-second
  * window and one either side) and keeps no memory of the codes it accepted, so
@@ -14,7 +14,13 @@ import { noteRedisFailure, sharedRedis } from '../chat-streams.js';
  * It is claimed before the plugin checks it, with one atomic `SET NX EX` in the
  * Redis every replica shares (two replicas racing on the same code give one
  * winner: mfa-redis-primitives.integration.test.ts), and given back when the
- * plugin refuses the code, so a typing mistake is not a replay. Only a hash of
+ * plugin refuses the code, so a typing mistake is not a replay. Recovery codes
+ * go through it too (namespaced `recovery:`): the plugin removes a used code
+ * with a guarded update that its Drizzle adapter writes as `WHERE id IN
+ * (SELECT ... WHERE <guard>)`, which under READ COMMITTED lets two parallel
+ * requests both pass the guard (measured: about one pair in four spent the
+ * same code twice, mfa-signin.live.test.ts). The claim makes the second one
+ * lose. Only a hash of
  * the person and the code is stored. With Redis away it counts in this process,
  * as the rate limits do: weaker with several replicas, never none.
  */
@@ -44,7 +50,7 @@ function localClaim(key: string): boolean {
 }
 
 /** True when this is the first use of the code for the person in the window; false for a replay. */
-export async function claimTotpCode(userId: string, code: string): Promise<boolean> {
+export async function claimCode(userId: string, code: string): Promise<boolean> {
   const key = keyFor(userId, code);
   const redis = await sharedRedis();
   if (redis) {
@@ -59,7 +65,7 @@ export async function claimTotpCode(userId: string, code: string): Promise<boole
 }
 
 /** Forgets a claim whose code the plugin refused. Never throws. */
-export async function releaseTotpCode(userId: string, code: string): Promise<void> {
+export async function releaseCode(userId: string, code: string): Promise<void> {
   const key = keyFor(userId, code);
   localClaims.delete(key);
   const redis = await sharedRedis();

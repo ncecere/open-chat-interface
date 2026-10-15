@@ -4,6 +4,7 @@ import { auth } from '../auth/index.js';
 import { loadEnv } from '../config/env.js';
 import { authRateLimitMiddleware } from '../middleware/auth-rate-limit.js';
 import type { AppBindings } from '../middleware/context.js';
+import { mfaGate } from '../middleware/mfa-gate.js';
 import { policyAcceptanceGuard } from '../middleware/policy-acceptance.js';
 import { readOnlyGuard } from '../middleware/read-only.js';
 import { adminRoutes } from './admin/index.js';
@@ -16,12 +17,28 @@ import { connectorRoutes } from './connectors.js';
 import { healthRoutes } from './health.js';
 import { maintenanceRoutes } from './maintenance.js';
 import { meRoutes } from './me.js';
+import { meMfaRoutes } from './me-mfa.js';
 import { memoryRoutes } from './memory.js';
 import { modelCatalogRoutes } from './models.js';
 import { portabilityRoutes } from './portability.js';
 import { projectRoutes } from './projects.js';
 import { shareLinkRoutes } from './share-links.js';
 import { threadRoutes } from './threads.js';
+
+/**
+ * Better Auth endpoints answered 404 over HTTP (the paths below /api/auth):
+ * the two-step verification plugin's enable, disable, get-totp-uri,
+ * generate-backup-codes and its email-code endpoints (view-backup-codes has no HTTP route), and the passkey list.
+ */
+export const MANAGED_IN_OCI_AUTH_PATHS = [
+  '/two-factor/enable',
+  '/two-factor/disable',
+  '/two-factor/get-totp-uri',
+  '/two-factor/generate-backup-codes',
+  '/two-factor/send-otp',
+  '/two-factor/verify-otp',
+  '/passkey/list-user-passkeys',
+] as const;
 
 export function createApiRoutes() {
   const env = loadEnv();
@@ -35,6 +52,9 @@ export function createApiRoutes() {
   // The acceptable use policy (#367): a person who has not accepted the
   // published version cannot write, except what its allowlist names.
   api.use('*', policyAcceptanceGuard);
+  // Two-step verification required for the person's role (#399): a session that
+  // has not passed one is limited to the way out, on every method.
+  api.use('*', mfaGate);
 
   api.route('/health', healthRoutes);
   // Unauthenticated: whether writes are refused now, for the banner.
@@ -62,6 +82,11 @@ export function createApiRoutes() {
     error: { code: 'NOT_FOUND', message: 'Manage accounts under People → Users.' },
   };
   api.all('/auth/admin/*', (c) => c.json(managedInPeople, 404));
+  const managedInSettings = {
+    code: 'NOT_FOUND',
+    message: 'Manage two-step verification under Settings → Account.',
+    error: { code: 'NOT_FOUND', message: 'Manage two-step verification under Settings → Account.' },
+  };
 
   /**
    * Answers 404 for every SAML endpoint (/api/auth/sso/saml2/*). SAML sign-in
@@ -76,6 +101,17 @@ export function createApiRoutes() {
     error: { code: 'NOT_FOUND', message: SAML_NOT_SUPPORTED_MESSAGE },
   };
   api.all('/auth/sso/saml2/*', (c) => c.json(samlRemoved, 404));
+
+  /**
+   * Answers 404 for the plugin endpoints that must never be reachable from a
+   * browser (v0.14, #399): enabling, disabling, the key and the recovery codes
+   * of two-step verification, and the passkey list (which carries each public
+   * key and counter). OCI's own /api/me/mfa routes call them server-side, with
+   * the password and code checks, limits, audit and emails around them.
+   */
+  for (const path of MANAGED_IN_OCI_AUTH_PATHS) {
+    api.on(['GET', 'POST'], `/auth${path}`, (c) => c.json(managedInSettings, 404));
+  }
 
   /**
    * Better Auth owns every other /api/auth/* path; sign-in, sign-up, password
@@ -112,6 +148,7 @@ export function createApiRoutes() {
     return response;
   });
 
+  api.route('/me/mfa', meMfaRoutes);
   api.route('/me', meRoutes);
   api.route('/me', portabilityRoutes);
   api.route('/memory', memoryRoutes);

@@ -278,6 +278,17 @@ export const webhookDeliveries = register(
     ['outcome'],
   ),
 );
+/**
+ * Second-step verifications (v0.14, #399). `method` is totp, recovery_code or
+ * passkey; `outcome` is success or failure. Never a person or a code.
+ */
+export const mfaVerifications = register(
+  new Counter(
+    'oci_mfa_verifications_total',
+    'Second-step verifications by method (totp, recovery_code, passkey) and outcome (success, failure).',
+    ['method', 'outcome'],
+  ),
+);
 export const backupRuns = register(
   new Counter('oci_backup_runs_total', 'Automated backup runs by outcome.', ['outcome']),
 );

@@ -3,6 +3,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { clientIp } from '../lib/client-ip.js';
 import { hashToken } from '../lib/crypto.js';
+import { rateLimited } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { recordAudit } from '../services/audit.js';
 import {
@@ -228,3 +229,43 @@ export const authRateLimitMiddleware: MiddlewareHandler = async (c, next) => {
     { 'retry-after': String(result.retryAfterSeconds) },
   );
 };
+
+/**
+ * The second-step limit for OCI's own MFA routes (`/api/me/mfa/*`), which are
+ * not under /api/auth: wrong passwords and codes count per session and per
+ * address, as at sign-in, and are refunded when the request works. Returns the
+ * refund to call on success; throws a 429 (with Retry-After) when over the
+ * limit, auditing the first refusal in a window once.
+ */
+export async function enforceSecondFactorLimit(c: Context): Promise<() => Promise<void>> {
+  const result = await authRateLimit({
+    kind: 'second-factor',
+    ipAddress: limitAddress(c),
+    challenge: sessionKey(c),
+  });
+  if (!result.allowed) {
+    if (result.firstRefusal) {
+      logger.warn({ path: c.req.path, scope: result.scope }, 'Authentication rate limit reached');
+      await recordAudit({
+        actorUserId: c.get('user')?.id ?? null,
+        actorEmail: c.get('user')?.email ?? null,
+        action: 'auth.rate_limited',
+        targetType: 'session',
+        targetId: null,
+        ipAddress: clientIp(c),
+        metadata: {
+          path: c.req.path,
+          scope: result.scope,
+          limit: result.limit,
+          retryAfterSeconds: result.retryAfterSeconds,
+        },
+      });
+    }
+    throw rateLimited(AUTH_RATE_LIMIT_MESSAGE, result.retryAfterSeconds);
+  }
+  return async () => {
+    await Promise.all(result.refundOnSuccess.map((key) => refundRateLimit(key))).catch((error) =>
+      logger.warn({ error }, 'Could not refund an authentication attempt'),
+    );
+  };
+}

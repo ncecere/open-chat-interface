@@ -29,7 +29,9 @@ vi.mock('../../services/settings.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/settings.js')>()),
   getSetting: async (key: string) => {
     if (key === 'maintenance') return {};
-    throw new Error(`Nothing but the read-only check may run here (read ${key})`);
+    // The two-step verification gate reads the requirement for a signed-in person: none here.
+    if (key === 'auth') return {};
+    throw new Error(`Nothing but the read-only check and the MFA gate may run here (read ${key})`);
   },
 }));
 vi.mock('../../lib/logger.js', () => ({
@@ -95,6 +97,10 @@ describe('acceptable use policy: every write route is refused unless allowlisted
         "DELETE /api/me/sessions/:id",
         "DELETE /api/share-links/links/:linkId",
         "POST /api/me/delete-account",
+        "POST /api/me/mfa/recovery-codes",
+        "POST /api/me/mfa/totp",
+        "POST /api/me/mfa/totp/confirm",
+        "POST /api/me/mfa/totp/disable",
         "POST /api/me/onboarding/accept-policy",
         "POST /api/me/sessions/revoke-others",
         "POST /api/me/share-links/revoke-all",

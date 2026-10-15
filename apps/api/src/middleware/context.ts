@@ -23,10 +23,24 @@ export interface AuthenticatedUser {
   organizationId: string;
 }
 
+/**
+ * What the second-step rules read about the session and the person, from the
+ * session lookup (the session cache is off, so these are current on every
+ * request): how the session was made, whether the person still has the second
+ * step on, and when their account was created (a requirement's deadline).
+ */
+export interface SessionMfaFacts {
+  authMethod: string | null;
+  twoFactorEnabled: boolean;
+  userCreatedAt: Date;
+}
+
 export interface AppBindings {
   Variables: {
     user: AuthenticatedUser | null;
     sessionId: string | null;
+    /** Absent in tests that set only `user`; the gate then reads a password session. */
+    mfa?: SessionMfaFacts | null;
   };
 }
 
@@ -73,6 +87,7 @@ export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) =
       role?: string;
       organizationId?: string;
       banned?: boolean;
+      twoFactorEnabled?: boolean | null;
     };
 
     c.set('user', {
@@ -85,6 +100,11 @@ export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) =
       organizationId: raw.organizationId ?? '',
     });
     c.set('sessionId', session.session.id);
+    c.set('mfa', {
+      authMethod: (session.session as { authMethod?: string | null }).authMethod ?? null,
+      twoFactorEnabled: raw.twoFactorEnabled === true,
+      userCreatedAt: new Date(raw.createdAt),
+    });
     // Settings → Devices shows when each session was last active. Not awaited:
     // a failed write must never fail or slow the request it rides on.
     void noteSessionActivity(session.session.id, new Date(session.session.updatedAt)).catch(
@@ -93,6 +113,7 @@ export const sessionMiddleware = createMiddleware<AppBindings>(async (c, next) =
   } else {
     c.set('user', null);
     c.set('sessionId', null);
+    c.set('mfa', null);
   }
 
   await next();

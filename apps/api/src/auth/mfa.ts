@@ -9,6 +9,15 @@ import type { MfaLimitReason, MfaRequirement, SessionAuthMethod, UserRole } from
  */
 
 /**
+ * The second step's account lockout, as the plugin applies it at sign-in and
+ * as OCI applies it to disabling and regenerating (the plugin counts nothing
+ * for a signed-in person): this many consecutive failures lock it for this many
+ * seconds, across challenges and factors.
+ */
+export const MFA_LOCKOUT_ATTEMPTS = 10;
+export const MFA_LOCKOUT_SECONDS = 15 * 60;
+
+/**
  * How a session was created, from the Better Auth endpoint that created it
  * (`context.path` in `session.create.before`; settled by
  * mfa-library-behaviour.unit.test.ts: it is set for sessions made inside

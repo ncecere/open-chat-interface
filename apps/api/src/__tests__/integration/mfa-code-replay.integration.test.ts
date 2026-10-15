@@ -36,7 +36,7 @@ vi.mock('../../lib/logger.js', () => ({
 }));
 
 state.real = redis;
-const { claimTotpCode, releaseTotpCode, resetLocalCodeClaims, CODE_REPLAY_SECONDS } = await import(
+const { claimCode, releaseCode, resetLocalCodeClaims, CODE_REPLAY_SECONDS } = await import(
   '../../services/limits/code-replay.js'
 );
 
@@ -56,16 +56,16 @@ afterAll(async () => {
 describe('integration: TOTP replay guard', () => {
   it('lets a code through once per person, for two minutes', async () => {
     expect(CODE_REPLAY_SECONDS).toBe(120);
-    expect(await claimTotpCode(user, '123456')).toBe(true);
-    expect(await claimTotpCode(user, '123456')).toBe(false);
+    expect(await claimCode(user, '123456')).toBe(true);
+    expect(await claimCode(user, '123456')).toBe(false);
     // Another code, and the same digits for another person, are separate.
-    expect(await claimTotpCode(user, '654321')).toBe(true);
-    expect(await claimTotpCode(other, '123456')).toBe(true);
+    expect(await claimCode(user, '654321')).toBe(true);
+    expect(await claimCode(other, '123456')).toBe(true);
   });
 
   it('keeps no code in Redis, only a hash of the person and the code, with an expiry', async () => {
     const code = '246810';
-    await claimTotpCode(user, code);
+    await claimCode(user, code);
     const keys = await redis.keys('oci:mfa-code:*');
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) {
@@ -76,31 +76,29 @@ describe('integration: TOTP replay guard', () => {
   });
 
   it('lets exactly one of many concurrent uses of a code win (two replicas, one code)', async () => {
-    const results = await Promise.all(
-      Array.from({ length: 20 }, () => claimTotpCode(user, '111222')),
-    );
+    const results = await Promise.all(Array.from({ length: 20 }, () => claimCode(user, '111222')));
     expect(results.filter(Boolean)).toHaveLength(1);
   });
 
   it('gives a code back when the plugin refused it, so a typing mistake is not a replay', async () => {
-    expect(await claimTotpCode(user, '333444')).toBe(true);
-    await releaseTotpCode(user, '333444');
-    expect(await claimTotpCode(user, '333444')).toBe(true);
+    expect(await claimCode(user, '333444')).toBe(true);
+    await releaseCode(user, '333444');
+    expect(await claimCode(user, '333444')).toBe(true);
   });
 
   it('counts in this process when Redis is not configured', async () => {
     state.client = 'none';
-    expect(await claimTotpCode(user, '555666')).toBe(true);
-    expect(await claimTotpCode(user, '555666')).toBe(false);
-    await releaseTotpCode(user, '555666');
-    expect(await claimTotpCode(user, '555666')).toBe(true);
+    expect(await claimCode(user, '555666')).toBe(true);
+    expect(await claimCode(user, '555666')).toBe(false);
+    await releaseCode(user, '555666');
+    expect(await claimCode(user, '555666')).toBe(true);
   });
 
   it('falls back to this process when Redis fails mid-request, rather than letting a replay through', async () => {
     state.client = 'broken';
-    expect(await claimTotpCode(user, '777888')).toBe(true);
-    expect(await claimTotpCode(user, '777888')).toBe(false);
-    await releaseTotpCode(user, '777888');
-    expect(await claimTotpCode(user, '777888')).toBe(true);
+    expect(await claimCode(user, '777888')).toBe(true);
+    expect(await claimCode(user, '777888')).toBe(false);
+    await releaseCode(user, '777888');
+    expect(await claimCode(user, '777888')).toBe(true);
   });
 });
