@@ -1,6 +1,7 @@
-import { artifactKindLabel } from '@oci/shared';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { artifactKindName } from '~/components/artifacts/artifact-labels';
 import { ArtifactSource } from '~/components/artifacts/artifact-source';
+import { useT } from '~/lib/i18n';
 import { type Chrome, PanelHeader } from './panel-header';
 import type { PanelView } from './panel-helpers';
 
@@ -16,8 +17,9 @@ export function DraftBody({
   view: Extract<PanelView, { type: 'draft' }>;
   chrome: Chrome;
 }) {
+  const t = useT();
   const { draft, kind, writing } = view;
-  const name = view.title ?? 'New artifact';
+  const name = view.title ?? t('artifacts.draft.newArtifact');
   const scroller = useRef<HTMLElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -37,22 +39,25 @@ export function DraftBody({
   }, [toEnd]);
 
   const state = writing
-    ? 'being written…'
+    ? t('artifacts.draft.stateWriting')
     : draft.state === 'saved'
-      ? 'saved'
+      ? t('artifacts.draft.stateSaved')
       : draft.state === 'failed'
-        ? 'not saved'
-        : 'stopped';
+        ? t('artifacts.draft.stateNotSaved')
+        : t('artifacts.draft.stateStopped');
   return (
     <>
       <PanelHeader
         chrome={chrome}
         title={name}
-        description={`${kind ? artifactKindLabel(kind, draft.language) : 'Artifact'} · ${state}`}
+        description={t('artifacts.draft.description', {
+          kind: kind ? artifactKindName(kind, draft.language) : t('artifacts.kind.artifact'),
+          state,
+        })}
       />
       <section
         ref={scroller}
-        aria-label={`Source of ${name}`}
+        aria-label={t('artifacts.draft.sourceOf', { name })}
         aria-busy={writing}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs keyboard access.
         tabIndex={0}
@@ -72,11 +77,11 @@ export function DraftBody({
               writing={writing}
             />
           ) : (
-            <p className="p-4 text-sm text-[var(--text-muted)]">Preparing…</p>
+            <p className="p-4 text-sm text-[var(--text-muted)]">{t('artifacts.draft.preparing')}</p>
           )}
           {!writing && draft.state !== 'saved' && (
             <p role="alert" className="px-4 pb-4 text-sm text-[var(--danger-on-tint)]">
-              This artifact was not saved.
+              {t('artifacts.draft.notSaved')}
             </p>
           )}
         </div>

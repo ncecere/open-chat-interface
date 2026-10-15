@@ -193,17 +193,27 @@ export function workActivity(
 }
 
 /**
- * The message and the title when the header names an artifact ("Writing Sales
- * chart…"): the title is the person's or the model's text, so the header draws
- * it in a `<bdi>` instead of using `workActivity().label`.
+ * The message and the name when the header names something ("Writing Sales
+ * chart…", "Using Service Desk lookup…"): the title or tool name is the person's,
+ * the model's or a connector's text, so the header draws it in a `<bdi>` instead
+ * of using `workActivity().label`.
  */
 export function titledActivity(
   current: Parameters<typeof workActivity>[0],
-): { key: MessageKey; title: string } | null {
-  if (current.type !== 'tool' || !current.title) return null;
+): { key: MessageKey; name: 'title' | 'label'; value: string } | null {
+  if (current.type !== 'tool') return null;
   const { step, title } = current;
   if (step.state !== 'running' && step.state !== 'approved') return null;
-  if (step.toolId === 'create_artifact') return { key: 'chat.work.writingTitled', title };
-  if (step.toolId === 'update_artifact') return { key: 'chat.work.revisingTitled', title };
+  if (title && step.toolId === 'create_artifact')
+    return { key: 'chat.work.writingTitled', name: 'title', value: title };
+  if (title && step.toolId === 'update_artifact')
+    return { key: 'chat.work.revisingTitled', name: 'title', value: title };
+  // Any other tool: its name, which a connector chose, in the sentence.
+  if (step.toolId !== 'web_search' && !isOwnTool(step.toolId))
+    return { key: 'chat.work.usingTool', name: 'label', value: step.label };
   return null;
 }
+
+/** The tools this release writes headers for itself ("Searching the web…", "Saving a memory…"). */
+const isOwnTool = (toolId: string) =>
+  ['web_search', 'create_artifact', 'update_artifact', 'remember', 'forget'].includes(toolId);

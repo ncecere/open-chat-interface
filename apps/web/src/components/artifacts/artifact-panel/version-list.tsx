@@ -1,4 +1,5 @@
 import type { ArtifactDetail } from '@oci/shared';
+import { useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 import { formatDate } from './panel-helpers';
 
@@ -11,14 +12,18 @@ export function VersionList({
   selected: number;
   onSelect: (version: number) => void;
 }) {
+  const t = useT();
   if (!detail)
     return (
       <p role="status" className="p-4 text-sm text-[var(--text-muted)]">
-        Loading…
+        {t('artifacts.panel.loading')}
       </p>
     );
   return (
-    <ol className="divide-y divide-[var(--border-subtle)]" aria-label="Versions, newest first">
+    <ol
+      className="divide-y divide-[var(--border-subtle)]"
+      aria-label={t('artifacts.versions.label')}
+    >
       {detail.versions.map((entry) => (
         <li key={entry.version}>
           <button
@@ -31,12 +36,20 @@ export function VersionList({
             )}
           >
             <span className="font-medium text-[var(--text-primary)]">
-              Version {entry.version}
-              {entry.version === detail.artifact.currentVersion ? ' (current)' : ''}
+              {t(
+                entry.version === detail.artifact.currentVersion
+                  ? 'artifacts.versions.current'
+                  : 'artifacts.versions.version',
+                { version: entry.version },
+              )}
             </span>
             <span className="text-xs text-[var(--text-muted)]">
-              {entry.source === 'person' ? 'Edited by you' : 'By the assistant'} ·{' '}
-              {formatDate(entry.createdAt)}
+              {t(
+                entry.source === 'person'
+                  ? 'artifacts.versions.byPerson'
+                  : 'artifacts.versions.byAssistant',
+                { date: formatDate(entry.createdAt) },
+              )}
             </span>
           </button>
         </li>

@@ -15,6 +15,7 @@ import {
 } from '~/components/chat/message-reasoning';
 import { SearchStep, SourcesStep } from '~/components/chat/search-grounding';
 import { isArtifactStep, type ToolPart, ToolStepRow } from '~/components/chat/tool-steps';
+import { toolStepLabel } from '~/components/chat/tool-summary';
 import { translatedNodes } from '~/components/chat/translated-nodes';
 import {
   titledActivity,
@@ -99,7 +100,7 @@ type Entry = WorkEntry<ToolPart>;
 
 const workStepOf = (step: ToolStepSummary, part: ToolPart): WorkStep => ({
   toolId: step.toolId,
-  label: step.label,
+  label: toolStepLabel(step),
   state: step.state,
   target:
     typeof (part.input as { artifactId?: unknown } | undefined)?.artifactId === 'string'
@@ -188,7 +189,7 @@ export function WorkBlock({
       : t('chat.work.reasoning')
     : titled
       ? // The title is the person's or the model's text: isolated in the sentence.
-        translatedNodes(t, titled.key, { title: <bdi>{titled.title}</bdi> })
+        translatedNodes(t, titled.key, { [titled.name]: <bdi>{titled.value}</bdi> })
       : (activity?.label ?? workSummary({ reasoning: hasReasoning, steps }));
   const icon =
     hasReasoning || thinking

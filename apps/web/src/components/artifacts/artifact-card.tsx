@@ -1,6 +1,8 @@
-import { type ArtifactKind, artifactKindLabel } from '@oci/shared';
+import type { ArtifactKind } from '@oci/shared';
 import { ChevronRight, FileCode2, FileImage, FileTerminal, FileText, Workflow } from 'lucide-react';
+import { artifactKindName } from '~/components/artifacts/artifact-labels';
 import { type ArtifactRef, useArtifacts } from '~/components/artifacts/artifacts-context';
+import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 const ARTIFACT_ICONS: Record<ArtifactKind, typeof FileCode2> = {
@@ -13,7 +15,10 @@ const ARTIFACT_ICONS: Record<ArtifactKind, typeof FileCode2> = {
 
 /** "HTML · version 2"; a code artifact by its language, "Python · version 1" (#298). */
 export function artifactMeta(artifact: Pick<ArtifactRef, 'kind' | 'version' | 'language'>): string {
-  return `${artifactKindLabel(artifact.kind, artifact.language)} · version ${artifact.version}`;
+  return translate('artifacts.card.meta', {
+    kind: artifactKindName(artifact.kind, artifact.language),
+    version: artifact.version,
+  });
 }
 
 /**
@@ -136,12 +141,17 @@ export function ArtifactCard({
   /** For example "Updated" on a reply that revised an existing artifact. */
   note?: string;
 }) {
+  const t = useT();
   return (
     <ArtifactCardButton
       kind={artifact.kind}
       title={artifact.title}
-      meta={`${note ? `${note} · ` : ''}${artifactMeta(artifact)}`}
-      label={`Open artifact: ${artifact.title}`}
+      meta={
+        note
+          ? t('artifacts.card.metaNote', { note, meta: artifactMeta(artifact) })
+          : artifactMeta(artifact)
+      }
+      label={t('artifacts.card.open', { title: artifact.title })}
       onOpen={() => onOpen(artifact)}
       cardKey={artifact.sourceKey}
     />

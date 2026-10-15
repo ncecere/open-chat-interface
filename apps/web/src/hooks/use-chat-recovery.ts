@@ -8,6 +8,7 @@ import {
   messageStatus,
   refreshLimit,
 } from '~/lib/chat-history';
+import { translate } from '~/lib/i18n';
 
 interface RecoveryChat {
   status: string;
@@ -33,10 +34,8 @@ const MAX_CHECK_INTERVAL_MS = 15_000;
 const transientFailure = (failure: unknown) =>
   failure instanceof TypeError ||
   (failure instanceof ApiError && (failure.status >= 500 || [408, 429].includes(failure.status)));
-export const RECOVERY_RETRYING_TEXT =
-  'Could not reach the server to check for the reply. Checking again automatically.';
-export const RECOVERY_FAILED_TEXT =
-  'Could not read the saved messages. Use Reload saved messages to check again.';
+export const recoveryRetryingText = () => translate('chat.recovery.retrying');
+export const recoveryFailedText = () => translate('chat.recovery.failed');
 
 /** Reconnect once; recover from canonical storage without resending or losing the composer. */
 export function useChatRecovery(options: {
@@ -203,17 +202,17 @@ export function useChatRecovery(options: {
         if (failure instanceof ApiError && [401, 403, 404].includes(failure.status)) {
           setUnavailable(true);
           setRemotePending(false);
-          setError('Conversation unavailable');
+          setError(translate('chat.recovery.unavailable'));
         } else if (transientFailure(failure)) {
           // One failed check while the API is down used to end recovery for
           // good, leaving "A reply is pending" and Stop on screen after the
           // server had saved the reply (#229). Keep the run and the watch,
           // and check again with backoff until the server answers.
           failuresRef.current++;
-          setError(RECOVERY_RETRYING_TEXT);
+          setError(recoveryRetryingText());
           schedule(Math.min(CHECK_INTERVAL_MS * 2 ** failuresRef.current, MAX_CHECK_INTERVAL_MS));
           return;
-        } else setError(RECOVERY_FAILED_TEXT);
+        } else setError(recoveryFailedText());
         failuresRef.current = 0;
         setWatch(null);
         setStopRequested(false);

@@ -16,6 +16,7 @@ import { MemoryNote } from '~/components/chat/memory-note';
 import type { ToolPlace } from '~/components/chat/message-content';
 import { SearchDetails, type SearchGroundingView } from '~/components/chat/search-grounding';
 import { toolLimitText, toolStepLabel, toolSummaryNode } from '~/components/chat/tool-summary';
+import { translatedNodes } from '~/components/chat/translated-nodes';
 import { Button } from '~/components/ui/button';
 import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
@@ -232,11 +233,15 @@ function ApprovalCard({
     >
       <h3 id={titleId} className="flex items-center gap-2 font-medium text-[var(--text-primary)]">
         <ShieldQuestion className="size-4 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 break-words">{t('chat.toolSteps.allow', { label })}</span>
+        <span className="min-w-0 break-words">
+          {translatedNodes(t, 'chat.toolSteps.allow', { label: <bdi>{label}</bdi> })}
+        </span>
       </h3>
       <dl className="mt-2 grid gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)] sm:grid-cols-[auto_1fr]">
         <dt className="text-[var(--text-muted)]">{t('chat.toolSteps.tool')}</dt>
-        <dd className="min-w-0 break-words">{step.toolId}</dd>
+        <dd dir="ltr" className="min-w-0 break-words">
+          {step.toolId}
+        </dd>
         {connector && (
           <>
             <dt className="text-[var(--text-muted)]">{t('chat.toolSteps.connector')}</dt>

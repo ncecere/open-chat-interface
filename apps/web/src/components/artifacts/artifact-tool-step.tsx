@@ -1,4 +1,4 @@
-import { artifactKindLabel, type ToolStepSummary, toolKey } from '@oci/shared';
+import { type ToolStepSummary, toolKey } from '@oci/shared';
 import { ArrowDown, ChevronDown, FileCode2, Wrench } from 'lucide-react';
 import { type MouseEvent, useEffect, useId, useState } from 'react';
 import { ArtifactCardButton, artifactMeta } from '~/components/artifacts/artifact-card';
@@ -8,13 +8,16 @@ import {
   sizeLabel,
   writesSource,
 } from '~/components/artifacts/artifact-drafts';
+import { artifactKindName } from '~/components/artifacts/artifact-labels';
 import {
   type ArtifactRef,
   type ArtifactsContextValue,
   useArtifacts,
 } from '~/components/artifacts/artifacts-context';
 import type { ToolPart } from '~/components/chat/tool-steps';
+import { toolSummaryText } from '~/components/chat/tool-summary';
 import { Button } from '~/components/ui/button';
+import { translate, useT } from '~/lib/i18n';
 import { cn } from '~/lib/utils';
 
 /** How much of a live source the step's details show; the panel shows all of it. */
@@ -69,10 +72,15 @@ function useElapsedSeconds(active: boolean): number {
 function liveLabel(draft: ArtifactDraft, title: string | null): string {
   if (draft.mode === 'edits') {
     const count = draft.edits.length;
-    return `Revising ${title ?? 'an artifact'}… (${count} ${count === 1 ? 'change' : 'changes'})`;
+    return title
+      ? translate('artifacts.step.revisingChanges', { title, count })
+      : translate('artifacts.step.revisingChangesUntitled', { count });
   }
-  if (draft.mode === 'unknown') return `Revising ${title ?? 'an artifact'}…`;
-  return title ? `Writing ${title}…` : 'Writing an artifact…';
+  if (draft.mode === 'unknown')
+    return title
+      ? translate('chat.work.revisingTitled', { title })
+      : translate('chat.work.revising');
+  return title ? translate('chat.work.writingTitled', { title }) : translate('chat.work.writing');
 }
 
 /** A call that failed, or stopped before it was saved: only its row shows, with details. */
@@ -143,6 +151,7 @@ export function ArtifactToolStep({
   part: ToolPart;
   streaming: boolean;
 }) {
+  const t = useT();
   const artifacts = useArtifacts();
   const [open, setOpen] = useState(false);
   const detailsId = useId();
@@ -157,7 +166,7 @@ export function ArtifactToolStep({
   const waited = useElapsedSeconds(preparing);
   if (!info || !artifacts || info.failed) return null;
   const { draft, existing, saved, title, kind, writing } = info;
-  const kindName = kind ? artifactKindLabel(kind, info.language) : null;
+  const kindName = kind ? artifactKindName(kind, info.language) : null;
   const cardKey = toolKey(draft.toolCallId);
   const openDraft = artifacts.openDraft;
 
@@ -175,32 +184,43 @@ export function ArtifactToolStep({
     const shown = created ? saved : { ...saved, version: draft.version ?? saved.version };
     card = {
       title: saved.title,
-      meta: `${created ? '' : 'Updated · '}${artifactMeta(shown)}`,
-      label: `Open artifact: ${saved.title}`,
+      meta: created
+        ? artifactMeta(shown)
+        : t('artifacts.step.updatedMeta', { meta: artifactMeta(shown) }),
+      label: t('artifacts.card.open', { title: saved.title }),
       onOpen: () => artifacts.open(shown),
       live: false,
     };
   } else if (draft.state === 'saved') {
     // Saved, and the conversation's list has not caught up yet: the panel
     // shows the source from the call until it does, then the artifact.
-    const name = title ?? 'Artifact';
+    const name = title ?? t('artifacts.kind.artifact');
+    const kindOrArtifact = kindName ?? t('artifacts.kind.artifact');
     card = {
       title: name,
-      meta: `${kindName ?? 'Artifact'}${draft.version ? ` · version ${draft.version}` : ''}`,
-      label: `Open artifact: ${name}`,
+      meta: draft.version
+        ? t('artifacts.card.meta', { kind: kindOrArtifact, version: draft.version })
+        : kindOrArtifact,
+      label: t('artifacts.card.open', { title: name }),
       onOpen: openDraft ? () => openDraft(messageId, draft.toolCallId) : undefined,
       live: false,
     };
   } else {
-    const kindLabel = kindName ? `${kindName} · ` : '';
+    const status = preparing
+      ? waited >= PREPARING_NOTICE_S
+        ? t('artifacts.step.waitingForText', { seconds: waited })
+        : t('artifacts.step.starting')
+      : draft.mode === 'content'
+        ? sizeLabel(draft.content)
+        : t('artifacts.step.revising');
     card = {
-      title: preparing ? `Preparing ${title ?? 'artifact'}…` : liveLabel(draft, title),
-      meta: preparing
-        ? `${kindLabel}${waited >= PREPARING_NOTICE_S ? `waiting for text · ${waited} s` : 'starting'}`
-        : draft.mode === 'content'
-          ? `${kindLabel}${sizeLabel(draft.content)}`
-          : `${kindLabel}revising`,
-      label: `Open artifact while it is written: ${title ?? 'new artifact'}`,
+      title: preparing
+        ? title
+          ? t('artifacts.step.preparingTitled', { title })
+          : t('artifacts.step.preparing')
+        : liveLabel(draft, title),
+      meta: kindName ? t('artifacts.step.kindStatus', { kind: kindName, status }) : status,
+      label: title ? t('artifacts.step.openLive', { title }) : t('artifacts.step.openLiveUntitled'),
       onOpen:
         writesSource(draft) && openDraft
           ? () => openDraft(messageId, draft.toolCallId)
@@ -234,7 +254,11 @@ export function ArtifactToolStep({
           type="button"
           aria-expanded={open}
           aria-controls={detailsId}
-          aria-label={`Show details for ${title ?? 'artifact'}`}
+          aria-label={
+            title
+              ? t('artifacts.step.detailsFor', { title })
+              : t('artifacts.step.detailsForUntitled')
+          }
           data-artifact-details-toggle=""
           onClick={() => setOpen(!open)}
           className="flex shrink-0 items-center rounded-xl px-3 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-control-hover)] hover:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-bright)]"
@@ -287,6 +311,7 @@ export function ArtifactStepRow({
   step: ToolStepSummary;
   streaming: boolean;
 }) {
+  const t = useT();
   const artifacts = useArtifacts();
   const [open, setOpen] = useState(false);
   const detailsId = useId();
@@ -295,7 +320,7 @@ export function ArtifactStepRow({
   const { draft, title } = info;
 
   if (artifacts && !info.failed) {
-    const label = draft.state === 'saved' ? step.summary : liveLabel(draft, title);
+    const label = draft.state === 'saved' ? toolSummaryText(part, step) : liveLabel(draft, title);
     const cardKey = toolKey(draft.toolCallId);
     const goToCard = (event: MouseEvent<HTMLButtonElement>) => {
       const card = event.currentTarget
@@ -316,7 +341,7 @@ export function ArtifactStepRow({
         <FileCode2 className="size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 break-words">
           {label}
-          <span className="sr-only"> (go to its card)</span>
+          <span className="sr-only"> {t('artifacts.step.goToCard')}</span>
         </span>
         <ArrowDown className="size-3.5 shrink-0" aria-hidden="true" />
       </button>
@@ -325,8 +350,10 @@ export function ArtifactStepRow({
 
   const summary =
     draft.state === 'writing' && !streaming
-      ? `${title ? `'${title}'` : 'The artifact'} was not finished`
-      : step.summary;
+      ? title
+        ? t('artifacts.step.notFinishedTitled', { title })
+        : t('artifacts.step.notFinished')
+      : toolSummaryText(part, step);
   return (
     <div className="min-w-0" data-artifact-step={draft.toolCallId}>
       <button
@@ -388,51 +415,54 @@ function ArtifactStepDetails({
   saved: ArtifactRef | undefined;
   artifacts: ArtifactsContextValue | null;
 }) {
+  const t = useT();
   const size =
     draft.mode === 'content'
       ? sizeLabel(draft.content)
       : draft.mode === 'edits'
-        ? `${draft.edits.length} ${draft.edits.length === 1 ? 'change' : 'changes'}`
+        ? t('artifacts.step.changes', { count: draft.edits.length })
         : null;
   return (
     <>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-        <dt className="text-[var(--text-muted)]">Title</dt>
+        <dt className="text-[var(--text-muted)]">{t('artifacts.step.title')}</dt>
         <dd className="min-w-0 break-words">{title ?? '—'}</dd>
-        <dt className="text-[var(--text-muted)]">Kind</dt>
-        <dd>{kind ? artifactKindLabel(kind, language) : '—'}</dd>
+        <dt className="text-[var(--text-muted)]">{t('artifacts.step.kind')}</dt>
+        <dd>{kind ? artifactKindName(kind, language) : '—'}</dd>
         {size && (
           <>
-            <dt className="text-[var(--text-muted)]">Size</dt>
+            <dt className="text-[var(--text-muted)]">{t('artifacts.step.size')}</dt>
             <dd>{size}</dd>
           </>
         )}
         {draft.version !== null && (
           <>
-            <dt className="text-[var(--text-muted)]">Version</dt>
+            <dt className="text-[var(--text-muted)]">{t('artifacts.step.version')}</dt>
             <dd>{draft.version}</dd>
           </>
         )}
       </dl>
       {draft.mode === 'edits' && draft.edits.length > 0 && (
-        <ol className="space-y-2" aria-label="Changes">
+        <ol className="space-y-2" aria-label={t('artifacts.step.changesLabel')}>
           {draft.edits.map((edit, index) => (
             // Edits only ever grow at the end while they stream.
             // biome-ignore lint/suspicious/noArrayIndexKey: the position is the edit's identity.
             <li key={index} className="space-y-1">
-              <p className="text-[var(--text-muted)]">Change {index + 1}: replace</p>
+              <p className="text-[var(--text-muted)]">
+                {t('artifacts.step.replace', { n: index + 1 })}
+              </p>
               <pre
                 dir="ltr"
                 className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/15 p-2 font-mono line-through decoration-[var(--text-muted)]/60"
               >
                 {clip(edit.find, EDIT_SNIPPET)}
               </pre>
-              <p className="text-[var(--text-muted)]">with</p>
+              <p className="text-[var(--text-muted)]">{t('artifacts.step.with')}</p>
               <pre
                 dir="ltr"
                 className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/15 p-2 font-mono"
               >
-                {clip(edit.replace, EDIT_SNIPPET) || '(nothing)'}
+                {clip(edit.replace, EDIT_SNIPPET) || t('artifacts.step.nothing')}
               </pre>
             </li>
           ))}
@@ -441,7 +471,7 @@ function ArtifactStepDetails({
       {writing && draft.mode === 'content' && draft.content && (
         <div className="space-y-1">
           <section
-            aria-label="Latest source"
+            aria-label={t('artifacts.step.latestSource')}
             // biome-ignore lint/a11y/noNoninteractiveTabindex: it scrolls; the keyboard must reach it.
             tabIndex={0}
             className="max-h-48 overflow-auto rounded bg-black/15 p-2 focus-visible:outline-2 focus-visible:outline-[var(--accent-bright)]"
@@ -459,7 +489,7 @@ function ArtifactStepDetails({
               variant="ghost"
               onClick={() => artifacts.openDraft?.(draft.messageId, draft.toolCallId)}
             >
-              Show in panel
+              {t('artifacts.step.showInPanel')}
             </Button>
           )}
         </div>
@@ -469,8 +499,8 @@ function ArtifactStepDetails({
           {typeof part.errorText === 'string'
             ? part.errorText
             : part.state === 'output-denied'
-              ? 'Not run.'
-              : 'Not saved.'}
+              ? t('artifacts.step.notRun')
+              : t('artifacts.step.notSaved')}
         </p>
       )}
       {saved && artifacts && (
@@ -485,7 +515,9 @@ function ArtifactStepDetails({
             })
           }
         >
-          {draft.version !== null ? `Open artifact (version ${draft.version})` : 'Open artifact'}
+          {draft.version !== null
+            ? t('artifacts.step.openVersion', { version: draft.version })
+            : t('artifacts.step.openArtifact')}
         </Button>
       )}
     </>

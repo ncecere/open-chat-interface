@@ -4,9 +4,12 @@ import type { UIMessage } from 'ai';
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { UNSAVED_MESSAGE_TEXT } from '../../src/hooks/use-chat-session';
+import { unsavedMessageText } from '../../src/hooks/use-chat-session';
 import { TemporaryChatProvider } from '../../src/providers/temporary-chat-provider';
 import { ChatThreadPage } from '../../src/routes/chat/thread';
+
+// The text is translated now (English here: tests/unit/setup.ts).
+const UNSAVED_MESSAGE_TEXT = unsavedMessageText();
 
 /**
  * A message sent while the database is away (#326), with the real chat page,

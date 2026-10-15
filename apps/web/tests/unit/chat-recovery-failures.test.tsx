@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RECOVERY_FAILED_TEXT, RECOVERY_RETRYING_TEXT } from '../../src/hooks/use-chat-recovery';
+import { recoveryFailedText, recoveryRetryingText } from '../../src/hooks/use-chat-recovery';
 import { ApiError } from '../../src/lib/api-client';
 import type { ChatHistory } from '../../src/lib/chat-history';
 import {
@@ -17,6 +17,10 @@ import {
   settle,
   sse,
 } from './chat-recovery.fixtures';
+
+// The texts are translated now (English here: tests/unit/setup.ts).
+const RECOVERY_FAILED_TEXT = recoveryFailedText();
+const RECOVERY_RETRYING_TEXT = recoveryRetryingText();
 
 // Only external IO/catalog dependencies are replaced. Chat, useChat, transport,
 // history validation, recovery, session ownership and attachment state are real.

@@ -24,6 +24,7 @@ import { shownReply } from '~/components/artifacts/declined-artifacts';
 import { textOf } from '~/components/chat/message-content';
 import { useMediaQuery } from '~/hooks/use-media-query';
 import { api } from '~/lib/api-client';
+import { translate } from '~/lib/i18n';
 import { useAutoOpenArtifacts } from '~/providers/theme-provider';
 
 /**
@@ -125,7 +126,9 @@ function focusAfterClose(opened: Opened) {
   const card = document.querySelector<HTMLElement>(
     `[data-artifact-card="${CSS.escape(cardKey)}"]:not([disabled])`,
   );
-  const composer = document.querySelector<HTMLElement>('[aria-label="Message input"]');
+  const composer = document.querySelector<HTMLElement>(
+    `[aria-label="${CSS.escape(translate('chat.composer.messageInput'))}"]`,
+  );
   const next = returnTo?.isConnected ? returnTo : (card ?? composer);
   next?.focus();
 }
@@ -237,7 +240,7 @@ export function ThreadArtifactsProvider({
     // Never over what the person is looking at full screen.
     if (fullScreenRef.current) return;
     setOpened({ target, focusRequest: 0, returnTo: null });
-    if (title) setAnnouncement(`Opened artifact: ${title}`);
+    if (title) setAnnouncement(translate('artifacts.announce.opened', { title }));
     else if (target.type === 'draft') session.announce = target.toolCallId;
   }, []);
 
@@ -259,7 +262,11 @@ export function ThreadArtifactsProvider({
       const title = draft?.title ?? existing?.title;
       if (title || draft?.state !== 'writing') {
         session.announce = null;
-        setAnnouncement(`Opened artifact: ${title ?? 'new artifact'}`);
+        setAnnouncement(
+          title
+            ? translate('artifacts.announce.opened', { title })
+            : translate('artifacts.announce.openedNew'),
+        );
       }
     }
     if (!streaming || session.opened || session.dismissed || session.manual) return;

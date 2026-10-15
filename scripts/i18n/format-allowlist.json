@@ -37,26 +37,6 @@
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
     },
     {
-      "file": "apps/web/src/components/artifacts/artifact-drafts.ts",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
-      "file": "apps/web/src/components/artifacts/artifact-panel/panel-helpers.ts",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
-      "file": "apps/web/src/components/artifacts/artifact-source.tsx",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
-      "file": "apps/web/src/components/chat/share-thread-dialog.tsx",
-      "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
-    },
-    {
       "file": "apps/web/src/components/layout/top-bar.tsx",
       "count": 1,
       "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
@@ -79,7 +59,7 @@
     {
       "file": "apps/web/src/hooks/use-chat-session.ts",
       "count": 1,
-      "reason": "step 2: replace with the formatter in apps/web/src/lib/i18n/format.ts when this area is converted (#397)"
+      "reason": "reads the browser's time zone to send to the server (resolvedOptions().timeZone); nothing is displayed"
     },
     {
       "file": "apps/web/src/lib/activity-series.ts",
