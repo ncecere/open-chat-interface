@@ -28,7 +28,7 @@ classification, MFA policy) and institutions that buy software (the conformance 
 Build order: `mfa`, `data-classification`, `groups`, `installable-app` in parallel (each in its own worktree and
 branch, migrations numbered in advance); then `i18n` string extraction; then `accessibility-report`; then the
 release. Migrations are numbered in advance so branches do not collide: `0050` and `0051` mfa, `0052`
-data-classification, `0053` and `0054` groups. `i18n` and `installable-app` need none (settings are JSON).
+data-classification, `0053` and `0054` groups. `0055_user_locale` i18n (a nullable preference column). `installable-app` needs none (branding is JSON).
 
 ## Scope decisions (2026-10-14)
 
