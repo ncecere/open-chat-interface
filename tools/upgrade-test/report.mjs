@@ -158,6 +158,16 @@ export function analyse({ events, replies, run, bounds }) {
       }`,
     );
   }
+  if (run.sharing) {
+    const failed = run.sharing.steps.filter((step) => !step.ok);
+    add(
+      'project sharing and groups across the upgrade (a share is invisible to the previous release, its owner flows are unchanged, the guard refuses new shares while it serves, nothing is lost)',
+      run.sharing.steps.length > 0 && failed.length === 0,
+      run.sharing.steps.length
+        ? `${run.sharing.steps.length - failed.length}/${run.sharing.steps.length}${failed.length ? `; failed: ${failed.map((step) => `${step.name} (${step.detail})`).join('; ')}` : ''}`
+        : 'not run',
+    );
+  }
   const scope = windows.length
     ? bounds.allowShutdownGaps
       ? ' outside replica-shutdown windows'
@@ -538,6 +548,16 @@ function markdown(report) {
         lines.push(`- **${s.name}**: ${String(s.detail).replaceAll('\n', ' ').slice(0, 300)}`);
     } else {
       lines.push(`All steps passed: ${smoke.steps.map((s) => s.name).join(', ')}.`);
+    }
+    lines.push('');
+  }
+  if (run.sharing?.steps.length) {
+    lines.push('## Project sharing and groups across the upgrade');
+    lines.push('');
+    for (const step of run.sharing.steps) {
+      lines.push(
+        `- ${step.ok ? 'pass' : '**FAIL**'} ${step.name}: ${String(step.detail).replaceAll('\n', ' ').slice(0, 300)}`,
+      );
     }
     lines.push('');
   }
